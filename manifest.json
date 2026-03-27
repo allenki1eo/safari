@@ -1,12 +1,12 @@
 {
-  "name": "Roho ya Tanzania",
-  "short_name": "Tanzania",
+  "name": "Safari — East Africa Runner",
+  "short_name": "Safari",
   "description": "3D endless runner through the heart of East Africa",
   "start_url": "/",
   "display": "fullscreen",
   "orientation": "landscape",
-  "background_color": "#000000",
-  "theme_color": "#006B3C",
+  "background_color": "#0D0601",
+  "theme_color": "#E87C00",
   "icons": [
     {
       "src": "icons/icon-192.png",
@@ -21,7 +21,6 @@
       "purpose": "any maskable"
     }
   ],
-  "screenshots": [],
   "categories": ["games", "entertainment"],
   "lang": "en"
 }

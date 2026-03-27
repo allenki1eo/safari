@@ -3,44 +3,45 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
-  <meta name="theme-color" content="#006B3C">
-  <meta name="description" content="Roho ya Tanzania — 3D endless runner through the heart of East Africa">
+  <meta name="theme-color" content="#1A0A00">
+  <meta name="description" content="Safari — 3D endless runner through the heart of East Africa">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Roho ya Tanzania">
+  <meta name="apple-mobile-web-app-title" content="Safari">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <title>Roho ya Tanzania 🇹🇿</title>
+  <title>Safari 🦁</title>
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --tz-green:  #006B3C;
-      --tz-black:  #111111;
-      --tz-gold:   #FCD116;
-      --tz-blue:   #00A3DD;
-      --tz-sky:    #FFB347;
-      --radius:    16px;
+      --amber:  #E87C00;
+      --gold:   #FCD116;
+      --green:  #006B3C;
+      --black:  #111111;
+      --blue:   #00A3DD;
+      --radius: 18px;
     }
 
     html, body {
       width: 100%; height: 100%;
       overflow: hidden;
-      background: #000;
-      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0D0601;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
       color: #fff;
       -webkit-tap-highlight-color: transparent;
       touch-action: none;
     }
 
+    /* ─── Canvas lives behind everything ─────────────────── */
     #game-canvas {
       display: block;
-      width: 100%; height: 100%;
       position: fixed; inset: 0;
+      width: 100%; height: 100%;
     }
 
-    /* ─── UI OVERLAY ─────────────────────────────────────── */
+    /* ─── UI overlay ─────────────────────────────────────── */
     #ui {
       position: fixed; inset: 0;
       pointer-events: none;
@@ -49,133 +50,215 @@
 
     .screen {
       position: absolute; inset: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
       pointer-events: all;
-      transition: opacity 0.4s ease;
+      transition: opacity 0.45s ease;
     }
     .screen.hidden { opacity: 0; pointer-events: none; }
 
-    /* ─── MENU ───────────────────────────────────────────── */
+    /* ═══════════════════════════════════════════════════════
+       MENU  —  transparent over the Three.js art
+    ═══════════════════════════════════════════════════════ */
     #menu {
-      background: linear-gradient(160deg, rgba(0,107,60,0.92) 0%, rgba(0,0,0,0.85) 100%);
-      backdrop-filter: blur(6px);
-    }
-    .game-title {
-      font-size: clamp(2rem, 8vw, 4.5rem);
-      font-weight: 900;
-      letter-spacing: -1px;
-      text-shadow: 0 4px 20px rgba(0,0,0,0.6);
-      text-align: center;
-      line-height: 1.1;
-    }
-    .game-subtitle {
-      font-size: clamp(0.9rem, 3vw, 1.2rem);
-      opacity: 0.85;
-      letter-spacing: 3px;
-      text-transform: uppercase;
-      margin-top: 6px;
-      margin-bottom: 40px;
+      background: linear-gradient(
+        to top,
+        rgba(0,0,0,0.88) 0%,
+        rgba(0,0,0,0.45) 45%,
+        rgba(0,0,0,0.1)  100%
+      );
+      justify-content: flex-end;
+      padding-bottom: clamp(24px, 5vh, 48px);
     }
 
+    /* ── SAFARI logotype ── */
+    .safari-logo {
+      position: absolute;
+      top: clamp(20px, 4vh, 48px);
+      left: 50%;
+      transform: translateX(-50%);
+      text-align: center;
+      pointer-events: none;
+    }
+    .safari-wordmark {
+      font-size: clamp(3.2rem, 10vw, 7rem);
+      font-weight: 900;
+      letter-spacing: -3px;
+      line-height: 1;
+      /* Painted gold-to-amber gradient text */
+      background: linear-gradient(160deg, #FFE168 0%, #E87C00 55%, #7B3500 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      text-shadow: none;
+      filter: drop-shadow(0 4px 24px rgba(232,124,0,0.45));
+    }
+    .safari-tagline {
+      font-size: clamp(0.72rem, 2vw, 1rem);
+      letter-spacing: 5px;
+      text-transform: uppercase;
+      opacity: 0.75;
+      margin-top: 6px;
+      color: #FFD090;
+    }
+
+    /* ── Animated paw-print decorators ── */
+    .paw-row {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin-top: 10px;
+      animation: paw-drift 3s ease-in-out infinite;
+    }
+    @keyframes paw-drift {
+      0%,100% { transform: translateY(0); }
+      50%      { transform: translateY(-5px); }
+    }
+    .paw-row span { font-size: 1.2rem; opacity: 0.65; }
+
+    /* ── Level grid ── */
+    .level-section {
+      width: min(800px, 96vw);
+    }
+    .level-section-title {
+      font-size: 0.78rem;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      opacity: 0.6;
+      margin-bottom: 14px;
+      text-align: center;
+    }
     .level-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 16px;
-      width: min(760px, 92vw);
-      max-height: 60vh;
-      overflow-y: auto;
-      padding: 4px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
     }
+    @media (max-width: 520px) {
+      .level-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
     .level-card {
-      background: rgba(255,255,255,0.08);
-      border: 2px solid rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.06);
+      border: 1.5px solid rgba(255,255,255,0.12);
       border-radius: var(--radius);
-      padding: 24px 20px;
+      padding: 20px 14px 18px;
       cursor: pointer;
-      transition: all 0.25s ease;
+      transition: transform 0.22s ease, border-color 0.22s ease, background 0.22s ease;
       text-align: center;
       position: relative;
       overflow: hidden;
+      backdrop-filter: blur(12px);
     }
-    .level-card::before {
+    .level-card::after {
       content: '';
       position: absolute; inset: 0;
-      opacity: 0;
-      transition: opacity 0.25s;
-    }
-    .level-card:hover { transform: translateY(-4px) scale(1.02); border-color: var(--tz-gold); }
-    .level-card:hover::before { opacity: 0.12; }
-    .level-card:active { transform: scale(0.97); }
-    .level-card.locked { opacity: 0.45; cursor: not-allowed; }
-
-    .level-emoji { font-size: 2.8rem; display: block; margin-bottom: 10px; }
-    .level-name { font-size: 1.05rem; font-weight: 700; margin-bottom: 4px; }
-    .level-desc { font-size: 0.78rem; opacity: 0.7; line-height: 1.4; }
-    .level-lock { position: absolute; top: 12px; right: 12px; font-size: 1rem; }
-
-    /* ─── HUD ─────────────────────────────────────────────── */
-    #hud {
+      background: linear-gradient(135deg, rgba(255,255,255,0.07) 0%, transparent 60%);
       pointer-events: none;
     }
+    .level-card:hover {
+      transform: translateY(-5px) scale(1.02);
+      border-color: var(--gold);
+      background: rgba(255,255,255,0.12);
+    }
+    .level-card:active { transform: scale(0.97); }
+    .level-card.locked {
+      opacity: 0.38;
+      cursor: not-allowed;
+      filter: grayscale(0.5);
+    }
+    .level-card.locked:hover { transform: none; border-color: rgba(255,255,255,0.12); }
+
+    .level-emoji { font-size: 2.4rem; display: block; margin-bottom: 9px; }
+    .level-name  { font-size: 0.95rem; font-weight: 700; margin-bottom: 5px; }
+    .level-desc  { font-size: 0.72rem; opacity: 0.62; line-height: 1.45; }
+    .level-lock  { position: absolute; top: 10px; right: 12px; font-size: 0.9rem; opacity: 0.7; }
+
+    /* ─── HUD ─────────────────────────────────────────────── */
+    #hud { pointer-events: none; }
+
     #score-bar {
       position: absolute;
-      top: env(safe-area-inset-top, 16px);
+      top: max(env(safe-area-inset-top), 12px);
       left: 0; right: 0;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 12px 24px;
+      padding: 0 18px;
       pointer-events: none;
     }
     .hud-pill {
-      background: rgba(0,0,0,0.5);
-      backdrop-filter: blur(8px);
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.1);
       border-radius: 40px;
-      padding: 8px 18px;
+      padding: 7px 16px;
       font-weight: 700;
-      font-size: 1rem;
+      font-size: 0.95rem;
       display: flex;
       align-items: center;
-      gap: 8px;
-      border: 1px solid rgba(255,255,255,0.12);
+      gap: 7px;
     }
-    #score-val { color: var(--tz-gold); font-size: 1.3rem; }
-    #lives-val { font-size: 1.1rem; letter-spacing: 2px; }
-    #level-label { font-size: 0.85rem; opacity: 0.85; }
+    #score-val    { color: var(--gold); font-size: 1.25rem; }
+    #lives-val    { font-size: 1rem; letter-spacing: 2px; }
+    #level-label  { font-size: 0.82rem; opacity: 0.88; }
 
     #pause-btn {
       position: absolute;
-      top: env(safe-area-inset-top, 16px);
-      right: 16px;
-      background: rgba(0,0,0,0.5);
-      border: none;
+      top: max(env(safe-area-inset-top), 12px);
+      right: 14px;
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(255,255,255,0.12);
       color: #fff;
-      font-size: 1.4rem;
-      width: 44px; height: 44px;
+      font-size: 1.2rem;
+      width: 42px; height: 42px;
       border-radius: 50%;
       cursor: pointer;
       pointer-events: all;
       display: flex; align-items: center; justify-content: center;
+      backdrop-filter: blur(10px);
       transition: background 0.2s;
     }
-    #pause-btn:hover { background: rgba(255,255,255,0.2); }
+    #pause-btn:hover { background: rgba(255,255,255,0.18); }
 
-    /* ─── SWAHILI TOAST ──────────────────────────────────── */
+    /* ─── Touch zones ─────────────────────────────────────── */
+    #touch-zone-up, #touch-zone-down {
+      position: absolute; pointer-events: all; opacity: 0;
+    }
+    #touch-zone-up   { top: 0; left: 0; right: 0; height: 50%; }
+    #touch-zone-down { bottom: 0; left: 0; right: 0; height: 50%; }
+
+    /* ─── Controls hint ───────────────────────────────────── */
+    #controls-hint {
+      position: absolute;
+      bottom: 22px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 16px;
+      pointer-events: none; opacity: 0;
+      transition: opacity 0.5s;
+    }
+    #controls-hint.visible { opacity: 1; }
+    .ctrl {
+      background: rgba(0,0,0,0.6);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 10px;
+      padding: 7px 14px;
+      font-size: 0.78rem;
+      text-align: center;
+      backdrop-filter: blur(8px);
+    }
+    .ctrl span { display: block; font-size: 1.05rem; margin-bottom: 2px; }
+
+    /* ─── Toast ───────────────────────────────────────────── */
     #toast {
       position: absolute;
-      bottom: 20%;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0,0,0,0.75);
-      border: 2px solid var(--tz-gold);
+      bottom: 22%;
+      left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.8);
+      border: 2px solid var(--gold);
       border-radius: 40px;
-      padding: 10px 28px;
-      font-size: 1.2rem;
+      padding: 9px 26px;
+      font-size: 1.15rem;
       font-weight: 700;
-      color: var(--tz-gold);
+      color: var(--gold);
       letter-spacing: 1px;
       white-space: nowrap;
       pointer-events: none;
@@ -184,159 +267,102 @@
     }
     #toast.show { opacity: 1; }
 
-    /* ─── CONTROLS HINT ──────────────────────────────────── */
-    #controls-hint {
-      position: absolute;
-      bottom: 24px;
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      gap: 20px;
-      pointer-events: none;
-      opacity: 0;
-      transition: opacity 0.5s;
-    }
-    #controls-hint.visible { opacity: 1; }
-    .ctrl {
-      background: rgba(0,0,0,0.6);
-      border: 1px solid rgba(255,255,255,0.2);
-      border-radius: 12px;
-      padding: 8px 16px;
-      font-size: 0.82rem;
+    /* ─── Overlay screens ─────────────────────────────────── */
+    .glass-box {
+      background: rgba(0,0,0,0.65);
+      border: 1.5px solid rgba(255,255,255,0.14);
+      border-radius: 26px;
+      padding: 44px 52px;
       text-align: center;
+      backdrop-filter: blur(16px);
+      max-width: 420px;
+      width: 90vw;
     }
-    .ctrl span { display: block; font-size: 1.1rem; margin-bottom: 2px; }
+    .glass-box h2 { font-size: 2.1rem; margin-bottom: 8px; }
+    .glass-box p  { opacity: 0.68; margin-bottom: 28px; font-size: 0.95rem; }
 
-    /* ─── TOUCH ZONES ─────────────────────────────────────── */
-    #touch-zone-up, #touch-zone-down {
-      position: absolute;
-      pointer-events: all;
-      opacity: 0;
-    }
-    #touch-zone-up { top: 0; left: 0; right: 0; height: 50%; }
-    #touch-zone-down { bottom: 0; left: 0; right: 0; height: 50%; }
+    #pause-overlay { background: rgba(0,0,0,0.55); backdrop-filter: blur(8px); }
 
-    /* ─── PAUSE OVERLAY ──────────────────────────────────── */
-    #pause-overlay {
-      background: rgba(0,0,0,0.7);
-      backdrop-filter: blur(8px);
-    }
-    .pause-box {
-      background: rgba(0,107,60,0.2);
-      border: 2px solid rgba(255,255,255,0.15);
-      border-radius: 24px;
-      padding: 40px 50px;
-      text-align: center;
-    }
-    .pause-box h2 { font-size: 2rem; margin-bottom: 8px; }
-    .pause-box p { opacity: 0.7; margin-bottom: 30px; }
-
-    /* ─── GAME OVER ──────────────────────────────────────── */
     #gameover {
-      background: linear-gradient(160deg, rgba(0,0,0,0.95) 0%, rgba(17,0,0,0.95) 100%);
+      background: linear-gradient(160deg, rgba(10,0,0,0.97) 0%, rgba(0,0,0,0.95) 100%);
     }
-    .go-box {
-      text-align: center;
-      max-width: 400px;
-    }
-    .go-box h2 { font-size: 2.5rem; margin-bottom: 6px; }
-    .go-box .go-score {
-      font-size: 1.1rem;
-      opacity: 0.75;
-      margin-bottom: 8px;
-    }
-    .go-box .go-score-val {
-      font-size: 4rem;
-      font-weight: 900;
-      color: var(--tz-gold);
-      display: block;
-      line-height: 1;
-      margin-bottom: 32px;
+    .score-giant {
+      font-size: 4.2rem; font-weight: 900;
+      color: var(--gold); display: block;
+      line-height: 1; margin: 14px 0 34px;
     }
 
-    /* ─── BUTTONS ─────────────────────────────────────────── */
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      padding: 14px 32px;
-      border-radius: 50px;
-      border: none;
-      font-size: 1rem;
-      font-weight: 700;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      text-decoration: none;
-      min-width: 180px;
-      pointer-events: all;
-    }
-    .btn-primary {
-      background: var(--tz-gold);
-      color: #000;
-      box-shadow: 0 4px 20px rgba(252,209,22,0.4);
-    }
-    .btn-primary:hover { background: #ffe040; transform: translateY(-2px); box-shadow: 0 6px 24px rgba(252,209,22,0.5); }
-    .btn-primary:active { transform: scale(0.97); }
-    .btn-secondary {
-      background: rgba(255,255,255,0.1);
-      color: #fff;
-      border: 2px solid rgba(255,255,255,0.25);
-    }
-    .btn-secondary:hover { background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.4); }
-    .btn-row { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; margin-top: 10px; }
-
-    /* ─── LEVEL COMPLETE ─────────────────────────────────── */
     #level-complete {
-      background: linear-gradient(160deg, rgba(0,107,60,0.95) 0%, rgba(0,0,0,0.92) 100%);
-    }
-    .lc-box { text-align: center; max-width: 420px; }
-    .lc-box h2 { font-size: 2.2rem; margin-bottom: 6px; }
-    .lc-box .lc-score-val {
-      font-size: 3.5rem;
-      font-weight: 900;
-      color: var(--tz-gold);
-      display: block;
-      line-height: 1;
-      margin: 16px 0 32px;
+      background: linear-gradient(160deg, rgba(0,40,15,0.97) 0%, rgba(0,0,0,0.94) 100%);
     }
 
-    /* ─── LOADING ─────────────────────────────────────────── */
-    #loading {
-      background: #000;
-    }
-    .loader-wrap { text-align: center; }
-    .loader-emoji { font-size: 4rem; display: block; margin-bottom: 16px; animation: pulse 1.4s ease-in-out infinite; }
-    @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.12)} }
-    .loader-text { font-size: 1rem; opacity: 0.7; letter-spacing: 2px; text-transform: uppercase; }
-    .loader-bar-wrap { width: 200px; height: 4px; background: rgba(255,255,255,0.15); border-radius: 4px; margin: 20px auto 0; overflow: hidden; }
-    .loader-bar { height: 100%; background: var(--tz-gold); border-radius: 4px; width: 0; transition: width 0.3s; }
-
-    /* ─── TRIVIA OVERLAY ─────────────────────────────────── */
+    /* ─── Trivia ──────────────────────────────────────────── */
     #trivia {
-      background: linear-gradient(160deg, rgba(0,60,107,0.95) 0%, rgba(0,0,0,0.9) 100%);
+      background: linear-gradient(160deg, rgba(0,30,70,0.97) 0%, rgba(0,0,0,0.94) 100%);
     }
-    .trivia-box { text-align: center; max-width: 500px; padding: 0 20px; }
-    .trivia-box .trivia-q { font-size: 1.25rem; font-weight: 600; margin: 20px 0 24px; line-height: 1.5; }
-    .trivia-options { display: flex; flex-direction: column; gap: 12px; width: 100%; }
-    .trivia-option {
-      background: rgba(255,255,255,0.08);
-      border: 2px solid rgba(255,255,255,0.2);
+    .trivia-inner { text-align: center; max-width: 520px; padding: 0 20px; }
+    .trivia-q  { font-size: 1.2rem; font-weight: 600; margin: 20px 0 24px; line-height: 1.55; }
+    .trivia-opts { display: flex; flex-direction: column; gap: 11px; }
+    .trivia-opt {
+      background: rgba(255,255,255,0.07);
+      border: 1.5px solid rgba(255,255,255,0.18);
       border-radius: 12px;
-      padding: 14px 20px;
-      cursor: pointer;
-      font-size: 0.95rem;
+      padding: 13px 18px;
+      cursor: pointer; font-size: 0.92rem;
       transition: all 0.2s;
       pointer-events: all;
     }
-    .trivia-option:hover { background: rgba(255,255,255,0.18); border-color: var(--tz-gold); }
-    .trivia-option.correct { background: rgba(0,180,80,0.3); border-color: #00e676; }
-    .trivia-option.wrong { background: rgba(220,30,30,0.25); border-color: #ff5252; }
+    .trivia-opt:hover { background: rgba(255,255,255,0.16); border-color: var(--gold); }
+    .trivia-opt.correct { background: rgba(0,180,80,0.28); border-color: #00e676; }
+    .trivia-opt.wrong   { background: rgba(220,30,30,0.22); border-color: #ff5252; }
 
-    /* Scrollbar */
-    .level-grid::-webkit-scrollbar { width: 4px; }
-    .level-grid::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); border-radius: 4px; }
-    .level-grid::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+    /* ─── Buttons ─────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      gap: 9px; padding: 13px 30px; border-radius: 50px;
+      border: none; font-size: 0.97rem; font-weight: 700;
+      cursor: pointer; transition: all 0.2s ease;
+      min-width: 160px; pointer-events: all;
+    }
+    .btn-primary {
+      background: var(--gold); color: #000;
+      box-shadow: 0 4px 22px rgba(252,209,22,0.38);
+    }
+    .btn-primary:hover { background: #ffe040; transform: translateY(-2px); }
+    .btn-primary:active { transform: scale(0.97); }
+    .btn-secondary {
+      background: rgba(255,255,255,0.08);
+      color: #fff;
+      border: 1.5px solid rgba(255,255,255,0.22);
+    }
+    .btn-secondary:hover { background: rgba(255,255,255,0.18); }
+    .btn-row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+
+    /* ─── Loading ─────────────────────────────────────────── */
+    #loading { background: #0D0601; }
+    .loader-inner { text-align: center; }
+    .loader-animal { font-size: 4.5rem; display: block; animation: lope 1.2s ease-in-out infinite; }
+    @keyframes lope {
+      0%,100% { transform: scale(1) translateY(0); }
+      40%      { transform: scale(1.08) translateY(-8px); }
+      70%      { transform: scale(0.96) translateY(2px); }
+    }
+    .loader-title {
+      font-size: clamp(2rem, 6vw, 3.5rem); font-weight: 900;
+      background: linear-gradient(160deg, #FFE168, #E87C00);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text; margin: 12px 0 6px;
+    }
+    .loader-sub { font-size: 0.82rem; letter-spacing: 3px; text-transform: uppercase; opacity: 0.5; }
+    .loader-bar-wrap {
+      width: 200px; height: 3px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 3px; margin: 20px auto 0; overflow: hidden;
+    }
+    .loader-bar {
+      height: 100%; background: linear-gradient(90deg, #E87C00, #FFE168);
+      border-radius: 3px; width: 0; transition: width 0.3s;
+    }
   </style>
 </head>
 <body>
@@ -347,37 +373,45 @@
 
   <!-- LOADING -->
   <div class="screen" id="loading">
-    <div class="loader-wrap">
-      <span class="loader-emoji">🌍</span>
-      <div class="loader-text">Loading Tanzania…</div>
-      <div class="loader-bar-wrap"><div class="loader-bar" id="loader-bar"></div></div>
+    <div class="loader-inner">
+      <span class="loader-animal">🦁</span>
+      <div class="loader-title">SAFARI</div>
+      <div class="loader-sub">East Africa Awaits</div>
+      <div class="loader-bar-wrap">
+        <div class="loader-bar" id="loader-bar"></div>
+      </div>
     </div>
   </div>
 
-  <!-- MENU -->
+  <!-- MENU (transparent — art scene shows through) -->
   <div class="screen hidden" id="menu">
-    <h1 class="game-title">🇹🇿 Roho ya Tanzania</h1>
-    <p class="game-subtitle">Soul of Tanzania</p>
-    <div class="level-grid" id="level-grid">
-      <!-- Level cards injected by UI.js -->
+    <!-- Logo top-centre -->
+    <div class="safari-logo">
+      <div class="safari-wordmark">SAFARI</div>
+      <div class="safari-tagline">East Africa in 3D</div>
+      <div class="paw-row">
+        <span>🐾</span><span>🦁</span><span>🐾</span>
+        <span>🐘</span><span>🐾</span><span>🦒</span><span>🐾</span>
+      </div>
+    </div>
+
+    <!-- Level select at bottom -->
+    <div class="level-section">
+      <p class="level-section-title">Choose your destination</p>
+      <div class="level-grid" id="level-grid"></div>
     </div>
   </div>
 
-  <!-- HUD (during play) -->
+  <!-- HUD -->
   <div class="screen hidden" id="hud">
     <div id="score-bar">
-      <div class="hud-pill">
-        <span>⭐</span>
-        <span id="score-val">0</span>
-      </div>
+      <div class="hud-pill">⭐ <span id="score-val">0</span></div>
       <div class="hud-pill" id="level-label">🌾 Serengeti</div>
-      <div class="hud-pill">
-        <span id="lives-val">❤️❤️❤️</span>
-      </div>
+      <div class="hud-pill"><span id="lives-val">❤️❤️❤️</span></div>
     </div>
     <div id="touch-zone-up"></div>
     <div id="touch-zone-down"></div>
-    <button id="pause-btn" title="Pause">⏸</button>
+    <button id="pause-btn" title="Pause (P)">⏸</button>
   </div>
 
   <!-- SWAHILI TOAST -->
@@ -392,33 +426,33 @@
 
   <!-- PAUSE -->
   <div class="screen hidden" id="pause-overlay">
-    <div class="pause-box">
+    <div class="glass-box">
       <h2>⏸ Paused</h2>
-      <p>Take a breath — Tanzania awaits!</p>
+      <p>The savanna waits for no one.</p>
       <div class="btn-row">
-        <button class="btn btn-primary" id="resume-btn">▶ Resume</button>
+        <button class="btn btn-primary"   id="resume-btn">▶ Resume</button>
         <button class="btn btn-secondary" id="pause-menu-btn">🏠 Menu</button>
       </div>
     </div>
   </div>
 
-  <!-- TRIVIA (between levels) -->
+  <!-- TRIVIA -->
   <div class="screen hidden" id="trivia">
-    <div class="trivia-box">
-      <div class="hud-pill" style="margin-bottom:16px;font-size:0.85rem">🇹🇿 Tanzania Trivia</div>
+    <div class="trivia-inner">
+      <div class="hud-pill" style="margin-bottom:18px;font-size:0.82rem;display:inline-flex">🇹🇿 Tanzania Trivia</div>
       <p class="trivia-q" id="trivia-q"></p>
-      <div class="trivia-options" id="trivia-opts"></div>
+      <div class="trivia-opts" id="trivia-opts"></div>
     </div>
   </div>
 
   <!-- LEVEL COMPLETE -->
   <div class="screen hidden" id="level-complete">
-    <div class="lc-box">
+    <div class="glass-box">
       <h2>🎉 Level Complete!</h2>
-      <p style="opacity:.7;margin-bottom:4px">Score</p>
-      <span class="lc-score-val" id="lc-score-val">0</span>
+      <p>Final Score</p>
+      <span class="score-giant" id="lc-score-val">0</span>
       <div class="btn-row">
-        <button class="btn btn-primary" id="next-level-btn">Next Level →</button>
+        <button class="btn btn-primary"   id="next-level-btn">Next Level →</button>
         <button class="btn btn-secondary" id="lc-menu-btn">🏠 Menu</button>
       </div>
     </div>
@@ -426,12 +460,12 @@
 
   <!-- GAME OVER -->
   <div class="screen hidden" id="gameover">
-    <div class="go-box">
+    <div class="glass-box">
       <h2>💀 Game Over</h2>
-      <p class="go-score">Final Score</p>
-      <span class="go-score-val" id="go-score-val">0</span>
+      <p>Final Score</p>
+      <span class="score-giant" id="go-score-val">0</span>
       <div class="btn-row">
-        <button class="btn btn-primary" id="retry-btn">🔄 Try Again</button>
+        <button class="btn btn-primary"   id="retry-btn">🔄 Try Again</button>
         <button class="btn btn-secondary" id="go-menu-btn">🏠 Menu</button>
       </div>
     </div>
@@ -439,7 +473,7 @@
 
 </div>
 
-<!-- Three.js via importmap -->
+<!-- Three.js ES module importmap -->
 <script type="importmap">
 {
   "imports": {
@@ -453,13 +487,12 @@
 
 <script>
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
+    window.addEventListener('load', () =>
       navigator.serviceWorker.register('/sw.js')
-        .then(r => console.log('[PWA] SW registered:', r.scope))
-        .catch(e => console.warn('[PWA] SW failed:', e));
-    });
+        .then(r  => console.log('[PWA] SW registered:', r.scope))
+        .catch(e => console.warn('[PWA] SW failed:', e))
+    );
   }
 </script>
-
 </body>
 </html>

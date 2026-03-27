@@ -253,7 +253,8 @@ export class Player {
     this.group.position.set(0, 0, 0);
     this.group.rotation.set(0, 0, 0);
     this.group.scale.set(1, 1, 1);
-    this.group.visible = true;
+    this.group.visible   = true;
+    this._shadow.visible = true;
     this.vy         = 0;
     this.onGround   = true;
     this.extraJumps = DOUBLE_JUMP_CAP;

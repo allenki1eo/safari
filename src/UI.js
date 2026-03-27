@@ -71,8 +71,6 @@ export class UI {
   showMenu() {
     this._hideAll();
     this._show('menu');
-    this.game.level?.unload?.();
-    this.game.player?.hide?.();
   }
 
   showHUD() {

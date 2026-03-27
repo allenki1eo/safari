@@ -660,16 +660,14 @@ export class Level {
 
   /* ─── Spawners ──────────────────────────────────────────── */
   _spawnObstacle() {
-    const free = this._obsPool.find(o => !o.active);
-    if (!free) return;
+    /* Pick a template first, then find a free slot that was built for it */
+    const tmpl = this.cfg.obstacles[Math.floor(Math.random() * this.cfg.obstacles.length)];
+    const free = this._obsPool.find(o => !o.active && o.tmpl.kind === tmpl.kind);
+    if (!free) return;  /* pool exhausted for this type — skip */
 
-    /* Pick a random template, matching pool slot */
-    const tmpl     = this.cfg.obstacles[Math.floor(Math.random() * this.cfg.obstacles.length)];
-    /* Find a pool slot with this template (or just use the free one and rebuild) */
-    free.tmpl      = tmpl;
     free.group.position.set(24 + Math.random() * 4, 0, (Math.random() - 0.5) * 0.3);
     free.group.visible = true;
-    free.active    = true;
+    free.active = true;
   }
 
   _spawnGem() {
