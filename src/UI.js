@@ -44,7 +44,17 @@ export class UI {
         ${lvl.locked ? '<span class="level-lock">🔒</span>' : ''}
       `;
       if (!lvl.locked) {
-        card.addEventListener('click', () => this.game.startLevel(i));
+        card.addEventListener('click', () => {
+          try {
+            this.game.startLevel(i);
+          } catch (err) {
+            console.error(err);
+            const d = document.createElement('div');
+            d.style.cssText = 'position:fixed;top:0;left:0;z-index:9999;background:red;color:white;padding:15px;white-space:pre-wrap;width:100%;font-size:16px;';
+            d.textContent = 'ERROR ON CLICK:\\n' + err.message + '\\n' + err.stack;
+            document.body.appendChild(d);
+          }
+        });
         card.style.cssText += `
           background: linear-gradient(135deg,
             rgba(255,255,255,0.1) 0%,

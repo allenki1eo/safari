@@ -5,6 +5,11 @@ import { Level }     from './Level.js';
 import { UI }        from './UI.js';
 import { MenuScene } from './MenuScene.js';
 
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass }     from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass }     from 'three/addons/postprocessing/OutputPass.js';
+
 /* ─── Constants ──────────────────────────────────────────── */
 const SCROLL_SPEED_BASE = 9;
 const SPEED_RAMP        = 0.22;
@@ -24,7 +29,10 @@ class Game {
 
     this._setupRenderer();
     this._setupScene();
+    this._setupPostProcessing();
     this._setupLights();
+
+    this.shakeIntensity = 0;
 
     this.player    = new Player(this.scene);
     this.level     = new Level(this.scene, this.renderer);
@@ -57,7 +65,27 @@ class Game {
       this.camera.aspect = w / h;
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(w, h);
+      if (this.composer) this.composer.setSize(w, h);
     });
+  }
+
+  /* ─── Post-Processing ─────────────────────────────────── */
+  _setupPostProcessing() {
+    this.composer = new EffectComposer(this.renderer);
+    
+    const renderPass = new RenderPass(this.scene, this.camera);
+    this.composer.addPass(renderPass);
+
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      1.2,   /* strength */
+      0.8,   /* radius */
+      0.4    /* threshold */
+    );
+    this.composer.addPass(bloomPass);
+
+    const outputPass = new OutputPass();
+    this.composer.addPass(outputPass);
   }
 
   /* ─── Scene ───────────────────────────────────────────── */
@@ -211,6 +239,7 @@ class Game {
     if (this.player.isInvincible) return;
     this.lives = Math.max(0, this.lives - 1);
     this.ui.setLives(this.lives);
+    this.shakeIntensity = 1.0; /* Trigger camera shake */
     if (this.lives <= 0) {
       this.state = 'gameover';
       this.clock.stop();
@@ -257,8 +286,22 @@ class Game {
           this.ui.showLevelComplete(Math.floor(this.score), this.levelIdx + 1 < Level.LEVEL_COUNT);
         }
 
-        /* Camera sway */
-        this.camera.position.y = 5.5 + Math.sin(this.time * 0.8) * 0.08;
+        /* Camera sway and speed FOV */
+        this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, 62 + (this.speed - SCROLL_SPEED_BASE), 0.1);
+        this.camera.updateProjectionMatrix();
+        
+        /* Camera shake */
+        let shakeX = 0, shakeY = 0;
+        if (this.shakeIntensity > 0) {
+          shakeX = (Math.random() - 0.5) * 0.5 * this.shakeIntensity;
+          shakeY = (Math.random() - 0.5) * 0.5 * this.shakeIntensity;
+          this.shakeIntensity -= dt * 2.5;
+          if (this.shakeIntensity < 0) this.shakeIntensity = 0;
+        }
+
+        this.camera.position.x = -1.5 + shakeX;
+        this.camera.position.y = 5.5 + Math.sin(this.time * 0.8) * 0.08 + shakeY;
+        this.camera.lookAt(new THREE.Vector3(1, 1.4, 0));
 
       } else if (this.state === 'menu') {
         /* Animate menu scene (use real time, not game clock) */
@@ -268,7 +311,7 @@ class Game {
         if (this.menuScene) this.menuScene.update(mdt, this.camera);
       }
 
-      this.renderer.render(this.scene, this.camera);
+      this.composer.render(dt);
     };
     requestAnimationFrame(animate);
   }

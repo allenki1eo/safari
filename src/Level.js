@@ -116,6 +116,16 @@ export class Level {
     /* Reusable geometries */
     this._gemGeo = new THREE.OctahedronGeometry(0.22, 0);
     this._gemMat = new THREE.MeshStandardMaterial({ color: 0xFFD700, roughness: 0.1, metalness: 0.9, emissive: 0xFFAA00, emissiveIntensity: 0.4 });
+
+    /* Load Textures */
+    this.textureLoader = new THREE.TextureLoader();
+    this.texSerengeti = this.textureLoader.load('src/assets/serengeti_ground.png');
+    this.texSerengeti.wrapS = this.texSerengeti.wrapT = THREE.RepeatWrapping;
+    this.texSerengeti.repeat.set(20, 2);
+
+    this.texZanzibar = this.textureLoader.load('src/assets/zanzibar_sand.png');
+    this.texZanzibar.wrapS = this.texZanzibar.wrapT = THREE.RepeatWrapping;
+    this.texZanzibar.repeat.set(20, 2);
   }
 
   /* ─── Load level ────────────────────────────────────────── */
@@ -126,7 +136,7 @@ export class Level {
     this._loaded = true;
 
     this._buildSky();
-    this._buildGround();
+    this._buildGround(idx);
     this._buildBackground(idx);
     this._buildObstaclePool();
     this._buildGemPool();
@@ -140,7 +150,7 @@ export class Level {
 
   unload() {
     for (const m of this._env)     this.scene.remove(m);
-    for (const o of this._obsPool) this.scene.remove(o.mesh);
+    for (const o of this._obsPool) this.scene.remove(o.group);
     for (const g of this._gemPool) this.scene.remove(g.mesh);
     if (this._particles) this.scene.remove(this._particles);
     for (const d of this._decors) this.scene.remove(d.group);
@@ -179,7 +189,7 @@ export class Level {
   }
 
   /* ─── Ground plane ─────────────────────────────────────── */
-  _buildGround() {
+  _buildGround(idx) {
     const geo = new THREE.PlaneGeometry(300, 40, 60, 1);
     /* Subtle height variation */
     const pos = geo.attributes.position;
@@ -192,6 +202,15 @@ export class Level {
       color:     this.cfg.groundCol,
       roughness: this.cfg.groundRough,
     });
+
+    if (idx === 0) {
+      mat2.map = this.texSerengeti;
+      mat2.color.setHex(0xFFFFFF); // Let texture color drive the look
+    } else if (idx === 1) {
+      mat2.map = this.texZanzibar;
+      mat2.color.setHex(0xFFFFFF);
+    }
+
     const ground = new THREE.Mesh(geo, mat2);
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;

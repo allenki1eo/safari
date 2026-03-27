@@ -10,6 +10,9 @@
   <meta name="apple-mobile-web-app-title" content="Safari">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;900&display=swap" rel="stylesheet">
   <title>Safari 🦁</title>
 
   <style>
@@ -28,17 +31,24 @@
       width: 100%; height: 100%;
       overflow: hidden;
       background: #0D0601;
-      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      font-family: 'Outfit', 'Segoe UI', system-ui, -apple-system, sans-serif;
       color: #fff;
       -webkit-tap-highlight-color: transparent;
       touch-action: none;
     }
 
-    /* ─── Canvas lives behind everything ─────────────────── */
+    /* ─── Canvas & Vignette ──────────────────────────────── */
     #game-canvas {
       display: block;
       position: fixed; inset: 0;
       width: 100%; height: 100%;
+    }
+    
+    #vignette {
+      position: fixed; inset: 0;
+      background: radial-gradient(circle at center, transparent 30%, rgba(5,0,0,0.85) 120%);
+      pointer-events: none;
+      z-index: 5;
     }
 
     /* ─── UI overlay ─────────────────────────────────────── */
@@ -368,6 +378,7 @@
 <body>
 
 <canvas id="game-canvas"></canvas>
+<div id="vignette"></div>
 
 <div id="ui">
 
