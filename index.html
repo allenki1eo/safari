@@ -223,7 +223,7 @@
       width: 42px; height: 42px;
       border-radius: 50%;
       cursor: pointer;
-      pointer-events: all;
+      pointer-events: inherit;
       display: flex; align-items: center; justify-content: center;
       backdrop-filter: blur(10px);
       transition: background 0.2s;
@@ -232,7 +232,11 @@
 
     /* ─── Touch zones ─────────────────────────────────────── */
     #touch-zone-up, #touch-zone-down {
-      position: absolute; pointer-events: all; opacity: 0;
+      position: absolute; pointer-events: none; opacity: 0;
+    }
+    #hud:not(.hidden) #touch-zone-up,
+    #hud:not(.hidden) #touch-zone-down {
+      pointer-events: all;
     }
     #touch-zone-up   { top: 0; left: 0; right: 0; height: 50%; }
     #touch-zone-down { bottom: 0; left: 0; right: 0; height: 50%; }

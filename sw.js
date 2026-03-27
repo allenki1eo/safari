@@ -7,7 +7,6 @@ self.addEventListener('activate', (e) => {
       return Promise.all(keyList.map((key) => caches.delete(key)));
     })
   );
-  self.clients.claim();
 });
 self.addEventListener('fetch', (e) => {
   // Pass-through to network, no caching to prevent stale assets during dev
