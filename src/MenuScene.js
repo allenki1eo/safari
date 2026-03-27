@@ -1,215 +1,9 @@
 /* ─── MenuScene — Animated Safari Sunset Art ─────────────── */
 import * as THREE from 'three';
+import { loadModel } from './Level.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
-const SILHOUETTE = 0x0D0603; /* near-black warm brown */
 const GROUND_COL = 0x7A4E1A;
-
-function sm() {
-  return new THREE.MeshStandardMaterial({ color: SILHOUETTE, roughness: 1, metalness: 0 });
-}
-
-/* ─── Animal builders ─────────────────────────────────────── */
-function makeElephant(scale = 1) {
-  const g = new THREE.Group();
-  const mat = sm();
-
-  /* body */
-  const body = new THREE.Mesh(new THREE.BoxGeometry(1.6 * scale, 1.0 * scale, 0.8 * scale), mat);
-  body.position.y = 1.3 * scale;
-  g.add(body);
-
-  /* head */
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.45 * scale, 12, 10), mat);
-  head.position.set(0.95 * scale, 1.9 * scale, 0);
-  g.add(head);
-
-  /* trunk — segments drooping down */
-  for (let i = 0; i < 4; i++) {
-    const seg = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.1 * scale, 0.08 * scale, 0.38 * scale, 7),
-      mat
-    );
-    seg.position.set((1.35 + i * 0.1) * scale, (1.55 - i * 0.35) * scale, 0);
-    seg.rotation.z = 0.3 + i * 0.22;
-    g.add(seg);
-  }
-
-  /* ears */
-  const earGeo = new THREE.EllipseCurve(0, 0, 0.42 * scale, 0.55 * scale, 0, Math.PI * 2);
-  const earShape = new THREE.Shape();
-  earShape.absellipse(0, 0, 0.42 * scale, 0.55 * scale, 0, Math.PI * 2);
-  const ear = new THREE.Mesh(new THREE.ShapeGeometry(earShape), mat);
-  ear.position.set(0.5 * scale, 1.85 * scale, 0.42 * scale);
-  g.add(ear);
-
-  /* tusk */
-  const tusk = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.05 * scale, 0.03 * scale, 0.55 * scale, 6),
-    new THREE.MeshStandardMaterial({ color: 0x2A1E10, roughness: 1 })
-  );
-  tusk.rotation.z = 1.1;
-  tusk.position.set(1.35 * scale, 1.45 * scale, 0.16 * scale);
-  g.add(tusk);
-
-  /* 4 legs */
-  const legH = 0.85 * scale;
-  const legGeo = new THREE.CylinderGeometry(0.15 * scale, 0.18 * scale, legH, 8);
-  for (let lx = -0.45; lx <= 0.45; lx += 0.9) {
-    for (let lz = -0.22; lz <= 0.22; lz += 0.44) {
-      const leg = new THREE.Mesh(legGeo, mat);
-      leg.position.set(lx * scale, legH / 2, lz * scale);
-      g.add(leg);
-    }
-  }
-
-  /* tail */
-  const tail = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.04 * scale, 0.02 * scale, 0.5 * scale, 6),
-    mat
-  );
-  tail.rotation.z = -0.6;
-  tail.position.set(-0.95 * scale, 1.4 * scale, 0);
-  g.add(tail);
-
-  return g;
-}
-
-function makeGiraffe(scale = 1) {
-  const g = new THREE.Group();
-  const mat = sm();
-
-  /* body */
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.9 * scale, 0.7 * scale, 0.55 * scale), mat);
-  body.position.y = 2.0 * scale;
-  g.add(body);
-
-  /* long neck */
-  const neck = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.14 * scale, 0.18 * scale, 2.1 * scale, 8),
-    mat
-  );
-  neck.position.set(0.3 * scale, 3.3 * scale, 0);
-  neck.rotation.z = 0.12;
-  g.add(neck);
-
-  /* head */
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.45 * scale, 0.28 * scale, 0.28 * scale), mat);
-  head.position.set(0.5 * scale, 4.52 * scale, 0);
-  g.add(head);
-
-  /* ossicones (horns) */
-  for (let ox of [-0.1, 0.1]) {
-    const horn = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.025 * scale, 0.04 * scale, 0.25 * scale, 5),
-      mat
-    );
-    horn.position.set(0.38 * scale, 4.78 * scale, ox * scale);
-    g.add(horn);
-  }
-
-  /* 4 long legs */
-  const legH = 1.85 * scale;
-  const legGeo = new THREE.CylinderGeometry(0.09 * scale, 0.07 * scale, legH, 7);
-  for (let lx = -0.28; lx <= 0.28; lx += 0.56) {
-    for (let lz = -0.17; lz <= 0.17; lz += 0.34) {
-      const leg = new THREE.Mesh(legGeo, mat);
-      leg.position.set(lx * scale, legH / 2, lz * scale);
-      g.add(leg);
-    }
-  }
-
-  /* tail */
-  const tail = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.03 * scale, 0.01 * scale, 0.6 * scale, 5),
-    mat
-  );
-  tail.rotation.z = -0.5;
-  tail.position.set(-0.55 * scale, 1.9 * scale, 0);
-  g.add(tail);
-
-  return g;
-}
-
-function makeWildebeest(scale = 1) {
-  const g = new THREE.Group();
-  const mat = sm();
-
-  /* body */
-  const body = new THREE.Mesh(new THREE.BoxGeometry(1.0 * scale, 0.65 * scale, 0.5 * scale), mat);
-  body.position.y = 1.15 * scale;
-  g.add(body);
-
-  /* shaggy head */
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.32 * scale, 10, 8), mat);
-  head.scale.set(1.2, 0.9, 1.0);
-  head.position.set(0.62 * scale, 1.5 * scale, 0);
-  g.add(head);
-
-  /* horns */
-  for (let hz = -0.14; hz <= 0.14; hz += 0.28) {
-    const horn = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.04 * scale, 0.02 * scale, 0.35 * scale, 5),
-      mat
-    );
-    horn.position.set(0.55 * scale, 1.88 * scale, hz * scale);
-    horn.rotation.z = 0.5;
-    horn.rotation.x = hz > 0 ? -0.4 : 0.4;
-    g.add(horn);
-  }
-
-  /* beard */
-  const beard = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.1 * scale, 0.04 * scale, 0.28 * scale, 6),
-    mat
-  );
-  beard.position.set(0.75 * scale, 1.2 * scale, 0);
-  g.add(beard);
-
-  /* 4 legs */
-  const legH = 0.9 * scale;
-  const legGeo = new THREE.CylinderGeometry(0.08 * scale, 0.07 * scale, legH, 7);
-  for (let lx = -0.3; lx <= 0.3; lx += 0.6) {
-    for (let lz = -0.14; lz <= 0.14; lz += 0.28) {
-      const leg = new THREE.Mesh(legGeo, mat);
-      leg.position.set(lx * scale, legH / 2, lz * scale);
-      g.add(leg);
-    }
-  }
-
-  /* tail */
-  const tail = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.03 * scale, 0.01 * scale, 0.4 * scale, 5),
-    mat
-  );
-  tail.rotation.z = -0.7;
-  tail.position.set(-0.62 * scale, 1.2 * scale, 0);
-  g.add(tail);
-
-  return g;
-}
-
-function makeAcacia(scale = 1) {
-  const g   = new THREE.Group();
-  const mat = sm();
-
-  const trunk = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.07 * scale, 0.11 * scale, 1.8 * scale, 7),
-    mat
-  );
-  trunk.position.y = 0.9 * scale;
-  g.add(trunk);
-
-  /* umbrella canopy */
-  const canopy = new THREE.Mesh(
-    new THREE.SphereGeometry(1.1 * scale, 12, 6),
-    mat
-  );
-  canopy.scale.set(1.8, 0.55, 1.5);
-  canopy.position.y = 2.2 * scale;
-  g.add(canopy);
-
-  return g;
-}
 
 /* ─── MenuScene class ─────────────────────────────────────── */
 export class MenuScene {
@@ -307,33 +101,58 @@ export class MenuScene {
       [28, 0, -14, 1.1],  [-38, 0, -30, 2.2],
     ];
     for (const [x, y, z, s] of positions) {
-      const tree = makeAcacia(s);
-      tree.position.set(x, y, z);
-      this._add(tree);
+      const grp = new THREE.Group();
+      grp.position.set(x, y, z);
+      this._add(grp);
+
+      const treeModel = Math.random() > 0.5 ? 'src/assets/nature/CommonTree_1.gltf' : 'src/assets/nature/DeadTree_1.gltf';
+      loadModel(treeModel, gltf => {
+         const mesh = gltf.scene.clone();
+         const box = new THREE.Box3().setFromObject(mesh);
+         mesh.scale.setScalar((4.5 * s) / box.getSize(new THREE.Vector3()).y);
+         mesh.traverse(c => {
+             if (c.isMesh) c.castShadow = true;
+         });
+         grp.add(mesh);
+      });
     }
   }
 
   /* ─── Animal herd ───────────────────────────────────────── */
   _buildHerd() {
     const specs = [
-      /* [factory, scale, x, z, speed, phase] */
-      [makeElephant,    1.0,  20,  -4, 2.5, 0.0],
-      [makeElephant,    0.85, 14,  -3, 2.8, 1.0],
-      [makeElephant,    1.1, -8,   -5, 2.3, 2.2],
-      [makeGiraffe,     1.0,  50,  -2, 3.5, 0.5],
-      [makeGiraffe,     0.9,  60,  -6, 3.2, 1.8],
-      [makeWildebeest,  0.9,  35,  -1, 5.5, 0.0],
-      [makeWildebeest,  0.85, 28,  -2, 5.8, 0.7],
-      [makeWildebeest,  1.0,  42,   0, 5.2, 1.4],
-      [makeWildebeest,  0.8,  55,  -1, 6.0, 2.1],
-      [makeWildebeest,  0.95,-12,  -2, 5.6, 2.8],
+      ['src/assets/animals/Bull.gltf',     1.0,  50,  -2, 3.5, 0.5],
+      ['src/assets/animals/Bull.gltf',     0.9,  60,  -6, 3.2, 1.8],
+      ['src/assets/animals/Bull.gltf',     1.1,  35,  -1, 3.4, 0.0],
+      ['src/assets/animals/Stag.gltf',     0.85, 28,  -2, 5.8, 0.7],
+      ['src/assets/animals/Stag.gltf',     1.0,  42,   0, 5.2, 1.4],
+      ['src/assets/animals/Stag.gltf',     0.8,  55,  -1, 6.0, 2.1],
+      ['src/assets/animals/Deer.gltf',     1.1, -8,   -5, 4.3, 2.2],
+      ['src/assets/animals/Horse.gltf',    1.0,  20,  -4, 4.5, 0.0],
+      ['src/assets/animals/Horse.gltf',    0.85, 14,  -3, 4.8, 1.0],
+      ['src/assets/animals/Wolf.gltf',     0.95,-12,  -2, 6.6, 2.8],
     ];
 
-    for (const [fn, s, x, z, speed, phase] of specs) {
-      const grp = fn(s);
+    for (const [path, s, x, z, speed, phase] of specs) {
+      const grp = new THREE.Group();
       grp.position.set(x, 0, z);
       this.scene.add(grp);
       this._herd.push({ grp, speed, phase, baseX: x, origX: x });
+
+      loadModel(path, gltf => {
+          const mesh = SkeletonUtils.clone(gltf.scene);
+          if (gltf.animations) {
+              const mixer = new THREE.AnimationMixer(mesh);
+              const clip = gltf.animations.find(a => a.name==='Run' || a.name==='Gallop' || a.name==='Walk') || gltf.animations[0];
+              mixer.clipAction(clip).play();
+              grp.userData.mixer = mixer;
+          }
+          const box = new THREE.Box3().setFromObject(mesh);
+          mesh.scale.setScalar((1.5 * s) / box.getSize(new THREE.Vector3()).y);
+          mesh.rotation.y = -Math.PI / 2;
+          mesh.traverse(c => { if (c.isMesh) c.castShadow = true; });
+          grp.add(mesh);
+      });
     }
   }
 
@@ -388,8 +207,9 @@ export class MenuScene {
     for (const a of this._herd) {
       a.grp.position.x -= a.speed * dt;
 
-      /* Walking bob */
-      a.grp.position.y = Math.abs(Math.sin(t * a.speed * 1.5 + a.phase)) * 0.04;
+      if (a.grp.userData.mixer) {
+        a.grp.userData.mixer.update(dt * (a.speed / 3));
+      }
 
       /* Loop */
       if (a.grp.position.x < -90) {
@@ -413,12 +233,12 @@ export class MenuScene {
       this._stars.material.opacity = 0.5 + Math.sin(t * 0.4) * 0.2;
     }
 
-    /* Gentle camera drift — slow pan */
+    /* Gentle camera drift — cinematic low pan */
     if (camera) {
-      camera.position.x = Math.sin(t * 0.05) * 3;
-      camera.position.y = 3.5 + Math.sin(t * 0.12) * 0.4;
-      camera.position.z = 16;
-      camera.lookAt(new THREE.Vector3(Math.sin(t * 0.04) * 2, 3.5, -10));
+      camera.position.x = Math.sin(t * 0.03) * 5;
+      camera.position.y = 1.2 + Math.sin(t * 0.08) * 0.4;
+      camera.position.z = 10;
+      camera.lookAt(new THREE.Vector3(Math.sin(t * 0.02) * 3, 3.5, -15));
     }
   }
 

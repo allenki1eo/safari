@@ -1,5 +1,22 @@
 /* ─── Level Manager — 3 Tanzania levels ─────────────────── */
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+
+/* ─── Static GLTF Cache ─── */
+const GLTF_CACHE = {};
+const gltfLoader = new GLTFLoader();
+
+export function loadModel(path, onLoad) {
+  if (GLTF_CACHE[path]) {
+    onLoad(GLTF_CACHE[path]);
+  } else {
+    gltfLoader.load(path, (gltf) => {
+      GLTF_CACHE[path] = gltf;
+      onLoad(gltf);
+    });
+  }
+}
 
 /* ─── Shared helpers ─────────────────────────────────────── */
 function m(color, rough = 0.85, metal = 0) {
@@ -250,21 +267,19 @@ export class Level {
 
   _makeAcacia(scale) {
     const grp = new THREE.Group();
-    /* trunk */
-    const trunk = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.06 * scale, 0.1 * scale, 1.5 * scale, 7),
-      m(0x5C3D18, 0.95)
-    );
-    trunk.position.y = 0.75 * scale;
-    grp.add(trunk);
-    /* canopy — flat umbrella disc + sphere */
-    const canopy = new THREE.Mesh(
-      new THREE.SphereGeometry(1.0 * scale, 14, 6),
-      m(0x2D5A1B + (Math.random() > 0.5 ? 0x050500 : 0), 0.9)
-    );
-    canopy.scale.set(1.6, 0.55, 1.4);
-    canopy.position.y = 1.9 * scale;
-    grp.add(canopy);
+    loadModel('src/assets/nature/CommonTree_1.gltf', gltf => {
+      const mesh = gltf.scene.clone();
+      const box = new THREE.Box3().setFromObject(mesh);
+      const size = box.getSize(new THREE.Vector3());
+      mesh.scale.setScalar((3.5 * scale) / size.y);
+      mesh.traverse(c => { 
+        if (c.isMesh) {
+           c.castShadow = true;
+           c.receiveShadow = true;
+        }
+      });
+      grp.add(mesh);
+    });
     return grp;
   }
 
@@ -471,61 +486,131 @@ export class Level {
   }
 
   _makeAnimal(tmpl) {
-    const mat2 = m(tmpl.col, 0.88);
     const grp = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.BoxGeometry(tmpl.w, tmpl.h * 0.6, 0.5), mat2);
-    body.position.y = tmpl.h * 0.6;
-    body.castShadow = true;
-    grp.add(body);
-    /* legs */
-    const legH = tmpl.h * 0.45;
-    const legGeo = new THREE.CylinderGeometry(0.07, 0.06, legH, 6);
-    for (let lx = -0.25; lx <= 0.25; lx += 0.5) {
-      const leg = new THREE.Mesh(legGeo, mat2);
-      leg.position.set(lx, legH / 2, 0.12);
-      leg.castShadow = true;
-      grp.add(leg);
-      const leg2 = leg.clone();
-      leg2.position.z = -0.12;
-      grp.add(leg2);
+    if (tmpl.kind === 'wildebeest') {
+      loadModel('src/assets/animals/Bull.gltf', gltf => {
+        const mesh = SkeletonUtils.clone(gltf.scene);
+        if (gltf.animations && gltf.animations.length > 0) {
+           const mixer = new THREE.AnimationMixer(mesh);
+           const clip = gltf.animations.find(a => a.name === 'Gallop' || a.name === 'Run' || a.name === 'Walk') || gltf.animations[0];
+           mixer.clipAction(clip).play();
+           grp.userData.mixer = mixer;
+        }
+        const box = new THREE.Box3().setFromObject(mesh);
+        const size = box.getSize(new THREE.Vector3());
+        mesh.scale.setScalar(tmpl.h / size.y);
+        mesh.rotation.y = -Math.PI / 2; // Face towards negative X
+        mesh.traverse(c => { if (c.isMesh) c.castShadow = c.receiveShadow = true; });
+        grp.add(mesh);
+      });
+    } else {
+      const mat2 = m(tmpl.col, 0.88);
+      const body = new THREE.Mesh(new THREE.BoxGeometry(tmpl.w, tmpl.h * 0.6, 0.5), mat2);
+      body.position.y = tmpl.h * 0.6;
+      body.castShadow = true;
+      grp.add(body);
+      /* legs */
+      const legH = tmpl.h * 0.45;
+      const legGeo = new THREE.CylinderGeometry(0.07, 0.06, legH, 6);
+      for (let lx = -0.25; lx <= 0.25; lx += 0.5) {
+        const leg = new THREE.Mesh(legGeo, mat2);
+        leg.position.set(lx, legH / 2, 0.12);
+        leg.castShadow = true;
+        grp.add(leg);
+        const leg2 = leg.clone();
+        leg2.position.z = -0.12;
+        grp.add(leg2);
+      }
+      /* head */
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.38), mat2);
+      head.position.set(tmpl.w * 0.45, tmpl.h * 0.72, 0);
+      head.castShadow = true;
+      grp.add(head);
     }
-    /* head */
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.38), mat2);
-    head.position.set(tmpl.w * 0.45, tmpl.h * 0.72, 0);
-    head.castShadow = true;
-    grp.add(head);
     return grp;
   }
 
   _makeRock(tmpl) {
-    const mat2 = m(tmpl.col, 0.95);
     const grp = new THREE.Group();
-    const geo = new THREE.DodecahedronGeometry(tmpl.h / 2, 0);
-    /* Randomise vertices slightly */
-    const pos = geo.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
-      pos.setX(i, pos.getX(i) * (0.85 + Math.random() * 0.3));
-      pos.setY(i, pos.getY(i) * (0.85 + Math.random() * 0.3));
-      pos.setZ(i, pos.getZ(i) * (0.85 + Math.random() * 0.3));
+    if (tmpl.kind === 'rock') {
+      loadModel('src/assets/nature/Pebble_Round_1.gltf', gltf => {
+        const mesh = gltf.scene.clone();
+        const box = new THREE.Box3().setFromObject(mesh);
+        const size = box.getSize(new THREE.Vector3());
+        mesh.scale.setScalar(tmpl.h / size.y);
+        mesh.rotation.y = Math.random() * Math.PI * 2;
+        mesh.traverse(c => { if (c.isMesh) c.castShadow = c.receiveShadow = true; });
+        grp.add(mesh);
+      });
+    } else {
+      const mat2 = m(tmpl.col, 0.95);
+      const geo = new THREE.DodecahedronGeometry(tmpl.h / 2, 0);
+      /* Randomise vertices slightly */
+      const pos = geo.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        pos.setX(i, pos.getX(i) * (0.85 + Math.random() * 0.3));
+        pos.setY(i, pos.getY(i) * (0.85 + Math.random() * 0.3));
+        pos.setZ(i, pos.getZ(i) * (0.85 + Math.random() * 0.3));
+      }
+      geo.computeVertexNormals();
+      const rock = new THREE.Mesh(geo, mat2);
+      rock.scale.set(tmpl.w / tmpl.h, 1, 0.8);
+      rock.position.y = tmpl.h / 2;
+      rock.castShadow = rock.receiveShadow = true;
+      grp.add(rock);
     }
-    geo.computeVertexNormals();
-    const rock = new THREE.Mesh(geo, mat2);
-    rock.scale.set(tmpl.w / tmpl.h, 1, 0.8);
-    rock.position.y = tmpl.h / 2;
-    rock.castShadow = rock.receiveShadow = true;
-    grp.add(rock);
     return grp;
   }
 
   /* ─── Gem pool ──────────────────────────────────────────── */
   _buildGemPool() {
     for (let i = 0; i < 12; i++) {
+      if (i === 11) {
+        const eggGeo = new THREE.SphereGeometry(0.3, 16, 16);
+        const eggMat = new THREE.MeshStandardMaterial({ color: 0xFFFFFF, roughness: 0.4 });
+        const eggMesh = new THREE.Mesh(eggGeo, eggMat);
+        eggMesh.position.y = 0.5;
+        eggMesh.scale.set(1, 1.4, 1);
+        eggMesh.castShadow = eggMesh.receiveShadow = true;
+        const eggGrp = new THREE.Group();
+        eggGrp.add(eggMesh);
+        eggGrp.visible = false;
+        this.scene.add(eggGrp);
+        this._gemPool.push({ mesh: eggGrp, active: false, hb: new THREE.Box3(), isEgg: true, word: '' });
+        continue;
+      }
       const mesh = new THREE.Mesh(this._gemGeo, this._gemMat);
       mesh.castShadow = true;
       mesh.visible = false;
       this.scene.add(mesh);
-      this._gemPool.push({ mesh, active: false, hb: new THREE.Box3(), word: '' });
+      function getWord() { return SWAHILI[Math.floor(Math.random() * SWAHILI.length)]; }
+      this._gemPool.push({ mesh, active: false, hb: new THREE.Box3(), word: getWord() });
     }
+  }
+
+  spawnPredator() {
+    if (this.predator) {
+      this.predator.visible = true;
+      return this.predator;
+    }
+    const grp = new THREE.Group();
+    loadModel('src/assets/animals/Wolf.gltf', gltf => {
+        const mesh = SkeletonUtils.clone(gltf.scene);
+        if (gltf.animations) {
+            const mixer = new THREE.AnimationMixer(mesh);
+            const clip = gltf.animations.find(a => a.name==='Run' || a.name==='Gallop') || gltf.animations[0];
+            mixer.clipAction(clip).play();
+            grp.userData.mixer = mixer;
+        }
+        mesh.scale.setScalar(0.85); // giant wolf
+        mesh.rotation.y = Math.PI / 2; // facing +X
+        mesh.traverse(c => { if(c.isMesh) c.castShadow = true; });
+        grp.add(mesh);
+    });
+    this.predator = grp;
+    this.predator.visible = true;
+    this.scene.add(grp);
+    return grp;
   }
 
   /* ─── Particles ─────────────────────────────────────────── */
@@ -557,6 +642,10 @@ export class Level {
   /* ─── Update ─────────────────────────────────────────────── */
   update(dt, speed, playerHB, time) {
     if (!this._loaded) return { hit: false };
+
+    if (this.predator && this.predator.visible && this.predator.userData.mixer) {
+       this.predator.userData.mixer.update(dt * 1.6);
+    }
 
     const ev = { hit: false, collect: null, word: null };
 
@@ -595,6 +684,10 @@ export class Level {
     for (const obs of this._obsPool) {
       if (!obs.active) continue;
       obs.group.position.x -= speed * dt;
+
+      if (obs.group.userData.mixer) {
+        obs.group.userData.mixer.update(dt * (speed / 10));
+      }
 
       /* Update hitbox */
       obs.hb.setFromObject(obs.group);
@@ -653,6 +746,7 @@ export class Level {
         gem.mesh.visible = false;
         ev.collect = 'gem';
         ev.word    = gem.word;
+        ev.isEgg   = gem.isEgg;
       }
     }
 
@@ -676,6 +770,7 @@ export class Level {
     if (!free) return;
     const y = 0.8 + Math.random() * 1.4;
     free.mesh.position.set(26 + Math.random() * 4, y, (Math.random() - 0.5) * 0.4);
+    if (free.isEgg) free.mesh.position.z = 0;
     free._baseY  = y;
     free._phase  = Math.random() * Math.PI * 2;
     free.word    = SWAHILI[Math.floor(Math.random() * SWAHILI.length)];

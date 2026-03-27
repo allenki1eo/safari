@@ -183,6 +183,7 @@ class Game {
     this.lives    = 3;
     this.time     = 0;
     this.speed    = SCROLL_SPEED_BASE + idx * 1.5;
+    this.chaseMode = false;
 
     this.level.load(idx);
     this.player.reset();
@@ -236,15 +237,34 @@ class Game {
   }
 
   /* ─── Hit / Collect ───────────────────────────────────── */
+  _die() {
+    this.lives = 0;
+    this.ui.setLives(0);
+    this.state = 'gameover';
+    this.clock.stop();
+    this.ui.showGameOver(Math.floor(this.score));
+  }
+
   _onHit() {
     if (this.player.isInvincible) return;
+
+    if (this.chaseMode) {
+      this.speed = Math.max(SCROLL_SPEED_BASE - 2, this.speed - 6.5);
+      this.shakeIntensity = 1.2;
+      this.player.isInvincible = true;
+      const iv = setInterval(() => { if (this.player) this.player.group.visible = !this.player.group.visible; }, 100);
+      setTimeout(() => {
+        clearInterval(iv);
+        if (this.player) { this.player.isInvincible = false; this.player.group.visible = true; }
+      }, 1200);
+      return;
+    }
+
     this.lives = Math.max(0, this.lives - 1);
     this.ui.setLives(this.lives);
     this.shakeIntensity = 1.0; /* Trigger camera shake */
     if (this.lives <= 0) {
-      this.state = 'gameover';
-      this.clock.stop();
-      this.ui.showGameOver(Math.floor(this.score));
+      this._die();
     } else {
       this.player.startInvincibility(2.2);
     }
@@ -277,7 +297,16 @@ class Game {
 
         const ev = this.level.update(dt, this.speed, this.player.hitBox, this.time);
         if (ev.hit)     this._onHit();
-        if (ev.collect) this._onCollect(ev.collect, ev.word);
+        if (ev.collect) {
+          if (ev.isEgg && !this.chaseMode) {
+             this.chaseMode = true;
+             this.ui.showToast("WOLF PACK IMMINENT!!");
+             this.predator = this.level.spawnPredator();
+             this.predator.position.set(-20, 0, 0); // start far back
+          } else if (!ev.isEgg) {
+             this._onCollect(ev.collect, ev.word);
+          }
+        }
 
         this.level.updateLighting(this.sunLight, this.ambientLight, this.fillLight);
 
@@ -300,7 +329,27 @@ class Game {
           if (this.shakeIntensity < 0) this.shakeIntensity = 0;
         }
 
-        this.camera.position.x = -1.5 + shakeX;
+        let targetCamX = -1.5, targetCamZ = 13;
+
+        if (this.chaseMode && this.predator) {
+           const relativeSpeed = 16.5 - this.speed; // Wolf speed is ~16.5
+           this.predator.position.x += relativeSpeed * dt;
+           
+           if (this.predator.position.x >= this.player.group.position.x - 0.8) {
+               this._die();
+           } else if (this.predator.position.x < -35) {
+               this.chaseMode = false;
+               this.predator.visible = false;
+               this.ui.showToast("ESCAPED THE WOLF!");
+               this.score += 500;
+           }
+           
+           targetCamX = -4.0;
+           targetCamZ = 16.5; 
+        }
+
+        this.camera.position.x = THREE.MathUtils.lerp(this.camera.position.x, targetCamX + shakeX, 0.05);
+        this.camera.position.z = THREE.MathUtils.lerp(this.camera.position.z, targetCamZ, 0.05);
         this.camera.position.y = 5.5 + Math.sin(this.time * 0.8) * 0.08 + shakeY;
         this.camera.lookAt(new THREE.Vector3(1, 1.4, 0));
 
