@@ -223,19 +223,12 @@
       width: 42px; height: 42px;
       border-radius: 50%;
       cursor: pointer;
-      pointer-events: all;
+      pointer-events: inherit;
       display: flex; align-items: center; justify-content: center;
       backdrop-filter: blur(10px);
       transition: background 0.2s;
     }
     #pause-btn:hover { background: rgba(255,255,255,0.18); }
-
-    /* ─── Touch zones ─────────────────────────────────────── */
-    #touch-zone-up, #touch-zone-down {
-      position: absolute; pointer-events: all; opacity: 0;
-    }
-    #touch-zone-up   { top: 0; left: 0; right: 0; height: 50%; }
-    #touch-zone-down { bottom: 0; left: 0; right: 0; height: 50%; }
 
     /* ─── Controls hint ───────────────────────────────────── */
     #controls-hint {
@@ -420,8 +413,6 @@
       <div class="hud-pill" id="level-label">🌾 Serengeti</div>
       <div class="hud-pill"><span id="lives-val">❤️❤️❤️</span></div>
     </div>
-    <div id="touch-zone-up"></div>
-    <div id="touch-zone-down"></div>
     <button id="pause-btn" title="Pause (P)">⏸</button>
   </div>
 

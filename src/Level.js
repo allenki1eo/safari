@@ -17,15 +17,15 @@ const CONFIGS = [
   /* 0 — Serengeti */
   {
     name:       '🌾 Serengeti',
-    skyTop:     0xE8622A,
-    skyBot:     0xFFB84C,
-    fogColor:   0xFFB347,
-    fogDensity: 0.016,
-    groundCol:  0xC4922A,
+    skyTop:     0xC85820,
+    skyBot:     0xFF9A3C,
+    fogColor:   0xE8894A,
+    fogDensity: 0.006,   /* much less fog so scene is visible */
+    groundCol:  0xB87820,
     groundRough:0.95,
-    lightCol:   0xFFE0A0,
-    ambCol:     0xFFD090,
-    ambInt:     0.5,
+    lightCol:   0xFFD080,
+    ambCol:     0xFFC060,
+    ambInt:     0.55,
     /* obstacle templates: { kind, w, h, hGap } hGap>0 = arch (duck under), hGap=0 = block (jump over) */
     obstacles: [
       { kind: 'wildebeest', w: 0.85, h: 1.05, hGap: 0,   col: 0x5C3D1C },
@@ -38,14 +38,14 @@ const CONFIGS = [
   /* 1 — Zanzibar Beach */
   {
     name:       '🏖️ Zanzibar',
-    skyTop:     0x00BFEA,
-    skyBot:     0x6EE6FF,
-    fogColor:   0x9DE8FF,
-    fogDensity: 0.012,
-    groundCol:  0xEDD5A0,
+    skyTop:     0x0088CC,
+    skyBot:     0x44CCEE,
+    fogColor:   0x88DDFF,
+    fogDensity: 0.005,   /* ocean haze, very light */
+    groundCol:  0xD4B870,
     groundRough:0.9,
-    lightCol:   0xFFF8E0,
-    ambCol:     0xC0EEFF,
+    lightCol:   0xFFF5D0,
+    ambCol:     0xA0D8F0,
     ambInt:     0.6,
     obstacles: [
       { kind: 'crab',      w: 0.75, h: 0.55, hGap: 0,   col: 0xE05020 },
@@ -58,11 +58,11 @@ const CONFIGS = [
   /* 2 — Kilimanjaro Slopes */
   {
     name:       '🏔️ Kilimanjaro',
-    skyTop:     0xA8C0D0,
-    skyBot:     0xD8EAF5,
-    fogColor:   0xCDE4F5,
-    fogDensity: 0.014,
-    groundCol:  0x8C8C8C,
+    skyTop:     0x6888A8,
+    skyBot:     0xB8D4E8,
+    fogColor:   0xA8C4D8,
+    fogDensity: 0.007,   /* mountain haze, gentle */
+    groundCol:  0x888888,
     groundRough:0.92,
     lightCol:   0xE8F0FF,
     ambCol:     0xB0CCEE,
@@ -117,15 +117,6 @@ export class Level {
     this._gemGeo = new THREE.OctahedronGeometry(0.22, 0);
     this._gemMat = new THREE.MeshStandardMaterial({ color: 0xFFD700, roughness: 0.1, metalness: 0.9, emissive: 0xFFAA00, emissiveIntensity: 0.4 });
 
-    /* Load Textures */
-    this.textureLoader = new THREE.TextureLoader();
-    this.texSerengeti = this.textureLoader.load('src/assets/serengeti_ground.png');
-    this.texSerengeti.wrapS = this.texSerengeti.wrapT = THREE.RepeatWrapping;
-    this.texSerengeti.repeat.set(20, 2);
-
-    this.texZanzibar = this.textureLoader.load('src/assets/zanzibar_sand.png');
-    this.texZanzibar.wrapS = this.texZanzibar.wrapT = THREE.RepeatWrapping;
-    this.texZanzibar.repeat.set(20, 2);
   }
 
   /* ─── Load level ────────────────────────────────────────── */
@@ -191,7 +182,6 @@ export class Level {
   /* ─── Ground plane ─────────────────────────────────────── */
   _buildGround(idx) {
     const geo = new THREE.PlaneGeometry(300, 40, 60, 1);
-    /* Subtle height variation */
     const pos = geo.attributes.position;
     for (let i = 0; i < pos.count; i++) {
       pos.setZ(i, (Math.random() - 0.5) * 0.04);
@@ -202,14 +192,6 @@ export class Level {
       color:     this.cfg.groundCol,
       roughness: this.cfg.groundRough,
     });
-
-    if (idx === 0) {
-      mat2.map = this.texSerengeti;
-      mat2.color.setHex(0xFFFFFF); // Let texture color drive the look
-    } else if (idx === 1) {
-      mat2.map = this.texZanzibar;
-      mat2.color.setHex(0xFFFFFF);
-    }
 
     const ground = new THREE.Mesh(geo, mat2);
     ground.rotation.x = -Math.PI / 2;
@@ -705,7 +687,9 @@ export class Level {
   updateLighting(sun, ambient, fill) {
     if (!this.cfg) return;
     sun.color.set(this.cfg.lightCol);
+    sun.intensity = 1.2;          /* keep sun consistent across levels */
     ambient.color.set(this.cfg.ambCol);
     ambient.intensity = this.cfg.ambInt;
+    fill.intensity = 0.35;
   }
 }

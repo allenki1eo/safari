@@ -251,7 +251,7 @@ export class Player {
   /* ─── Public API ──────────────────────────────────────── */
   reset() {
     this.group.position.set(0, 0, 0);
-    this.group.rotation.set(0, 0, 0);
+    this.group.rotation.set(0, Math.PI / 2, 0);
     this.group.scale.set(1, 1, 1);
     this.group.visible   = true;
     this._shadow.visible = true;
@@ -414,18 +414,26 @@ export class Player {
       this.group.scale.set(1, 1, 1);
 
     } else if (this.pstate === 'sliding') {
-      /* crouch / slide */
-      this.group.scale.y = 0.52;
-      this._lLegP.rotation.x  =  0.65;
-      this._rLegP.rotation.x  =  0.65;
-      this._lKneeP.rotation.x =  0.9;
-      this._rKneeP.rotation.x =  0.9;
-      this._lArmP.rotation.x  =  0.6;
-      this._rArmP.rotation.x  =  0.6;
-      this._lArmP._elbow.rotation.x = -0.4;
-      this._rArmP._elbow.rotation.x = -0.4;
-      this._torso.rotation.x  = -0.4;
-      this._head.rotation.x   =  0.3;
+      /* Feet-first baseball slide */
+      this.group.scale.y = 0.65;
+      
+      /* Left leg straight out in front */
+      this._lLegP.rotation.x  = -1.6;
+      this._lKneeP.rotation.x =  0.1;
+      
+      /* Right leg bent and tucked slightly */
+      this._rLegP.rotation.x  = -0.8;
+      this._rKneeP.rotation.x =  1.3;
+      
+      /* Arms thrown backward for balance */
+      this._lArmP.rotation.x  =  0.8;
+      this._rArmP.rotation.x  =  0.8;
+      this._lArmP._elbow.rotation.x = 0;
+      this._rArmP._elbow.rotation.x = 0;
+      
+      /* Torso leaning back */
+      this._torso.rotation.x  = -0.8;
+      this._head.rotation.x   =  0.6;
     }
   }
 
