@@ -184,6 +184,12 @@
       }
     }
 
+    @media (max-width: 380px) {
+      .level-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
     .level-card {
       background: rgba(255, 255, 255, 0.06);
       border: 1.5px solid rgba(255, 255, 255, 0.12);
@@ -405,7 +411,7 @@
       background: rgba(0, 0, 0, 0.65);
       border: 1.5px solid rgba(255, 255, 255, 0.14);
       border-radius: 26px;
-      padding: 44px 52px;
+      padding: clamp(24px, 6vh, 44px) clamp(20px, 6vw, 52px);
       text-align: center;
       backdrop-filter: blur(16px);
       max-width: 420px;
@@ -593,11 +599,12 @@
     }
 
     .loader-bar-wrap {
-      width: 200px;
+      width: min(200px, 80vw);
       height: 3px;
       background: rgba(255, 255, 255, 0.1);
       border-radius: 3px;
       margin: 20px auto 0;
+      position: relative;
       overflow: hidden;
     }
 

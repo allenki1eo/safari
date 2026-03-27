@@ -4,8 +4,9 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
 /* ─── Static GLTF Cache ─── */
+export const loadingManager = new THREE.LoadingManager();
 const GLTF_CACHE = {};
-const gltfLoader = new GLTFLoader();
+const gltfLoader = new GLTFLoader(loadingManager);
 
 export function loadModel(path, onLoad) {
   if (GLTF_CACHE[path]) {

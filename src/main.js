@@ -1,7 +1,7 @@
 /* ─── Safari — Main Game Engine ──────────────────────────── */
 import * as THREE from 'three';
 import { Player }    from './Player.js';
-import { Level }     from './Level.js';
+import { Level, loadingManager } from './Level.js';
 import { UI }        from './UI.js';
 import { MenuScene } from './MenuScene.js';
 
@@ -164,13 +164,29 @@ class Game {
   }
 
   /* ─── Loading ─────────────────────────────────────────── */
-  async _finishLoading() {
+  _finishLoading() {
     const bar = document.getElementById('loader-bar');
-    for (let p = 0; p <= 100; p += 8) {
-      if (bar) bar.style.width = p + '%';
-      await new Promise(r => setTimeout(r, 55));
-    }
-    this.goToMenu();
+
+    loadingManager.onProgress = (url, items, total) => {
+      if (bar) bar.style.width = ((items / total) * 100) + '%';
+    };
+
+    let hasDoneWarmup = false;
+    loadingManager.onLoad = () => {
+      if (hasDoneWarmup) return;
+      hasDoneWarmup = true;
+      /* GPU Warm-up: Compile all shaders from the instantly loaded assets before showing game */
+      this.renderer.compile(this.scene, this.camera);
+      
+      setTimeout(() => {
+        this.goToMenu();
+      }, 400);
+    };
+    loadingManager.onError = (url) => console.warn('Failed to load asset', url);
+
+    /* Construct MenuScene early specifically to force all heavy Quaternius models into the LoadingManager queue */
+    this.scene.fog = null;
+    this.menuScene = new MenuScene(this.scene);
   }
 
   /* ─── Level flow ──────────────────────────────────────── */
@@ -221,7 +237,7 @@ class Game {
     this.level.unload();
     this.player.hide();
 
-    /* Build menu art scene */
+    /* Menu art is pre-built in _finishLoading() */
     if (!this.menuScene) {
       this.scene.fog = null;
       this.menuScene = new MenuScene(this.scene);
