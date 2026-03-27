@@ -57,7 +57,7 @@ class Game {
     this.renderer.shadowMap.enabled   = true;
     this.renderer.shadowMap.type      = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping         = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 0.85;
     this.renderer.outputColorSpace    = THREE.SRGBColorSpace;
 
     window.addEventListener('resize', () => {
@@ -78,10 +78,11 @@ class Game {
 
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      1.2,   /* strength */
-      0.8,   /* radius */
-      0.4    /* threshold */
+      0.18,  /* strength — subtle glow only on gems/sun */
+      0.4,   /* radius */
+      0.88   /* threshold — only things >88% brightness bloom */
     );
+    this.bloomPass = bloomPass;
     this.composer.addPass(bloomPass);
 
     const outputPass = new OutputPass();
@@ -106,10 +107,10 @@ class Game {
 
   /* ─── Lights ──────────────────────────────────────────── */
   _setupLights() {
-    this.ambientLight = new THREE.AmbientLight(0xfff0e0, 0.55);
+    this.ambientLight = new THREE.AmbientLight(0xfff0e0, 0.7);
     this.scene.add(this.ambientLight);
 
-    this.sunLight = new THREE.DirectionalLight(0xfff4d0, 2.0);
+    this.sunLight = new THREE.DirectionalLight(0xfff4d0, 1.2);
     this.sunLight.position.set(8, 18, 8);
     this.sunLight.castShadow = true;
     this.sunLight.shadow.mapSize.set(1024, 1024);
