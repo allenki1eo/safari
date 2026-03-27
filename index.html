@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#006B3C">
+  <meta name="description" content="Roho ya Tanzania — 3D endless runner through the heart of East Africa">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Roho ya Tanzania">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <title>Roho ya Tanzania 🇹🇿</title>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --tz-green:  #006B3C;
+      --tz-black:  #111111;
+      --tz-gold:   #FCD116;
+      --tz-blue:   #00A3DD;
+      --tz-sky:    #FFB347;
+      --radius:    16px;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: #000;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      color: #fff;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: none;
+    }
+
+    #game-canvas {
+      display: block;
+      width: 100%; height: 100%;
+      position: fixed; inset: 0;
+    }
+
+    /* ─── UI OVERLAY ─────────────────────────────────────── */
+    #ui {
+      position: fixed; inset: 0;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .screen {
+      position: absolute; inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      pointer-events: all;
+      transition: opacity 0.4s ease;
+    }
+    .screen.hidden { opacity: 0; pointer-events: none; }
+
+    /* ─── MENU ───────────────────────────────────────────── */
+    #menu {
+      background: linear-gradient(160deg, rgba(0,107,60,0.92) 0%, rgba(0,0,0,0.85) 100%);
+      backdrop-filter: blur(6px);
+    }
+    .game-title {
+      font-size: clamp(2rem, 8vw, 4.5rem);
+      font-weight: 900;
+      letter-spacing: -1px;
+      text-shadow: 0 4px 20px rgba(0,0,0,0.6);
+      text-align: center;
+      line-height: 1.1;
+    }
+    .game-subtitle {
+      font-size: clamp(0.9rem, 3vw, 1.2rem);
+      opacity: 0.85;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin-top: 6px;
+      margin-bottom: 40px;
+    }
+
+    .level-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      width: min(760px, 92vw);
+      max-height: 60vh;
+      overflow-y: auto;
+      padding: 4px;
+    }
+    .level-card {
+      background: rgba(255,255,255,0.08);
+      border: 2px solid rgba(255,255,255,0.15);
+      border-radius: var(--radius);
+      padding: 24px 20px;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .level-card::before {
+      content: '';
+      position: absolute; inset: 0;
+      opacity: 0;
+      transition: opacity 0.25s;
+    }
+    .level-card:hover { transform: translateY(-4px) scale(1.02); border-color: var(--tz-gold); }
+    .level-card:hover::before { opacity: 0.12; }
+    .level-card:active { transform: scale(0.97); }
+    .level-card.locked { opacity: 0.45; cursor: not-allowed; }
+
+    .level-emoji { font-size: 2.8rem; display: block; margin-bottom: 10px; }
+    .level-name { font-size: 1.05rem; font-weight: 700; margin-bottom: 4px; }
+    .level-desc { font-size: 0.78rem; opacity: 0.7; line-height: 1.4; }
+    .level-lock { position: absolute; top: 12px; right: 12px; font-size: 1rem; }
+
+    /* ─── HUD ─────────────────────────────────────────────── */
+    #hud {
+      pointer-events: none;
+    }
+    #score-bar {
+      position: absolute;
+      top: env(safe-area-inset-top, 16px);
+      left: 0; right: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 24px;
+      pointer-events: none;
+    }
+    .hud-pill {
+      background: rgba(0,0,0,0.5);
+      backdrop-filter: blur(8px);
+      border-radius: 40px;
+      padding: 8px 18px;
+      font-weight: 700;
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+    #score-val { color: var(--tz-gold); font-size: 1.3rem; }
+    #lives-val { font-size: 1.1rem; letter-spacing: 2px; }
+    #level-label { font-size: 0.85rem; opacity: 0.85; }
+
+    #pause-btn {
+      position: absolute;
+      top: env(safe-area-inset-top, 16px);
+      right: 16px;
+      background: rgba(0,0,0,0.5);
+      border: none;
+      color: #fff;
+      font-size: 1.4rem;
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      cursor: pointer;
+      pointer-events: all;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s;
+    }
+    #pause-btn:hover { background: rgba(255,255,255,0.2); }
+
+    /* ─── SWAHILI TOAST ──────────────────────────────────── */
+    #toast {
+      position: absolute;
+      bottom: 20%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.75);
+      border: 2px solid var(--tz-gold);
+      border-radius: 40px;
+      padding: 10px 28px;
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--tz-gold);
+      letter-spacing: 1px;
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+    #toast.show { opacity: 1; }
+
+    /* ─── CONTROLS HINT ──────────────────────────────────── */
+    #controls-hint {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 20px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.5s;
+    }
+    #controls-hint.visible { opacity: 1; }
+    .ctrl {
+      background: rgba(0,0,0,0.6);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 12px;
+      padding: 8px 16px;
+      font-size: 0.82rem;
+      text-align: center;
+    }
+    .ctrl span { display: block; font-size: 1.1rem; margin-bottom: 2px; }
+
+    /* ─── TOUCH ZONES ─────────────────────────────────────── */
+    #touch-zone-up, #touch-zone-down {
+      position: absolute;
+      pointer-events: all;
+      opacity: 0;
+    }
+    #touch-zone-up { top: 0; left: 0; right: 0; height: 50%; }
+    #touch-zone-down { bottom: 0; left: 0; right: 0; height: 50%; }
+
+    /* ─── PAUSE OVERLAY ──────────────────────────────────── */
+    #pause-overlay {
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(8px);
+    }
+    .pause-box {
+      background: rgba(0,107,60,0.2);
+      border: 2px solid rgba(255,255,255,0.15);
+      border-radius: 24px;
+      padding: 40px 50px;
+      text-align: center;
+    }
+    .pause-box h2 { font-size: 2rem; margin-bottom: 8px; }
+    .pause-box p { opacity: 0.7; margin-bottom: 30px; }
+
+    /* ─── GAME OVER ──────────────────────────────────────── */
+    #gameover {
+      background: linear-gradient(160deg, rgba(0,0,0,0.95) 0%, rgba(17,0,0,0.95) 100%);
+    }
+    .go-box {
+      text-align: center;
+      max-width: 400px;
+    }
+    .go-box h2 { font-size: 2.5rem; margin-bottom: 6px; }
+    .go-box .go-score {
+      font-size: 1.1rem;
+      opacity: 0.75;
+      margin-bottom: 8px;
+    }
+    .go-box .go-score-val {
+      font-size: 4rem;
+      font-weight: 900;
+      color: var(--tz-gold);
+      display: block;
+      line-height: 1;
+      margin-bottom: 32px;
+    }
+
+    /* ─── BUTTONS ─────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 14px 32px;
+      border-radius: 50px;
+      border: none;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-decoration: none;
+      min-width: 180px;
+      pointer-events: all;
+    }
+    .btn-primary {
+      background: var(--tz-gold);
+      color: #000;
+      box-shadow: 0 4px 20px rgba(252,209,22,0.4);
+    }
+    .btn-primary:hover { background: #ffe040; transform: translateY(-2px); box-shadow: 0 6px 24px rgba(252,209,22,0.5); }
+    .btn-primary:active { transform: scale(0.97); }
+    .btn-secondary {
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+      border: 2px solid rgba(255,255,255,0.25);
+    }
+    .btn-secondary:hover { background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.4); }
+    .btn-row { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; margin-top: 10px; }
+
+    /* ─── LEVEL COMPLETE ─────────────────────────────────── */
+    #level-complete {
+      background: linear-gradient(160deg, rgba(0,107,60,0.95) 0%, rgba(0,0,0,0.92) 100%);
+    }
+    .lc-box { text-align: center; max-width: 420px; }
+    .lc-box h2 { font-size: 2.2rem; margin-bottom: 6px; }
+    .lc-box .lc-score-val {
+      font-size: 3.5rem;
+      font-weight: 900;
+      color: var(--tz-gold);
+      display: block;
+      line-height: 1;
+      margin: 16px 0 32px;
+    }
+
+    /* ─── LOADING ─────────────────────────────────────────── */
+    #loading {
+      background: #000;
+    }
+    .loader-wrap { text-align: center; }
+    .loader-emoji { font-size: 4rem; display: block; margin-bottom: 16px; animation: pulse 1.4s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.12)} }
+    .loader-text { font-size: 1rem; opacity: 0.7; letter-spacing: 2px; text-transform: uppercase; }
+    .loader-bar-wrap { width: 200px; height: 4px; background: rgba(255,255,255,0.15); border-radius: 4px; margin: 20px auto 0; overflow: hidden; }
+    .loader-bar { height: 100%; background: var(--tz-gold); border-radius: 4px; width: 0; transition: width 0.3s; }
+
+    /* ─── TRIVIA OVERLAY ─────────────────────────────────── */
+    #trivia {
+      background: linear-gradient(160deg, rgba(0,60,107,0.95) 0%, rgba(0,0,0,0.9) 100%);
+    }
+    .trivia-box { text-align: center; max-width: 500px; padding: 0 20px; }
+    .trivia-box .trivia-q { font-size: 1.25rem; font-weight: 600; margin: 20px 0 24px; line-height: 1.5; }
+    .trivia-options { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+    .trivia-option {
+      background: rgba(255,255,255,0.08);
+      border: 2px solid rgba(255,255,255,0.2);
+      border-radius: 12px;
+      padding: 14px 20px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      transition: all 0.2s;
+      pointer-events: all;
+    }
+    .trivia-option:hover { background: rgba(255,255,255,0.18); border-color: var(--tz-gold); }
+    .trivia-option.correct { background: rgba(0,180,80,0.3); border-color: #00e676; }
+    .trivia-option.wrong { background: rgba(220,30,30,0.25); border-color: #ff5252; }
+
+    /* Scrollbar */
+    .level-grid::-webkit-scrollbar { width: 4px; }
+    .level-grid::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); border-radius: 4px; }
+    .level-grid::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+  </style>
+</head>
+<body>
+
+<canvas id="game-canvas"></canvas>
+
+<div id="ui">
+
+  <!-- LOADING -->
+  <div class="screen" id="loading">
+    <div class="loader-wrap">
+      <span class="loader-emoji">🌍</span>
+      <div class="loader-text">Loading Tanzania…</div>
+      <div class="loader-bar-wrap"><div class="loader-bar" id="loader-bar"></div></div>
+    </div>
+  </div>
+
+  <!-- MENU -->
+  <div class="screen hidden" id="menu">
+    <h1 class="game-title">🇹🇿 Roho ya Tanzania</h1>
+    <p class="game-subtitle">Soul of Tanzania</p>
+    <div class="level-grid" id="level-grid">
+      <!-- Level cards injected by UI.js -->
+    </div>
+  </div>
+
+  <!-- HUD (during play) -->
+  <div class="screen hidden" id="hud">
+    <div id="score-bar">
+      <div class="hud-pill">
+        <span>⭐</span>
+        <span id="score-val">0</span>
+      </div>
+      <div class="hud-pill" id="level-label">🌾 Serengeti</div>
+      <div class="hud-pill">
+        <span id="lives-val">❤️❤️❤️</span>
+      </div>
+    </div>
+    <div id="touch-zone-up"></div>
+    <div id="touch-zone-down"></div>
+    <button id="pause-btn" title="Pause">⏸</button>
+  </div>
+
+  <!-- SWAHILI TOAST -->
+  <div id="toast"></div>
+
+  <!-- CONTROLS HINT -->
+  <div id="controls-hint">
+    <div class="ctrl"><span>⎵ / ↑</span>Jump</div>
+    <div class="ctrl"><span>↓</span>Slide</div>
+    <div class="ctrl"><span>P</span>Pause</div>
+  </div>
+
+  <!-- PAUSE -->
+  <div class="screen hidden" id="pause-overlay">
+    <div class="pause-box">
+      <h2>⏸ Paused</h2>
+      <p>Take a breath — Tanzania awaits!</p>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="resume-btn">▶ Resume</button>
+        <button class="btn btn-secondary" id="pause-menu-btn">🏠 Menu</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TRIVIA (between levels) -->
+  <div class="screen hidden" id="trivia">
+    <div class="trivia-box">
+      <div class="hud-pill" style="margin-bottom:16px;font-size:0.85rem">🇹🇿 Tanzania Trivia</div>
+      <p class="trivia-q" id="trivia-q"></p>
+      <div class="trivia-options" id="trivia-opts"></div>
+    </div>
+  </div>
+
+  <!-- LEVEL COMPLETE -->
+  <div class="screen hidden" id="level-complete">
+    <div class="lc-box">
+      <h2>🎉 Level Complete!</h2>
+      <p style="opacity:.7;margin-bottom:4px">Score</p>
+      <span class="lc-score-val" id="lc-score-val">0</span>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="next-level-btn">Next Level →</button>
+        <button class="btn btn-secondary" id="lc-menu-btn">🏠 Menu</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GAME OVER -->
+  <div class="screen hidden" id="gameover">
+    <div class="go-box">
+      <h2>💀 Game Over</h2>
+      <p class="go-score">Final Score</p>
+      <span class="go-score-val" id="go-score-val">0</span>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="retry-btn">🔄 Try Again</button>
+        <button class="btn btn-secondary" id="go-menu-btn">🏠 Menu</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Three.js via importmap -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module" src="src/main.js"></script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js')
+        .then(r => console.log('[PWA] SW registered:', r.scope))
+        .catch(e => console.warn('[PWA] SW failed:', e));
+    });
+  }
+</script>
+
+</body>
+</html>
