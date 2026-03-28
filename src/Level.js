@@ -32,6 +32,9 @@ function box(w, h, d, mat, y0 = 0) {
   return mesh;
 }
 
+/* ─── Nature GLTF asset paths ───────────────────────────── */
+const N = 'src/assets/nature/';
+
 /* ─── Level config catalogue ─────────────────────────────── */
 const CONFIGS = [
   /* 0 — Serengeti */
@@ -40,20 +43,30 @@ const CONFIGS = [
     skyTop:     0xC85820,
     skyBot:     0xFF9A3C,
     fogColor:   0xE8894A,
-    fogDensity: 0.006,   /* much less fog so scene is visible */
+    fogDensity: 0.006,
     groundCol:  0xB87820,
     groundRough:0.95,
     lightCol:   0xFFD080,
     ambCol:     0xFFC060,
     ambInt:     0.55,
-    /* obstacle templates: { kind, w, h, hGap } hGap>0 = arch (duck under), hGap=0 = block (jump over) */
     obstacles: [
-      { kind: 'wildebeest', w: 0.85, h: 1.05, hGap: 0,   col: 0x5C3D1C },
-      { kind: 'rock',       w: 0.9,  h: 0.78, hGap: 0,   col: 0x7A6248 },
-      { kind: 'termite',    w: 0.55, h: 1.45, hGap: 0,   col: 0xB87E3B },
-      { kind: 'archway',    w: 0.4,  h: 2.6,  hGap: 1.05, col: 0x8B7355 },
+      { kind: 'wildebeest', w: 0.85, h: 1.05, hGap: 0 },
+      { kind: 'rock',       w: 0.9,  h: 0.78, hGap: 0,  model: N+'Rock_Medium_1.gltf' },
+      { kind: 'fallen-tree',w: 1.2,  h: 0.6,  hGap: 0,  model: N+'DeadTree_2.gltf', rotY: Math.PI/2 },
+      { kind: 'big-rock',   w: 1.1,  h: 1.1,  hGap: 0,  model: N+'Rock_Medium_3.gltf' },
+      { kind: 'bush',       w: 0.9,  h: 0.7,  hGap: 0,  model: N+'Bush_Common.gltf' },
+      { kind: 'twisted-tree',w:0.8,  h: 1.4,  hGap: 0,  model: N+'TwistedTree_1.gltf' },
+      { kind: 'stone-pile', w: 1.0,  h: 0.65, hGap: 0,  model: N+'RockPath_Round_Wide.gltf' },
+      { kind: 'archway',    w: 0.4,  h: 2.6,  hGap: 1.05, model: N+'CommonTree_3.gltf' },
     ],
     spawnMin: 2.2, spawnMax: 3.6,
+    scenery: [
+      { model: N+'Grass_Common_Tall.gltf', count: 20, zMin: -4, zMax: -9, scale: [0.8, 1.5] },
+      { model: N+'Grass_Wispy_Tall.gltf',  count: 15, zMin: -3, zMax: -8, scale: [0.6, 1.2] },
+      { model: N+'Bush_Common_Flowers.gltf',count: 8,  zMin: -4, zMax: -10,scale: [0.8, 1.4] },
+      { model: N+'Flower_3_Group.gltf',     count: 10, zMin: -3, zMax: -7, scale: [0.5, 1.0] },
+      { model: N+'Pebble_Round_2.gltf',     count: 12, zMin: -3, zMax: -6, scale: [0.5, 1.2] },
+    ],
   },
   /* 1 — Zanzibar Beach */
   {
@@ -61,19 +74,29 @@ const CONFIGS = [
     skyTop:     0x0088CC,
     skyBot:     0x44CCEE,
     fogColor:   0x88DDFF,
-    fogDensity: 0.005,   /* ocean haze, very light */
+    fogDensity: 0.005,
     groundCol:  0xD4B870,
     groundRough:0.9,
     lightCol:   0xFFF5D0,
     ambCol:     0xA0D8F0,
     ambInt:     0.6,
     obstacles: [
-      { kind: 'crab',      w: 0.75, h: 0.55, hGap: 0,   col: 0xE05020 },
-      { kind: 'barrel',    w: 0.6,  h: 1.0,  hGap: 0,   col: 0x8B4513 },
-      { kind: 'driftwood', w: 1.1,  h: 0.45, hGap: 0,   col: 0x9E7B56 },
-      { kind: 'arch-rock', w: 0.45, h: 2.8,  hGap: 1.1, col: 0xC8A66A },
+      { kind: 'rock',       w: 0.85, h: 0.7, hGap: 0,  model: N+'Rock_Medium_2.gltf' },
+      { kind: 'driftwood',  w: 1.1,  h: 0.5, hGap: 0,  model: N+'DeadTree_3.gltf', rotY: Math.PI/2 },
+      { kind: 'big-rock',   w: 1.0,  h: 1.0, hGap: 0,  model: N+'RockPath_Square_Wide.gltf' },
+      { kind: 'bush',       w: 0.8,  h: 0.65,hGap: 0,  model: N+'Bush_Common_Flowers.gltf' },
+      { kind: 'stone',      w: 0.7,  h: 0.55,hGap: 0,  model: N+'Pebble_Square_3.gltf' },
+      { kind: 'fallen-tree',w: 1.2,  h: 0.55,hGap: 0,  model: N+'TwistedTree_3.gltf', rotY: Math.PI/2 },
+      { kind: 'arch-rock',  w: 0.45, h: 2.8, hGap: 1.1, model: N+'CommonTree_4.gltf' },
     ],
     spawnMin: 2.0, spawnMax: 3.2,
+    scenery: [
+      { model: N+'Grass_Wispy_Short.gltf',  count: 18, zMin: -3, zMax: -8, scale: [0.6, 1.0] },
+      { model: N+'Plant_1.gltf',            count: 8,  zMin: -4, zMax: -9, scale: [0.7, 1.3] },
+      { model: N+'Flower_4_Group.gltf',     count: 10, zMin: -3, zMax: -7, scale: [0.5, 0.9] },
+      { model: N+'Mushroom_Common.gltf',    count: 6,  zMin: -3, zMax: -6, scale: [0.6, 1.0] },
+      { model: N+'Pebble_Round_3.gltf',     count: 10, zMin: -3, zMax: -5, scale: [0.4, 0.8] },
+    ],
   },
   /* 2 — Kilimanjaro Slopes */
   {
@@ -81,19 +104,29 @@ const CONFIGS = [
     skyTop:     0x6888A8,
     skyBot:     0xB8D4E8,
     fogColor:   0xA8C4D8,
-    fogDensity: 0.007,   /* mountain haze, gentle */
+    fogDensity: 0.007,
     groundCol:  0x888888,
     groundRough:0.92,
     lightCol:   0xE8F0FF,
     ambCol:     0xB0CCEE,
     ambInt:     0.6,
     obstacles: [
-      { kind: 'boulder', w: 1.0,  h: 1.2,  hGap: 0,   col: 0x6A6A6A },
-      { kind: 'icewall', w: 0.5,  h: 2.0,  hGap: 0,   col: 0xB8D8F0 },
-      { kind: 'snowlog', w: 1.2,  h: 0.5,  hGap: 0,   col: 0xE8E8F5 },
-      { kind: 'iceArch', w: 0.45, h: 2.7,  hGap: 1.05, col: 0x90C4E0 },
+      { kind: 'boulder',    w: 1.0,  h: 1.2, hGap: 0,  model: N+'Rock_Medium_1.gltf' },
+      { kind: 'big-rock',   w: 1.2,  h: 1.3, hGap: 0,  model: N+'Rock_Medium_3.gltf' },
+      { kind: 'fallen-tree',w: 1.3,  h: 0.6, hGap: 0,  model: N+'DeadTree_4.gltf', rotY: Math.PI/2 },
+      { kind: 'stone-pile', w: 1.0,  h: 0.7, hGap: 0,  model: N+'RockPath_Round_Small_2.gltf' },
+      { kind: 'pine-block', w: 0.9,  h: 1.5, hGap: 0,  model: N+'Pine_2.gltf' },
+      { kind: 'twisted-tree',w:0.8,  h: 1.3, hGap: 0,  model: N+'TwistedTree_4.gltf' },
+      { kind: 'iceArch',    w: 0.45, h: 2.7, hGap: 1.05, model: N+'Pine_3.gltf' },
     ],
     spawnMin: 1.8, spawnMax: 2.8,
+    scenery: [
+      { model: N+'Grass_Common_Short.gltf', count: 16, zMin: -3, zMax: -7, scale: [0.5, 1.0] },
+      { model: N+'Fern_1.gltf',             count: 10, zMin: -4, zMax: -8, scale: [0.6, 1.2] },
+      { model: N+'Mushroom_Laetiporus.gltf',count: 6,  zMin: -3, zMax: -6, scale: [0.5, 0.9] },
+      { model: N+'Pebble_Square_1.gltf',    count: 14, zMin: -2, zMax: -6, scale: [0.5, 1.0] },
+      { model: N+'Plant_7.gltf',            count: 6,  zMin: -4, zMax: -8, scale: [0.6, 1.1] },
+    ],
   },
 ];
 
@@ -255,6 +288,7 @@ export class Level {
     if (idx === 0) this._buildSerengeti();
     if (idx === 1) this._buildZanzibar();
     if (idx === 2) this._buildKilimanjaro();
+    this._buildNatureScenery();
   }
 
   _buildSerengeti() {
@@ -412,33 +446,28 @@ export class Level {
       this._env.push(patch);
     }
 
-    /* Pine trees */
+    /* Pine trees — GLTF models */
     for (let i = 0; i < 14; i++) {
       const x = (Math.random() - 0.5) * 110;
       const z = -1.5 - Math.random() * 7;
       const s = 0.5 + Math.random() * 1.0;
-      const p = this._makePine(s);
+      const p = this._makeGLTFTree(N + `Pine_${1 + (i % 5)}.gltf`, s * 3.5);
       p.position.set(x, 0, z);
       this.scene.add(p);
       this._decors.push({ group: p, z, speed: 0.3 + 0.4 * (z / -8.5) });
     }
   }
 
-  _makePine(scale) {
+  _makeGLTFTree(modelPath, targetHeight) {
     const grp = new THREE.Group();
-    const trunkMat = m(0x5C3A18, 0.95);
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.06 * scale, 0.1 * scale, 0.8 * scale, 7), trunkMat);
-    trunk.position.y = 0.4 * scale;
-    grp.add(trunk);
-    const needleMat = m(0x1A4A22, 0.88);
-    for (let t = 0; t < 3; t++) {
-      const tier = new THREE.Mesh(
-        new THREE.ConeGeometry((0.6 - t * 0.12) * scale, (0.8 + t * 0.1) * scale, 7),
-        needleMat
-      );
-      tier.position.y = (1.0 + t * 0.55) * scale;
-      grp.add(tier);
-    }
+    loadModel(modelPath, gltf => {
+      const mesh = gltf.scene.clone();
+      const b = new THREE.Box3().setFromObject(mesh);
+      const size = b.getSize(new THREE.Vector3());
+      mesh.scale.setScalar(targetHeight / Math.max(size.y, 0.01));
+      mesh.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+      grp.add(mesh);
+    });
     return grp;
   }
 
@@ -453,9 +482,40 @@ export class Level {
     }
   }
 
+  /* ─── Nature scenery from GLTF assets ────────────────────── */
+  _buildNatureScenery() {
+    if (!this.cfg.scenery) return;
+    for (const s of this.cfg.scenery) {
+      for (let i = 0; i < s.count; i++) {
+        const grp = new THREE.Group();
+        const x = (Math.random() - 0.5) * 140;
+        const z = s.zMin + Math.random() * (s.zMax - s.zMin);
+        /* Also scatter some on the positive Z side */
+        const side = Math.random() > 0.5 ? 1 : -1;
+        grp.position.set(x, 0, z * side);
+
+        loadModel(s.model, gltf => {
+          const mesh = gltf.scene.clone();
+          const b = new THREE.Box3().setFromObject(mesh);
+          const size = b.getSize(new THREE.Vector3());
+          const sc = s.scale[0] + Math.random() * (s.scale[1] - s.scale[0]);
+          mesh.scale.setScalar(sc / Math.max(size.y, 0.01));
+          mesh.rotation.y = Math.random() * Math.PI * 2;
+          mesh.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+          grp.add(mesh);
+        });
+
+        this.scene.add(grp);
+        const depth = Math.abs(z);
+        this._decors.push({ group: grp, z: grp.position.z, speed: 0.2 + 0.4 * (depth / 10) });
+      }
+    }
+  }
+
   /* ─── Obstacle pool ─────────────────────────────────────── */
   _buildObstaclePool() {
-    for (let i = 0; i < 18; i++) {
+    const poolSize = Math.max(18, this.cfg.obstacles.length * 3);
+    for (let i = 0; i < poolSize; i++) {
       const tmpl = this.cfg.obstacles[i % this.cfg.obstacles.length];
       const grp  = this._makeObstacleMesh(tmpl);
       grp.visible = false;
@@ -466,122 +526,74 @@ export class Level {
 
   _makeObstacleMesh(tmpl) {
     const grp = new THREE.Group();
-    const mat2 = m(tmpl.col, 0.9);
 
     if (tmpl.hGap > 0) {
-      /* Archway: two pillars + crossbar */
-      const pillarH = tmpl.h;
-      const pillarW = 0.4;
-      const gapH    = tmpl.hGap;
-
-      /* Left pillar (from ground to full height, opening cut in middle) */
-      const pL = new THREE.Mesh(new THREE.BoxGeometry(pillarW, pillarH, 0.6), mat2);
-      pL.position.set(-0.65, pillarH / 2, 0);
-      pL.castShadow = true;
-      grp.add(pL);
-
-      const pR = pL.clone();
-      pR.position.x = 0.65;
-      grp.add(pR);
-
-      /* Top bar (above the gap) */
-      const barH = pillarH - gapH;
-      const bar  = new THREE.Mesh(new THREE.BoxGeometry(1.7, barH, 0.6), mat2);
-      bar.position.y = gapH + barH / 2;
-      bar.castShadow = true;
-      grp.add(bar);
-
-      grp.userData = { arch: true, gapTop: gapH, gapBot: 0 };
-    } else {
-      /* Solid obstacle */
-      let obsMesh;
-      if (tmpl.kind === 'wildebeest' || tmpl.kind === 'crab') {
-        obsMesh = this._makeAnimal(tmpl);
-      } else if (tmpl.kind === 'boulder' || tmpl.kind === 'rock') {
-        obsMesh = this._makeRock(tmpl);
+      /* Archway — use a tall GLTF model as overhead obstacle (duck under) */
+      if (tmpl.model) {
+        loadModel(tmpl.model, gltf => {
+          const mesh = gltf.scene.clone();
+          const b = new THREE.Box3().setFromObject(mesh);
+          const size = b.getSize(new THREE.Vector3());
+          mesh.scale.setScalar(tmpl.h / Math.max(size.y, 0.01));
+          if (tmpl.rotY) mesh.rotation.y = tmpl.rotY;
+          mesh.traverse(c => { if (c.isMesh) c.castShadow = c.receiveShadow = true; });
+          grp.add(mesh);
+        });
       } else {
-        obsMesh = box(tmpl.w, tmpl.h, 0.5, mat2);
+        const mat2 = m(0x8B7355, 0.9);
+        const pL = new THREE.Mesh(new THREE.BoxGeometry(0.4, tmpl.h, 0.6), mat2);
+        pL.position.set(-0.65, tmpl.h / 2, 0); pL.castShadow = true; grp.add(pL);
+        const pR = pL.clone(); pR.position.x = 0.65; grp.add(pR);
+        const barH = tmpl.h - tmpl.hGap;
+        const bar = new THREE.Mesh(new THREE.BoxGeometry(1.7, barH, 0.6), mat2);
+        bar.position.y = tmpl.hGap + barH / 2; bar.castShadow = true; grp.add(bar);
       }
-      grp.add(obsMesh);
+      grp.userData = { arch: true, gapTop: tmpl.hGap, gapBot: 0 };
+    } else {
+      /* Solid obstacle — GLTF model or animated animal */
+      if (tmpl.kind === 'wildebeest') {
+        grp.add(this._makeAnimal(tmpl));
+      } else if (tmpl.model) {
+        this._loadNatureObstacle(grp, tmpl);
+      } else {
+        grp.add(box(tmpl.w, tmpl.h, 0.5, m(0x888888, 0.9)));
+      }
       grp.userData = { arch: false };
     }
     return grp;
   }
 
-  _makeAnimal(tmpl) {
-    const grp = new THREE.Group();
-    if (tmpl.kind === 'wildebeest') {
-      loadModel('src/assets/animals/Bull.gltf', gltf => {
-        const mesh = SkeletonUtils.clone(gltf.scene);
-        if (gltf.animations && gltf.animations.length > 0) {
-           const mixer = new THREE.AnimationMixer(mesh);
-           const clip = gltf.animations.find(a => a.name === 'Gallop' || a.name === 'Run' || a.name === 'Walk') || gltf.animations[0];
-           mixer.clipAction(clip).play();
-           grp.userData.mixer = mixer;
-        }
-        const box = new THREE.Box3().setFromObject(mesh);
-        const size = box.getSize(new THREE.Vector3());
-        mesh.scale.setScalar(tmpl.h / size.y);
-        mesh.rotation.y = -Math.PI / 2; // Face towards negative X
-        mesh.traverse(c => { if (c.isMesh) c.castShadow = c.receiveShadow = true; });
-        grp.add(mesh);
-      });
-    } else {
-      const mat2 = m(tmpl.col, 0.88);
-      const body = new THREE.Mesh(new THREE.BoxGeometry(tmpl.w, tmpl.h * 0.6, 0.5), mat2);
-      body.position.y = tmpl.h * 0.6;
-      body.castShadow = true;
-      grp.add(body);
-      /* legs */
-      const legH = tmpl.h * 0.45;
-      const legGeo = new THREE.CylinderGeometry(0.07, 0.06, legH, 6);
-      for (let lx = -0.25; lx <= 0.25; lx += 0.5) {
-        const leg = new THREE.Mesh(legGeo, mat2);
-        leg.position.set(lx, legH / 2, 0.12);
-        leg.castShadow = true;
-        grp.add(leg);
-        const leg2 = leg.clone();
-        leg2.position.z = -0.12;
-        grp.add(leg2);
-      }
-      /* head */
-      const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.38), mat2);
-      head.position.set(tmpl.w * 0.45, tmpl.h * 0.72, 0);
-      head.castShadow = true;
-      grp.add(head);
-    }
-    return grp;
+  _loadNatureObstacle(grp, tmpl) {
+    loadModel(tmpl.model, gltf => {
+      const mesh = gltf.scene.clone();
+      const b = new THREE.Box3().setFromObject(mesh);
+      const size = b.getSize(new THREE.Vector3());
+      const targetDim = Math.max(tmpl.h, 0.3);
+      mesh.scale.setScalar(targetDim / Math.max(size.y, 0.01));
+      if (tmpl.rotY) mesh.rotation.y = tmpl.rotY;
+      else mesh.rotation.y = Math.random() * Math.PI * 2;
+      mesh.traverse(c => { if (c.isMesh) c.castShadow = c.receiveShadow = true; });
+      grp.add(mesh);
+    });
   }
 
-  _makeRock(tmpl) {
+  _makeAnimal(tmpl) {
     const grp = new THREE.Group();
-    if (tmpl.kind === 'rock') {
-      loadModel('src/assets/nature/Pebble_Round_1.gltf', gltf => {
-        const mesh = gltf.scene.clone();
-        const box = new THREE.Box3().setFromObject(mesh);
-        const size = box.getSize(new THREE.Vector3());
-        mesh.scale.setScalar(tmpl.h / size.y);
-        mesh.rotation.y = Math.random() * Math.PI * 2;
-        mesh.traverse(c => { if (c.isMesh) c.castShadow = c.receiveShadow = true; });
-        grp.add(mesh);
-      });
-    } else {
-      const mat2 = m(tmpl.col, 0.95);
-      const geo = new THREE.DodecahedronGeometry(tmpl.h / 2, 0);
-      /* Randomise vertices slightly */
-      const pos = geo.attributes.position;
-      for (let i = 0; i < pos.count; i++) {
-        pos.setX(i, pos.getX(i) * (0.85 + Math.random() * 0.3));
-        pos.setY(i, pos.getY(i) * (0.85 + Math.random() * 0.3));
-        pos.setZ(i, pos.getZ(i) * (0.85 + Math.random() * 0.3));
+    loadModel('src/assets/animals/Bull.gltf', gltf => {
+      const mesh = SkeletonUtils.clone(gltf.scene);
+      if (gltf.animations && gltf.animations.length > 0) {
+        const mixer = new THREE.AnimationMixer(mesh);
+        const clip = gltf.animations.find(a => a.name === 'Gallop' || a.name === 'Run' || a.name === 'Walk') || gltf.animations[0];
+        mixer.clipAction(clip).play();
+        grp.userData.mixer = mixer;
       }
-      geo.computeVertexNormals();
-      const rock = new THREE.Mesh(geo, mat2);
-      rock.scale.set(tmpl.w / tmpl.h, 1, 0.8);
-      rock.position.y = tmpl.h / 2;
-      rock.castShadow = rock.receiveShadow = true;
-      grp.add(rock);
-    }
+      const b = new THREE.Box3().setFromObject(mesh);
+      const size = b.getSize(new THREE.Vector3());
+      mesh.scale.setScalar(tmpl.h / size.y);
+      mesh.rotation.y = -Math.PI / 2;
+      mesh.traverse(c => { if (c.isMesh) c.castShadow = c.receiveShadow = true; });
+      grp.add(mesh);
+    });
     return grp;
   }
 
