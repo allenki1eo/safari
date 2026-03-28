@@ -641,16 +641,27 @@
     /* ─── Character Select Screen ────────────────────────── */
     #char-screen {
       background: linear-gradient(to top,
-          rgba(0, 0, 0, 0.94) 0%,
-          rgba(0, 0, 0, 0.7) 40%,
-          rgba(0, 0, 0, 0.5) 100%);
-      justify-content: center;
+          rgba(0, 0, 0, 0.92) 0%,
+          rgba(0, 0, 0, 0.35) 35%,
+          rgba(0, 0, 0, 0.15) 50%,
+          rgba(0, 0, 0, 0.35) 65%,
+          rgba(0, 0, 0, 0.7) 100%);
+      justify-content: flex-end;
+      padding-bottom: clamp(16px, 3vh, 32px);
       z-index: 20;
     }
 
     .char-screen-inner {
       width: min(600px, 94vw);
       text-align: center;
+    }
+
+    .char-3d-window {
+      width: 160px;
+      height: 160px;
+      margin: 0 auto 10px;
+      pointer-events: none;
+      /* transparent area — the 3D character renders behind it */
     }
 
     .char-screen-title {
@@ -660,7 +671,11 @@
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
-      margin-bottom: 28px;
+      margin-bottom: 12px;
+      position: fixed;
+      top: clamp(20px, 4vh, 48px);
+      left: 50%;
+      transform: translateX(-50%);
     }
 
     .char-preview-area {
@@ -853,14 +868,21 @@
     <div class="screen hidden" id="char-screen">
       <div class="char-screen-inner">
         <h2 class="char-screen-title">Choose Your Runner</h2>
+
+        <!-- 3D preview shows through transparent center area -->
         <div class="char-preview-area">
           <button class="char-nav-arrow char-nav-left" id="char-prev">&#9664;</button>
           <div class="char-center">
+            <div class="char-3d-window">
+              <!-- 3D character renders behind this transparent area -->
+            </div>
             <div class="char-name-display" id="char-name">Adventurer</div>
             <div class="char-skin-count" id="char-skin-count">1 / 11</div>
           </div>
           <button class="char-nav-arrow char-nav-right" id="char-next">&#9654;</button>
         </div>
+
+        <!-- Character grid at bottom -->
         <div class="char-grid" id="char-grid"></div>
         <button class="btn btn-primary char-select-btn" id="char-select-done">Select & Back</button>
       </div>

@@ -99,6 +99,8 @@ export class Player {
 
     /* Skin index (for character selection) */
     this.skinIdx = 0;
+    this._buildGen = 0;   /* generation counter — prevents stale async callbacks */
+    this._skinLocked = false; /* true during gameplay to prevent mid-game shifts */
 
     this._build();
     this._addShadowCatcher();
@@ -107,19 +109,23 @@ export class Player {
 
   /* ─── Build character from GLB ───────────────────────────── */
   _build() {
+    const gen = ++this._buildGen;   /* capture generation */
     const skinName = CHARACTER_SKINS[this.skinIdx % CHARACTER_SKINS.length];
     const path = `src/assets/characters/male/${skinName}.glb`;
 
     loadModel(path, (gltf) => {
       try {
+        /* Stale callback — a newer _build() was called since this one started */
+        if (gen !== this._buildGen) return;
+
         /* Remove old character if swapping skins */
         if (this.characterMesh) {
           this.group.remove(this.characterMesh);
           this.characterMesh = null;
         }
 
-        /* Use the scene directly on first load (no clone needed for single player) */
-        const model = gltf.scene;
+        /* Clone so the cache entry stays untouched and can be reused */
+        const model = SkeletonUtils.clone(gltf.scene);
         model.traverse(c => {
           if (c.isMesh) {
             c.castShadow = true;
@@ -294,9 +300,14 @@ export class Player {
 
   /** Switch to a different character skin (0-based index) */
   setSkin(idx) {
+    if (this._skinLocked) return;   /* prevent mid-game character shifts */
     this.skinIdx = idx % CHARACTER_SKINS.length;
     this._build();
   }
+
+  /** Lock skin so it can't change during gameplay */
+  lockSkin()   { this._skinLocked = true; }
+  unlockSkin() { this._skinLocked = false; }
 
   jump() {
     if (this.isSliding) {

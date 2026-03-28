@@ -259,13 +259,20 @@ class Game {
       }
     }, { passive: true });
 
-    /* ── UI Buttons — click + touchend for instant mobile response ── */
+    /* ── UI Buttons — unified tap handler that prevents double-fire ── */
     const onBtn = (id, fn) => {
       const el = document.getElementById(id);
       if (!el) return;
+      let lastFire = 0;
       const handler = (e) => {
         e.stopPropagation();
-        this._lastUIAction = Date.now();
+        /* Prevent click that fires after touchend on mobile */
+        if (e.type === 'touchend') e.preventDefault();
+        /* Debounce — ignore if fired < 400ms ago */
+        const now = Date.now();
+        if (now - lastFire < 400) return;
+        lastFire = now;
+        this._lastUIAction = now;
         SFX.resumeAudio();
         fn();
       };
@@ -324,6 +331,7 @@ class Game {
     this.bestCombo  = 0;
 
     this.level.load(idx);
+    this.player.lockSkin();   /* freeze character for the duration of gameplay */
     this.player.reset();
 
     this._setGameCamera();
@@ -360,6 +368,7 @@ class Game {
     this.clock.stop();
     this.level.unload();
     this.player.hide();
+    this.player.unlockSkin();  /* allow character selection again */
     SFX.stopAmbient();
 
     if (!this.menuScene) {
@@ -374,6 +383,27 @@ class Game {
     const next = this.levelIdx + 1;
     if (next < Level.LEVEL_COUNT) this.startLevel(next);
     else this.goToMenu();
+  }
+
+  /* ─── Character Preview (for selection screen) ──────────── */
+  showCharPreview(show) {
+    this._charPreview = show;
+    if (show) {
+      /* Position player model in front of the camera for preview */
+      this.player.group.visible   = true;
+      this.player.group.position.set(0, 0, 0);
+      this.player.group.rotation.set(0, 0, 0);
+      this.player.group.scale.set(1, 1, 1);
+      if (this.player._shadow) this.player._shadow.visible = true;
+      /* Play idle animation */
+      if (this.player.mixer) {
+        this.player.mixer.stopAllAction();
+        this.player._currentAction = null;
+        this.player._playAction('CharacterArmature|Idle');
+      }
+    } else {
+      this.player.hide();
+    }
   }
 
   /* ─── Hit / Collect ───────────────────────────────────── */
@@ -574,6 +604,16 @@ class Game {
         const now  = ts / 1000;
         const mdt  = Math.min(now - lastMenuT, 0.05);
         lastMenuT  = now;
+
+        /* Character preview — spin the model & update animation */
+        if (this._charPreview) {
+          if (this.player.mixer) this.player.mixer.update(mdt);
+          this.player.group.rotation.y += mdt * 0.8;  /* slow turntable */
+          /* Camera: look at the character */
+          this.camera.position.set(-3, 2, 0);
+          this.camera.lookAt(0, 0.8, 0);
+        }
+
         if (this.menuScene) this.menuScene.update(mdt, this.camera);
       }
 

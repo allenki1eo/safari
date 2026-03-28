@@ -48,8 +48,13 @@ export class UI {
         ${lvl.locked ? '<span class="level-lock">🔒</span>' : ''}
       `;
       if (!lvl.locked) {
+        let lastFire = 0;
         const startFn = (e) => {
           e.stopPropagation();
+          if (e.type === 'touchend') e.preventDefault();
+          const now = Date.now();
+          if (now - lastFire < 400) return;
+          lastFire = now;
           try {
             SFX.resumeAudio();
             this.game.startLevel(i);
@@ -84,7 +89,6 @@ export class UI {
     const updateDisplay = () => {
       if (nameEl) nameEl.textContent = CHARACTER_SKINS[this._selectedSkin];
       if (countEl) countEl.textContent = `${this._selectedSkin + 1} / ${CHARACTER_SKINS.length}`;
-      /* Highlight active card */
       grid?.querySelectorAll('.char-card').forEach((card, i) => {
         card.classList.toggle('selected', i === this._selectedSkin);
       });
@@ -121,20 +125,31 @@ export class UI {
       selectSkin((this._selectedSkin + 1) % CHARACTER_SKINS.length);
     });
 
-    /* Open / close character screen — click + touchend for mobile */
+    /* Open / close character screen — debounced tap for mobile */
     const addTap = (el, fn) => {
       if (!el) return;
-      const h = (e) => { e.stopPropagation(); fn(); };
+      let lastFire = 0;
+      const h = (e) => {
+        e.stopPropagation();
+        if (e.type === 'touchend') e.preventDefault();
+        const now = Date.now();
+        if (now - lastFire < 400) return;
+        lastFire = now;
+        fn();
+      };
       el.addEventListener('click',    h);
       el.addEventListener('touchend', h, { passive: false });
     };
     addTap(openBtn, () => {
       SFX.resumeAudio(); SFX.sfxMenuClick();
       this._hide('menu'); this._show('char-screen');
+      /* Show 3D character preview */
+      this.game.showCharPreview(true);
     });
     addTap(doneBtn, () => {
       SFX.resumeAudio(); SFX.sfxMenuClick();
       this._hide('char-screen'); this._show('menu');
+      this.game.showCharPreview(false);
     });
 
     updateDisplay();
@@ -172,14 +187,14 @@ export class UI {
   }
 
   showGameOver(score) {
-    this._hide('hud');
+    this._hideAll();
     const el = document.getElementById('go-score-val');
     if (el) el.textContent = score.toLocaleString();
     this._show('gameover');
   }
 
   showLevelComplete(score, hasNext) {
-    this._hide('hud');
+    this._hideAll();
     const el = document.getElementById('lc-score-val');
     if (el) el.textContent = score.toLocaleString();
     const nextBtn = document.getElementById('next-level-btn');
