@@ -3,15 +3,17 @@ import { persist } from 'zustand/middleware';
 import { CHARACTERS, OUTFITS } from '../utils/assetManifest';
 import { MAX_LIVES, STARTING_SPEED } from '../utils/constants';
 
-const getInitialCharacter = () => CHARACTERS.find(c => c.free) || CHARACTERS[0];
-const getInitialOutfit = () => OUTFITS.find(o => o.free) || OUTFITS[0];
+const getInitialCharacter   = () => CHARACTERS.find(c => c.free) || CHARACTERS[0];
+const getInitialOutfit      = () => OUTFITS.find(o => o.free) || OUTFITS[0];
+const getInitialCharUnlocks = () => CHARACTERS.filter(c => c.free).map(c => c.id);
+const getInitialOutfitUnlocks = () => OUTFITS.filter(o => o.free).map(o => o.id);
 
 // Persisted slice (localStorage)
 const persistedStore = (set, get) => ({
   highScore: 0,
   totalCoinsEver: 0,
-  unlockedCharacters: [getInitialCharacter().id],
-  unlockedOutfits: [getInitialOutfit().id],
+  unlockedCharacters: getInitialCharUnlocks(),
+  unlockedOutfits: getInitialOutfitUnlocks(),
   selectedCharacterId: getInitialCharacter().id,
   selectedOutfitId: getInitialOutfit().id,
   hasSeenSwipeHint: false,
@@ -176,10 +178,10 @@ const sessionSlice = (set, get) => ({
   clearPowerUp: () => set({ activePowerUp: null, powerUpEndTime: 0 }),
 
   endGame: () => {
-    const { score, distance, coins } = get();
+    const { score, coins, highScore } = get();
+    const isNewHigh = score > highScore; // check BEFORE updating highScore
     get().updateHighScore(score);
     get().addTotalCoins(coins);
-    const isNewHigh = score > get().highScore;
     set({ gameState: 'gameover', isNewHighScore: isNewHigh });
   },
 });

@@ -1,55 +1,82 @@
-import { Suspense, useRef, useState } from 'react';
+import { Suspense, useRef, useEffect, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { useGLTF, OrbitControls, Environment, useAnimations } from '@react-three/drei';
+import * as THREE from 'three';
 import { useGameStore } from '../../store/gameStore';
 import { CHARACTERS, OUTFITS } from '../../utils/assetManifest';
 
-function CharacterPreview({ path }) {
+// ─── 3-D rotating preview ────────────────────────────────────────────────────
+function ModelPreview({ path }) {
   const { scene, animations } = useGLTF(path);
   const groupRef = useRef();
-  const { actions } = useAnimations(animations, groupRef);
+  const { actions, mixer } = useAnimations(animations, groupRef);
+  const scaledRef = useRef(false);
 
-  // Play idle or first animation
-  useState(() => {
-    const timer = setTimeout(() => {
-      if (!actions) return;
-      const idleAnim = actions['idle'] || actions['Idle'] || Object.values(actions)[0];
-      idleAnim?.reset().play();
-    }, 100);
-    return () => clearTimeout(timer);
+  // Play idle once actions are ready
+  useEffect(() => {
+    if (!actions || Object.keys(actions).length === 0) return;
+    const priority = ['Idle', 'idle', 'idle_loop', 'T-Pose', 'Walk', 'Run'];
+    const name = priority.find(n => actions[n]) ?? Object.keys(actions)[0];
+    if (name) {
+      actions[name].reset().setLoop(THREE.LoopRepeat, Infinity).play();
+    }
+  }, [actions]);
+
+  // Auto-scale to ~1.8 units tall
+  useEffect(() => {
+    if (scaledRef.current || !groupRef.current) return;
+    const box = new THREE.Box3().setFromObject(groupRef.current);
+    const h = box.max.y - box.min.y;
+    if (h > 0.01) {
+      const s = 1.8 / h;
+      groupRef.current.scale.setScalar(s);
+      groupRef.current.position.y = -box.min.y * s;
+      scaledRef.current = true;
+    }
   });
 
-  // Auto-scale to fit
-  const clone = scene.clone(true);
+  // Tick mixer manually
+  useEffect(() => {
+    let raf;
+    let last = performance.now();
+    const tick = (now) => {
+      mixer?.update((now - last) / 1000);
+      last = now;
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [mixer]);
 
   return (
-    <group ref={groupRef} position={[0, -1, 0]}>
-      <primitive object={clone} />
+    <group ref={groupRef}>
+      <primitive object={scene} rotation={[0, Math.PI, 0]} />
     </group>
   );
 }
 
 function PreviewCanvas({ path }) {
   return (
-    <Canvas camera={{ position: [0, 1.5, 3], fov: 45 }} className="w-full h-full">
-      <ambientLight intensity={0.6} />
-      <directionalLight position={[2, 4, 2]} intensity={1} />
+    <Canvas camera={{ position: [0, 1, 3.5], fov: 42 }} className="w-full h-full">
+      <ambientLight intensity={0.7} />
+      <directionalLight position={[3, 5, 3]} intensity={1.2} />
       <Environment preset="sunset" />
       <Suspense fallback={null}>
-        <CharacterPreview path={path} />
+        <ModelPreview path={path} />
       </Suspense>
       <OrbitControls
         enablePan={false}
         enableZoom={false}
         minPolarAngle={Math.PI / 3}
-        maxPolarAngle={Math.PI / 2}
+        maxPolarAngle={Math.PI / 2.2}
         autoRotate
-        autoRotateSpeed={3}
+        autoRotateSpeed={2.5}
       />
     </Canvas>
   );
 }
 
+// ─── Main screen ─────────────────────────────────────────────────────────────
 function CharacterSelect() {
   const {
     setGameState,
@@ -59,12 +86,11 @@ function CharacterSelect() {
     totalCoinsEver,
   } = useGameStore();
 
-  const [previewCharId, setPreviewCharId] = useState(selectedCharacterId);
-  const previewChar = CHARACTERS.find(c => c.id === previewCharId) || CHARACTERS[0];
-  const selectedOutfit = OUTFITS.find(o => o.id === selectedOutfitId) || OUTFITS[0];
+  const [previewId, setPreviewId] = useState(selectedCharacterId);
+  const previewChar = CHARACTERS.find(c => c.id === previewId) || CHARACTERS[0];
 
   const handleConfirm = () => {
-    selectCharacter(previewCharId);
+    selectCharacter(previewId);
     setGameState('menu');
   };
 
@@ -73,115 +99,130 @@ function CharacterSelect() {
          style={{ background: 'linear-gradient(180deg, #0A0A0A 0%, #0A1208 100%)' }}>
 
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[#D4A853]/20">
-        <button
-          onClick={() => setGameState('menu')}
-          className="text-[#D4A853] text-2xl px-2"
-        >
+      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+        <button onClick={() => setGameState('menu')}
+                className="text-[#D4A853] text-2xl w-10 h-10 flex items-center justify-center">
           ←
         </button>
-        <h2 className="text-[#D4A853] font-black text-xl tracking-widest">CHARACTERS</h2>
-        <div className="text-[#F5E6C8] text-sm">
-          🪙 {totalCoinsEver}
+        <h2 className="text-[#D4A853] font-black text-lg tracking-widest">CHARACTERS</h2>
+        <div className="flex items-center gap-1 text-yellow-300 text-sm font-bold">
+          <span>🪙</span><span>{totalCoinsEver}</span>
         </div>
       </div>
 
       {/* 3D Preview */}
-      <div className="h-56 relative border-b border-[#D4A853]/10">
+      <div className="relative h-52 border-b border-white/10 bg-gradient-to-b from-[#1A2A10] to-[#0A0A0A]">
         <PreviewCanvas path={previewChar.path} />
         <div className="absolute bottom-2 left-0 right-0 text-center">
-          <span className="text-[#D4A853] font-bold text-sm tracking-widest">
-            {previewChar.name}
-          </span>
+          <span className="text-[#D4A853] font-bold text-sm tracking-widest">{previewChar.name}</span>
+          {!unlockedCharacters.includes(previewChar.id) && (
+            <span className="ml-2 text-xs text-white/40">🪙 {previewChar.unlockCoins} to unlock</span>
+          )}
         </div>
       </div>
 
-      {/* Character grid */}
-      <div className="flex-1 overflow-y-auto p-4">
-        <p className="text-[#F5E6C8]/50 text-xs mb-3 tracking-widest uppercase">Select Character</p>
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          {CHARACTERS.map(char => {
-            const unlocked = unlockedCharacters.includes(char.id);
-            const isSelected = char.id === previewCharId;
-            return (
-              <button
-                key={char.id}
-                onClick={() => unlocked && setPreviewCharId(char.id)}
-                className={`
-                  relative p-3 rounded-xl border-2 flex flex-col items-center gap-1 transition-all duration-150
-                  ${isSelected ? 'border-[#D4A853] bg-[#D4A853]/10' : 'border-[#333] bg-[#111]'}
-                  ${!unlocked ? 'opacity-50' : 'hover:border-[#D4A853]/50 active:scale-95'}
-                `}
-              >
-                <div className="text-2xl">{getCharEmoji(char.id)}</div>
-                <span className="text-[#F5E6C8] text-xs text-center leading-tight">{char.name}</span>
-                {!unlocked && (
-                  <span className="text-[#D4A853] text-xs">🪙 {char.unlockCoins}</span>
-                )}
-                {unlocked && isSelected && (
-                  <div className="absolute top-1 right-1 text-[#D4A853] text-xs">✓</div>
-                )}
-              </button>
-            );
-          })}
+      {/* Scrollable body */}
+      <div className="flex-1 overflow-y-auto">
+
+        {/* Character grid */}
+        <div className="p-4">
+          <p className="text-white/30 text-xs tracking-widest uppercase mb-3">Select Character</p>
+          <div className="grid grid-cols-3 gap-2.5">
+            {CHARACTERS.map(char => {
+              const unlocked = unlockedCharacters.includes(char.id);
+              const isPreviewed = char.id === previewId;
+              const isSelected  = char.id === selectedCharacterId;
+              return (
+                <button
+                  key={char.id}
+                  onClick={() => setPreviewId(char.id)}
+                  className={`
+                    relative flex flex-col items-center gap-1.5 p-3 rounded-2xl border-2
+                    transition-all duration-150 active:scale-95
+                    ${isPreviewed
+                      ? 'border-[#D4A853] bg-[#D4A853]/15'
+                      : unlocked
+                        ? 'border-white/10 bg-white/5 hover:border-white/25'
+                        : 'border-white/5 bg-white/3 opacity-55'}
+                  `}
+                >
+                  <span className="text-2xl">{charEmoji(char.id)}</span>
+                  <span className="text-[#F5E6C8] text-xs text-center leading-tight font-medium">{char.name}</span>
+                  {!unlocked && (
+                    <span className="text-[#D4A853] text-xs font-bold">🪙 {char.unlockCoins}</span>
+                  )}
+                  {unlocked && isSelected && (
+                    <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-[#D4A853] flex items-center justify-center">
+                      <span className="text-black text-xs font-black">✓</span>
+                    </div>
+                  )}
+                  {!unlocked && (
+                    <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/20">
+                      <span className="text-lg">🔒</span>
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Outfit selector */}
-        <p className="text-[#F5E6C8]/50 text-xs mb-3 tracking-widest uppercase">Outfit</p>
-        <div className="flex gap-3 overflow-x-auto pb-2">
-          {OUTFITS.map(outfit => {
-            const unlocked = unlockedOutfits.includes(outfit.id);
-            const isSelected = outfit.id === selectedOutfitId;
-            return (
-              <button
-                key={outfit.id}
-                onClick={() => unlocked && selectOutfit(outfit.id)}
-                className={`
-                  flex-shrink-0 px-4 py-3 rounded-xl border-2 flex flex-col items-center gap-1 min-w-[80px]
-                  ${isSelected ? 'border-[#D4A853] bg-[#D4A853]/10' : 'border-[#333] bg-[#111]'}
-                  ${!unlocked ? 'opacity-50' : 'hover:border-[#D4A853]/50 active:scale-95'}
-                  transition-all duration-150
-                `}
-              >
-                <div className="text-xl">{getOutfitEmoji(outfit.id)}</div>
-                <span className="text-[#F5E6C8] text-xs">{outfit.name}</span>
-                {!unlocked && (
-                  <span className="text-[#D4A853] text-xs">🪙 {outfit.unlockCoins}</span>
-                )}
-              </button>
-            );
-          })}
+        <div className="px-4 pb-4">
+          <p className="text-white/30 text-xs tracking-widest uppercase mb-3">Outfit</p>
+          <div className="flex gap-2.5 overflow-x-auto pb-1">
+            {OUTFITS.map(outfit => {
+              const unlocked = unlockedOutfits.includes(outfit.id);
+              const isSelected = outfit.id === selectedOutfitId;
+              return (
+                <button
+                  key={outfit.id}
+                  onClick={() => unlocked && selectOutfit(outfit.id)}
+                  className={`
+                    flex-shrink-0 min-w-[76px] flex flex-col items-center gap-1.5 px-3 py-3
+                    rounded-2xl border-2 transition-all duration-150 active:scale-95
+                    ${isSelected
+                      ? 'border-[#D4A853] bg-[#D4A853]/15'
+                      : unlocked
+                        ? 'border-white/10 bg-white/5 hover:border-white/25'
+                        : 'border-white/5 bg-white/3 opacity-55'}
+                  `}
+                >
+                  <span className="text-2xl">{outfitEmoji(outfit.id)}</span>
+                  <span className="text-[#F5E6C8] text-xs font-medium">{outfit.name}</span>
+                  {!unlocked && <span className="text-[#D4A853] text-xs">🪙 {outfit.unlockCoins}</span>}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
       {/* Confirm */}
-      <div className="p-4 border-t border-[#D4A853]/20">
+      <div className="p-4 border-t border-white/10">
         <button
           onClick={handleConfirm}
-          className="w-full py-4 bg-[#D4A853] text-[#0A0A0A] font-black text-lg rounded-xl
-                     tracking-widest hover:bg-[#F5E6C8] active:scale-95 transition-all duration-150"
+          disabled={!unlockedCharacters.includes(previewId)}
+          className="w-full py-4 rounded-2xl font-black text-lg tracking-widest transition-all active:scale-95
+                     disabled:opacity-40"
+          style={{ background: 'linear-gradient(135deg,#D4A853,#FF8C00)', color: '#000' }}
         >
-          THIBITISHA ✓
+          {unlockedCharacters.includes(previewId) ? 'THIBITISHA ✓' : '🔒 LOCKED'}
         </button>
       </div>
     </div>
   );
 }
 
-function getCharEmoji(id) {
-  const map = {
+function charEmoji(id) {
+  return {
     adventurer: '🧭', casual: '🚶', farmer: '👨‍🌾', hoodie: '🧥',
     worker: '👷', beach: '🏖️', punk: '🎸', businessman: '💼',
     swat: '🛡️', astronaut: '🚀', king: '👑',
-  };
-  return map[id] || '🧑';
+  }[id] || '🧑';
 }
-
-function getOutfitEmoji(id) {
-  const map = {
-    male_peasant: '👘', female_peasant: '👗', male_ranger: '🥾', female_ranger: '🎽',
-  };
-  return map[id] || '👕';
+function outfitEmoji(id) {
+  return { male_peasant: '👘', female_peasant: '👗', male_ranger: '🥾', female_ranger: '🎽' }[id] || '👕';
 }
 
 export default CharacterSelect;

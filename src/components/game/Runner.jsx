@@ -176,7 +176,8 @@ function Runner({ modelPath }) {
 
   return (
     <group ref={groupRef} position={[getLaneX(LANE_CENTER), GROUND_Y, 0]}>
-      <primitive object={scene} />
+      {/* Rotate 180° so the character faces forward (toward -Z) */}
+      <primitive object={scene} rotation={[0, Math.PI, 0]} />
       {/* Shadow blob under player */}
       <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[0.45, 16]} />
