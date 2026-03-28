@@ -109,24 +109,25 @@ export class UI {
           <div class="char-card-name">${name}</div>
         `;
         card.addEventListener('click', () => selectSkin(i));
+        card.addEventListener('touchend', (e) => { e.stopPropagation(); e.preventDefault(); selectSkin(i); }, { passive: false });
         grid.appendChild(card);
       });
     }
 
-    /* Arrow navigation */
-    prevBtn?.addEventListener('click', () => {
-      selectSkin((this._selectedSkin - 1 + CHARACTER_SKINS.length) % CHARACTER_SKINS.length);
-    });
-    nextBtn?.addEventListener('click', () => {
-      selectSkin((this._selectedSkin + 1) % CHARACTER_SKINS.length);
-    });
+    /* Arrow navigation — click + touchend for mobile */
+    const addArrow = (el, fn) => {
+      if (!el) return;
+      el.addEventListener('click', fn);
+      el.addEventListener('touchend', (e) => { e.stopPropagation(); e.preventDefault(); fn(); }, { passive: false });
+    };
+    addArrow(prevBtn, () => selectSkin((this._selectedSkin - 1 + CHARACTER_SKINS.length) % CHARACTER_SKINS.length));
+    addArrow(nextBtn, () => selectSkin((this._selectedSkin + 1) % CHARACTER_SKINS.length));
 
     /* Open / close character screen — click + touchend for mobile */
     const addTap = (el, fn) => {
       if (!el) return;
-      const h = (e) => { e.stopPropagation(); fn(); };
-      el.addEventListener('click',    h);
-      el.addEventListener('touchend', h, { passive: false });
+      el.addEventListener('click',    (e) => { e.stopPropagation(); fn(); });
+      el.addEventListener('touchend', (e) => { e.stopPropagation(); e.preventDefault(); fn(); }, { passive: false });
     };
     addTap(openBtn, () => {
       SFX.resumeAudio(); SFX.sfxMenuClick();

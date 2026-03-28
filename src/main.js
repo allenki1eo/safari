@@ -263,14 +263,21 @@ class Game {
     const onBtn = (id, fn) => {
       const el = document.getElementById(id);
       if (!el) return;
-      const handler = (e) => {
+      /* touchend: preventDefault stops the browser firing a click ~300ms later */
+      el.addEventListener('touchend', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        this._lastUIAction = Date.now();
+        SFX.resumeAudio();
+        fn();
+      }, { passive: false });
+      /* click covers desktop mice (touchend preventDefault suppresses it on mobile) */
+      el.addEventListener('click', (e) => {
         e.stopPropagation();
         this._lastUIAction = Date.now();
         SFX.resumeAudio();
         fn();
-      };
-      el.addEventListener('click',    handler);
-      el.addEventListener('touchend', handler, { passive: false });
+      });
     };
 
     onBtn('pause-btn',      () => this.pause());
@@ -280,6 +287,12 @@ class Game {
     onBtn('go-menu-btn',    () => this.goToMenu());
     onBtn('next-level-btn', () => this._nextLevel());
     onBtn('lc-menu-btn',    () => this.goToMenu());
+
+    /* ── On-screen D-pad (mobile) ── */
+    onBtn('mob-left',  () => { if (this.state === 'playing') { this.player.moveLeft();  SFX.sfxLaneSwitch(); } });
+    onBtn('mob-right', () => { if (this.state === 'playing') { this.player.moveRight(); SFX.sfxLaneSwitch(); } });
+    onBtn('mob-jump',  () => { if (this.state === 'playing') { this.player.jump();      SFX.sfxJump();       } });
+    onBtn('mob-slide', () => { if (this.state === 'playing') { this.player.slide();     SFX.sfxSlide();      } });
   }
 
   /* ─── Loading ─────────────────────────────────────────── */

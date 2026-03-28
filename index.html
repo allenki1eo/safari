@@ -319,13 +319,15 @@
       height: 42px;
       border-radius: 50%;
       cursor: pointer;
-      pointer-events: inherit;
+      pointer-events: all;
       display: flex;
       align-items: center;
       justify-content: center;
       backdrop-filter: blur(10px);
       transition: background 0.2s;
       touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
     }
 
     #pause-btn:hover {
@@ -778,6 +780,47 @@
       margin-top: 8px;
     }
 
+    /* ─── Mobile On-screen D-pad ────────────────────────── */
+    #mobile-controls {
+      position: absolute;
+      bottom: max(env(safe-area-inset-bottom), 18px);
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 10px;
+      pointer-events: all;
+      z-index: 11;
+    }
+
+    .mob-btn {
+      background: rgba(0, 0, 0, 0.52);
+      border: 1.5px solid rgba(255, 255, 255, 0.22);
+      color: #fff;
+      font-size: 1.35rem;
+      width: 62px;
+      height: 62px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+      backdrop-filter: blur(8px);
+      transition: background 0.1s, transform 0.1s;
+    }
+
+    .mob-btn:active {
+      background: rgba(255, 255, 255, 0.22);
+      transform: scale(0.88);
+    }
+
+    /* Show only on touch devices, hide on desktop (mouse pointer) */
+    @media (pointer: fine) {
+      #mobile-controls { display: none; }
+    }
+
     /* ─── Combo Display ──────────────────────────────────── */
     #combo-display {
       position: absolute;
@@ -874,6 +917,14 @@
         <div class="hud-pill"><span id="lives-val">❤️❤️❤️</span></div>
       </div>
       <button id="pause-btn" title="Pause (P)">⏸</button>
+
+      <!-- On-screen D-pad (touch devices only) -->
+      <div id="mobile-controls">
+        <button class="mob-btn" id="mob-left">◀</button>
+        <button class="mob-btn" id="mob-jump">▲</button>
+        <button class="mob-btn" id="mob-slide">▼</button>
+        <button class="mob-btn" id="mob-right">▶</button>
+      </div>
     </div>
 
     <!-- COMBO DISPLAY -->
