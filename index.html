@@ -616,26 +616,60 @@
       transition: width 0.3s;
     }
 
-    /* ─── Character Select Carousel ──────────────────────── */
-    .char-section {
-      width: min(400px, 90vw);
-      margin-bottom: 18px;
+    /* ─── Menu Buttons ───────────────────────────────────── */
+    .menu-buttons {
+      margin-bottom: 22px;
+      display: flex;
+      gap: 14px;
+      justify-content: center;
     }
 
-    .char-carousel {
+    .menu-char-btn {
+      font-size: 1.05rem;
+      padding: 14px 36px;
+      min-width: 180px;
+    }
+
+    /* ─── Character Select Screen ────────────────────────── */
+    #char-screen {
+      background: linear-gradient(to top,
+          rgba(0, 0, 0, 0.94) 0%,
+          rgba(0, 0, 0, 0.7) 40%,
+          rgba(0, 0, 0, 0.5) 100%);
+      justify-content: center;
+      z-index: 20;
+    }
+
+    .char-screen-inner {
+      width: min(600px, 94vw);
+      text-align: center;
+    }
+
+    .char-screen-title {
+      font-size: 1.8rem;
+      font-weight: 900;
+      background: linear-gradient(160deg, #FFE168, #E87C00);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 28px;
+    }
+
+    .char-preview-area {
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 16px;
+      gap: 24px;
+      margin-bottom: 28px;
     }
 
-    .char-arrow {
+    .char-nav-arrow {
       background: rgba(255, 255, 255, 0.1);
       border: 1.5px solid rgba(255, 255, 255, 0.2);
       color: #fff;
-      font-size: 1.3rem;
-      width: 44px;
-      height: 44px;
+      font-size: 1.5rem;
+      width: 52px;
+      height: 52px;
       border-radius: 50%;
       cursor: pointer;
       transition: all 0.2s;
@@ -646,23 +680,88 @@
       backdrop-filter: blur(8px);
     }
 
-    .char-arrow:hover {
+    .char-nav-arrow:hover {
       background: rgba(255, 255, 255, 0.22);
       border-color: var(--gold);
       transform: scale(1.1);
     }
 
-    .char-arrow:active {
+    .char-nav-arrow:active {
       transform: scale(0.95);
     }
 
+    .char-center {
+      min-width: 200px;
+    }
+
     .char-name-display {
-      font-size: 1.1rem;
+      font-size: 1.4rem;
       font-weight: 700;
       color: var(--gold);
-      min-width: 160px;
       text-align: center;
       text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+      margin-bottom: 6px;
+    }
+
+    .char-skin-count {
+      font-size: 0.82rem;
+      opacity: 0.5;
+      letter-spacing: 2px;
+    }
+
+    .char-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 24px;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+
+    @media (max-width: 480px) {
+      .char-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+
+    .char-card {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1.5px solid rgba(255, 255, 255, 0.12);
+      border-radius: 14px;
+      padding: 14px 8px 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+      pointer-events: all;
+    }
+
+    .char-card:hover {
+      background: rgba(255, 255, 255, 0.14);
+      border-color: rgba(252, 209, 22, 0.5);
+      transform: translateY(-3px);
+    }
+
+    .char-card.selected {
+      background: rgba(252, 209, 22, 0.15);
+      border-color: var(--gold);
+      box-shadow: 0 0 16px rgba(252, 209, 22, 0.25);
+    }
+
+    .char-card-emoji {
+      font-size: 1.8rem;
+      display: block;
+      margin-bottom: 5px;
+    }
+
+    .char-card-name {
+      font-size: 0.72rem;
+      font-weight: 600;
+      opacity: 0.85;
+      line-height: 1.3;
+    }
+
+    .char-select-btn {
+      margin-top: 8px;
     }
 
     /* ─── Combo Display ──────────────────────────────────── */
@@ -724,20 +823,32 @@
         </div>
       </div>
 
-      <!-- Character selection -->
-      <div class="char-section">
-        <p class="level-section-title">Choose your runner</p>
-        <div id="char-select" class="char-carousel">
-          <button class="char-arrow" id="char-prev">&#9664;</button>
-          <div class="char-name-display" id="char-name">Adventurer</div>
-          <button class="char-arrow" id="char-next">&#9654;</button>
-        </div>
+      <!-- Menu buttons -->
+      <div class="menu-buttons">
+        <button class="btn btn-primary menu-char-btn" id="open-char-select">🏃 Characters</button>
       </div>
 
       <!-- Level select at bottom -->
       <div class="level-section">
         <p class="level-section-title">Choose your destination</p>
         <div class="level-grid" id="level-grid"></div>
+      </div>
+    </div>
+
+    <!-- CHARACTER SELECT SCREEN -->
+    <div class="screen hidden" id="char-screen">
+      <div class="char-screen-inner">
+        <h2 class="char-screen-title">Choose Your Runner</h2>
+        <div class="char-preview-area">
+          <button class="char-nav-arrow char-nav-left" id="char-prev">&#9664;</button>
+          <div class="char-center">
+            <div class="char-name-display" id="char-name">Adventurer</div>
+            <div class="char-skin-count" id="char-skin-count">1 / 11</div>
+          </div>
+          <button class="char-nav-arrow char-nav-right" id="char-next">&#9654;</button>
+        </div>
+        <div class="char-grid" id="char-grid"></div>
+        <button class="btn btn-primary char-select-btn" id="char-select-done">Select & Back</button>
       </div>
     </div>
 

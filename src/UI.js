@@ -29,7 +29,7 @@ export class UI {
     this._hintTimer  = null;
     this._selectedSkin = 0;
     this._buildLevelGrid();
-    this._buildCharacterSelect();
+    this._buildCharacterScreen();
     this._bindButtons();
   }
 
@@ -66,36 +66,73 @@ export class UI {
     });
   }
 
-  /* ─── Character Selection Carousel ───────────────────────── */
-  _buildCharacterSelect() {
-    const container = document.getElementById('char-select');
-    if (!container) return;
+  /* ─── Character Selection Screen (Subway Surfers style) ─── */
+  _buildCharacterScreen() {
+    const SKIN_EMOJIS = ['🧭','👕','🧥','🌾','🎸','🔧','💼','🏖️','👑','🛡️','🚀'];
 
-    const nameEl = document.getElementById('char-name');
-    const prevBtn = document.getElementById('char-prev');
-    const nextBtn = document.getElementById('char-next');
+    const nameEl    = document.getElementById('char-name');
+    const countEl   = document.getElementById('char-skin-count');
+    const prevBtn   = document.getElementById('char-prev');
+    const nextBtn   = document.getElementById('char-next');
+    const grid      = document.getElementById('char-grid');
+    const openBtn   = document.getElementById('open-char-select');
+    const doneBtn   = document.getElementById('char-select-done');
 
-    const updateName = () => {
+    const updateDisplay = () => {
       if (nameEl) nameEl.textContent = CHARACTER_SKINS[this._selectedSkin];
+      if (countEl) countEl.textContent = `${this._selectedSkin + 1} / ${CHARACTER_SKINS.length}`;
+      /* Highlight active card */
+      grid?.querySelectorAll('.char-card').forEach((card, i) => {
+        card.classList.toggle('selected', i === this._selectedSkin);
+      });
     };
 
+    const selectSkin = (idx) => {
+      SFX.resumeAudio();
+      SFX.sfxLaneSwitch();
+      this._selectedSkin = idx;
+      this.game.player.setSkin(idx);
+      updateDisplay();
+    };
+
+    /* Build grid of character cards */
+    if (grid) {
+      grid.innerHTML = '';
+      CHARACTER_SKINS.forEach((name, i) => {
+        const card = document.createElement('div');
+        card.className = 'char-card' + (i === 0 ? ' selected' : '');
+        card.innerHTML = `
+          <span class="char-card-emoji">${SKIN_EMOJIS[i] || '🏃'}</span>
+          <div class="char-card-name">${name}</div>
+        `;
+        card.addEventListener('click', () => selectSkin(i));
+        grid.appendChild(card);
+      });
+    }
+
+    /* Arrow navigation */
     prevBtn?.addEventListener('click', () => {
-      SFX.resumeAudio();
-      SFX.sfxLaneSwitch();
-      this._selectedSkin = (this._selectedSkin - 1 + CHARACTER_SKINS.length) % CHARACTER_SKINS.length;
-      this.game.player.setSkin(this._selectedSkin);
-      updateName();
+      selectSkin((this._selectedSkin - 1 + CHARACTER_SKINS.length) % CHARACTER_SKINS.length);
     });
-
     nextBtn?.addEventListener('click', () => {
-      SFX.resumeAudio();
-      SFX.sfxLaneSwitch();
-      this._selectedSkin = (this._selectedSkin + 1) % CHARACTER_SKINS.length;
-      this.game.player.setSkin(this._selectedSkin);
-      updateName();
+      selectSkin((this._selectedSkin + 1) % CHARACTER_SKINS.length);
     });
 
-    updateName();
+    /* Open / close character screen */
+    openBtn?.addEventListener('click', () => {
+      SFX.resumeAudio();
+      SFX.sfxMenuClick();
+      this._hide('menu');
+      this._show('char-screen');
+    });
+    doneBtn?.addEventListener('click', () => {
+      SFX.resumeAudio();
+      SFX.sfxMenuClick();
+      this._hide('char-screen');
+      this._show('menu');
+    });
+
+    updateDisplay();
   }
 
   _bindButtons() {
@@ -106,7 +143,7 @@ export class UI {
   _show(id)  { document.getElementById(id)?.classList.remove('hidden'); }
   _hide(id)  { document.getElementById(id)?.classList.add('hidden'); }
   _hideAll() {
-    ['loading', 'menu', 'hud', 'pause-overlay', 'trivia', 'level-complete', 'gameover']
+    ['loading', 'menu', 'hud', 'pause-overlay', 'trivia', 'level-complete', 'gameover', 'char-screen']
       .forEach(id => this._hide(id));
     this._hide('controls-hint');
   }
