@@ -199,7 +199,7 @@ export class Level {
 
   /* ─── Ground plane ─────────────────────────────────────── */
   _buildGround(idx) {
-    const geo = new THREE.PlaneGeometry(300, 40, 60, 1);
+    const geo = new THREE.PlaneGeometry(300, 50, 60, 1);
     const pos = geo.attributes.position;
     for (let i = 0; i < pos.count; i++) {
       pos.setZ(i, (Math.random() - 0.5) * 0.04);
@@ -217,15 +217,35 @@ export class Level {
     this.scene.add(ground);
     this._env.push(ground);
 
-    /* Ground edge / runner lane — slight highlight */
-    const lane = new THREE.Mesh(
-      new THREE.PlaneGeometry(300, 1.5),
-      new THREE.MeshStandardMaterial({ color: this.cfg.groundCol, roughness: 0.8, opacity: 0.6, transparent: true })
-    );
-    lane.rotation.x = -Math.PI / 2;
-    lane.position.y = 0.005;
-    this.scene.add(lane);
-    this._env.push(lane);
+    /* Lane guide markings — three lanes */
+    const LANES = [-1.8, 0, 1.8];
+    const laneMat = new THREE.MeshStandardMaterial({
+      color: this.cfg.groundCol,
+      roughness: 0.8,
+      opacity: 0.25,
+      transparent: true,
+    });
+    for (const lz of LANES) {
+      const lane = new THREE.Mesh(new THREE.PlaneGeometry(300, 1.4), laneMat);
+      lane.rotation.x = -Math.PI / 2;
+      lane.position.set(0, 0.005, lz);
+      this.scene.add(lane);
+      this._env.push(lane);
+    }
+    /* Subtle lane divider lines */
+    const divMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.9,
+      opacity: 0.06,
+      transparent: true,
+    });
+    for (const dz of [-0.9, 0.9]) {
+      const div = new THREE.Mesh(new THREE.PlaneGeometry(300, 0.04), divMat);
+      div.rotation.x = -Math.PI / 2;
+      div.position.set(0, 0.006, dz);
+      this.scene.add(div);
+      this._env.push(div);
+    }
   }
 
   /* ─── Background scenery ────────────────────────────────── */
@@ -761,7 +781,11 @@ export class Level {
     const free = this._obsPool.find(o => !o.active && o.tmpl.kind === tmpl.kind);
     if (!free) return;  /* pool exhausted for this type — skip */
 
-    free.group.position.set(24 + Math.random() * 4, 0, (Math.random() - 0.5) * 0.3);
+    /* Spawn in a random lane (left=-1.8, center=0, right=1.8) */
+    const LANES = [-1.8, 0, 1.8];
+    const lane = LANES[Math.floor(Math.random() * LANES.length)];
+
+    free.group.position.set(24 + Math.random() * 4, 0, lane);
     free.group.visible = true;
     free.active = true;
   }
@@ -769,9 +793,14 @@ export class Level {
   _spawnGem() {
     const free = this._gemPool.find(g => !g.active);
     if (!free) return;
+
+    /* Spawn in a random lane */
+    const LANES = [-1.8, 0, 1.8];
+    const lane = LANES[Math.floor(Math.random() * LANES.length)];
+
     const y = 0.8 + Math.random() * 1.4;
-    free.mesh.position.set(26 + Math.random() * 4, y, (Math.random() - 0.5) * 0.4);
-    if (free.isEgg) free.mesh.position.z = 0;
+    free.mesh.position.set(26 + Math.random() * 4, y, lane);
+    if (free.isEgg) free.mesh.position.z = 0;   // egg always center
     free._baseY  = y;
     free._phase  = Math.random() * Math.PI * 2;
     free.word    = SWAHILI[Math.floor(Math.random() * SWAHILI.length)];
