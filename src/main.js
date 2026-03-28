@@ -105,14 +105,15 @@ class Game {
 
     /* Game-play camera — behind & above player */
     this.camera = new THREE.PerspectiveCamera(
-      62, window.innerWidth / window.innerHeight, 0.1, 400
+      65, window.innerWidth / window.innerHeight, 0.1, 400
     );
     this._setGameCamera();
   }
 
   _setGameCamera() {
-    this.camera.position.set(-2.5, 6.5, 15);
-    this.camera.lookAt(new THREE.Vector3(1, 1.2, 0));
+    /* Behind-the-character camera (Subway Surfers style) */
+    this.camera.position.set(-7, 4, 0);
+    this.camera.lookAt(new THREE.Vector3(5, 1.5, 0));
   }
 
   /* ─── Lights ──────────────────────────────────────────── */
@@ -121,13 +122,13 @@ class Game {
     this.scene.add(this.ambientLight);
 
     this.sunLight = new THREE.DirectionalLight(0xfff4d0, 1.2);
-    this.sunLight.position.set(8, 18, 8);
+    this.sunLight.position.set(5, 18, 5);
     this.sunLight.castShadow = true;
     this.sunLight.shadow.mapSize.set(1024, 1024);
-    this.sunLight.shadow.camera.left   = -18;
-    this.sunLight.shadow.camera.right  =  18;
-    this.sunLight.shadow.camera.top    =  18;
-    this.sunLight.shadow.camera.bottom = -6;
+    this.sunLight.shadow.camera.left   = -12;
+    this.sunLight.shadow.camera.right  =  25;
+    this.sunLight.shadow.camera.top    =  10;
+    this.sunLight.shadow.camera.bottom = -10;
     this.sunLight.shadow.bias          = -0.0005;
     this.scene.add(this.sunLight);
 
@@ -462,20 +463,26 @@ class Game {
           this.ui.showLevelComplete(Math.floor(this.score), this.levelIdx + 1 < Level.LEVEL_COUNT);
         }
 
-        /* Camera sway and speed FOV */
-        this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, 62 + (this.speed - SCROLL_SPEED_BASE) * 1.2, 0.1);
+        /* ── Behind-the-player camera (Subway Surfers style) ── */
+        const speedFOV = 65 + (this.speed - SCROLL_SPEED_BASE) * 0.8;
+        this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, speedFOV, 0.08);
         this.camera.updateProjectionMatrix();
 
         /* Camera shake */
-        let shakeX = 0, shakeY = 0;
+        let shakeX = 0, shakeY = 0, shakeZ = 0;
         if (this.shakeIntensity > 0) {
-          shakeX = (Math.random() - 0.5) * 0.5 * this.shakeIntensity;
-          shakeY = (Math.random() - 0.5) * 0.5 * this.shakeIntensity;
+          shakeX = (Math.random() - 0.5) * 0.4 * this.shakeIntensity;
+          shakeY = (Math.random() - 0.5) * 0.4 * this.shakeIntensity;
+          shakeZ = (Math.random() - 0.5) * 0.3 * this.shakeIntensity;
           this.shakeIntensity -= dt * 2.5;
           if (this.shakeIntensity < 0) this.shakeIntensity = 0;
         }
 
-        let targetCamX = -2.5, targetCamZ = 15;
+        /* Camera target — behind & above the player */
+        let camBackDist = -7;    // how far behind
+        let camHeight   = 4;     // how high
+        let lookAheadX  = 8;     // how far ahead to look
+        let lookAtY     = 1.5;
 
         if (this.chaseMode && this.predator) {
            const relativeSpeed = 16.5 - this.speed;
@@ -493,16 +500,34 @@ class Game {
                this.score += 500;
            }
 
-           targetCamX = -4.5;
-           targetCamZ = 18;
+           /* Pull camera back further during chase to show the wolf */
+           camBackDist = -10;
+           camHeight   = 5;
+           lookAheadX  = 6;
         }
 
-        /* Camera follows player's lane with smooth lerp */
+        /* Smooth follow player's lane (Z) and height (Y) */
         const playerZ = this.player.group.position.z;
-        this.camera.position.x = THREE.MathUtils.lerp(this.camera.position.x, targetCamX + shakeX, 0.05);
-        this.camera.position.z = THREE.MathUtils.lerp(this.camera.position.z, targetCamZ + playerZ * 0.5, 0.06);
-        this.camera.position.y = 6.5 + Math.sin(this.time * 0.8) * 0.08 + shakeY;
-        this.camera.lookAt(new THREE.Vector3(1, 1.2, playerZ * 0.3));
+        const playerY = this.player.group.position.y;
+
+        this.camera.position.x = THREE.MathUtils.lerp(
+          this.camera.position.x, camBackDist + shakeX, 0.06
+        );
+        this.camera.position.y = THREE.MathUtils.lerp(
+          this.camera.position.y,
+          camHeight + playerY * 0.3 + Math.sin(this.time * 0.8) * 0.06 + shakeY,
+          0.08
+        );
+        this.camera.position.z = THREE.MathUtils.lerp(
+          this.camera.position.z, playerZ * 0.85 + shakeZ, 0.1
+        );
+
+        /* Look ahead of the player, slightly tracking lane */
+        this.camera.lookAt(new THREE.Vector3(
+          lookAheadX,
+          lookAtY + playerY * 0.2,
+          playerZ * 0.4
+        ));
 
         /* Speed lines */
         this._updateSpeedLines(dt, this.speed);
