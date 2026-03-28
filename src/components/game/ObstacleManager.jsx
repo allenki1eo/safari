@@ -11,30 +11,20 @@ import {
 } from '../../utils/assetManifest';
 
 const SPAWN_Z   = -55;
-const DESPAWN_Z =  14;
+const DESPAWN_Z =   3;  // Despawn just past player — before reaching camera at z=9
 
 // Target heights (world units) per obstacle type
 const TARGET_H = { large: 1.6, medium: 1.1, obstacle: 1.2, rock: 0.9, tree: 2.2 };
 // Collision half-widths
 const COLLIDE_W = { large: 1.2, medium: 0.8, obstacle: 0.7, rock: 0.7, tree: 0.6 };
 
-// Compute height from mesh geometries only (avoids Armature scale=100 inflation)
-function getMeshGeomHeight(root) {
-  let minY = Infinity, maxY = -Infinity;
-  root.traverse(child => {
-    if (child.isMesh && child.geometry?.attributes?.position) {
-      if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
-      const bb = child.geometry.boundingBox;
-      if (bb) {
-        minY = Math.min(minY, bb.min.y);
-        maxY = Math.max(maxY, bb.max.y);
-      }
-    }
-  });
-  if (!isFinite(minY) || !isFinite(maxY)) return null;
-  const h = maxY - minY;
-  // Normalize cm→m if needed
-  return h > 100 ? { h: h * 0.01, minY: minY * 0.01 } : { h, minY };
+// Compute world-space bounding box (includes Armature scale — gives correct world height)
+function getWorldBox(root) {
+  root.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(root);
+  const h = box.max.y - box.min.y;
+  if (!isFinite(h) || h < 0.001) return null;
+  return { h, minY: box.min.y };
 }
 
 // ─── Single obstacle mesh ────────────────────────────────────────────────────
@@ -56,12 +46,12 @@ function ObstacleModel({ path, sizeKey, facePlayer = true }) {
     mixer?.update(Math.min(delta, 0.1));
 
     if (!scaleRef.current && rootRef.current) {
-      const result = getMeshGeomHeight(rootRef.current);
-      if (result && result.h > 0.01) {
+      const result = getWorldBox(rootRef.current);
+      if (result) {
         const targetH = TARGET_H[sizeKey] ?? 1.2;
         const s = targetH / result.h;
         rootRef.current.scale.setScalar(s);
-        // Sit feet on y=0 of parent ObstacleInstance group
+        // Sit feet on y=0 (parent ObstacleInstance group is at y=0)
         rootRef.current.position.y = -result.minY * s;
         scaleRef.current = true;
       }
