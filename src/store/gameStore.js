@@ -3,15 +3,17 @@ import { persist } from 'zustand/middleware';
 import { CHARACTERS, OUTFITS } from '../utils/assetManifest';
 import { MAX_LIVES, STARTING_SPEED } from '../utils/constants';
 
-const getInitialCharacter = () => CHARACTERS.find(c => c.free) || CHARACTERS[0];
-const getInitialOutfit = () => OUTFITS.find(o => o.free) || OUTFITS[0];
+const getInitialCharacter   = () => CHARACTERS.find(c => c.free) || CHARACTERS[0];
+const getInitialOutfit      = () => OUTFITS.find(o => o.free) || OUTFITS[0];
+const getInitialCharUnlocks = () => CHARACTERS.filter(c => c.free).map(c => c.id);
+const getInitialOutfitUnlocks = () => OUTFITS.filter(o => o.free).map(o => o.id);
 
 // Persisted slice (localStorage)
 const persistedStore = (set, get) => ({
   highScore: 0,
   totalCoinsEver: 0,
-  unlockedCharacters: [getInitialCharacter().id],
-  unlockedOutfits: [getInitialOutfit().id],
+  unlockedCharacters: getInitialCharUnlocks(),
+  unlockedOutfits: getInitialOutfitUnlocks(),
   selectedCharacterId: getInitialCharacter().id,
   selectedOutfitId: getInitialOutfit().id,
   hasSeenSwipeHint: false,
