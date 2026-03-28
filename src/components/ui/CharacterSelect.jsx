@@ -57,9 +57,10 @@ function ModelPreview({ path }) {
 
 function PreviewCanvas({ path }) {
   return (
-    <Canvas camera={{ position: [0, 1, 3.5], fov: 42 }} className="w-full h-full">
-      <ambientLight intensity={0.7} />
-      <directionalLight position={[3, 5, 3]} intensity={1.2} />
+    <Canvas camera={{ position: [0, 1.0, 3.2], fov: 52 }} className="w-full h-full">
+      <ambientLight intensity={0.8} />
+      <directionalLight position={[3, 6, 3]} intensity={1.3} />
+      <directionalLight position={[-2, 3, -2]} intensity={0.4} />
       <Environment preset="sunset" />
       <Suspense fallback={null}>
         <ModelPreview path={path} />
@@ -67,8 +68,9 @@ function PreviewCanvas({ path }) {
       <OrbitControls
         enablePan={false}
         enableZoom={false}
-        minPolarAngle={Math.PI / 3}
-        maxPolarAngle={Math.PI / 2.2}
+        target={[0, 0.9, 0]}
+        minPolarAngle={Math.PI / 5}
+        maxPolarAngle={Math.PI / 2}
         autoRotate
         autoRotateSpeed={2.5}
       />
@@ -111,7 +113,7 @@ function CharacterSelect() {
       </div>
 
       {/* 3D Preview */}
-      <div className="relative h-52 border-b border-white/10 bg-gradient-to-b from-[#1A2A10] to-[#0A0A0A]">
+      <div className="relative h-72 border-b border-white/10 bg-gradient-to-b from-[#1A2A10] to-[#0A0A0A]">
         <PreviewCanvas path={previewChar.path} />
         <div className="absolute bottom-2 left-0 right-0 text-center">
           <span className="text-[#D4A853] font-bold text-sm tracking-widest">{previewChar.name}</span>

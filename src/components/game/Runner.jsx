@@ -13,8 +13,30 @@ import { clampLane, getLaneX } from '../../utils/helpers';
 
 const LANE_SWITCH_SPEED = 14;
 
+// Compute model height from mesh geometries only (avoids Armature scale=100 inflation)
+function getMeshHeight(root) {
+  let minY = Infinity, maxY = -Infinity;
+  root.traverse(child => {
+    if (child.isMesh && child.geometry?.attributes?.position) {
+      if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
+      const bb = child.geometry.boundingBox;
+      if (bb) {
+        minY = Math.min(minY, bb.min.y);
+        maxY = Math.max(maxY, bb.max.y);
+      }
+    }
+  });
+  if (!isFinite(minY) || !isFinite(maxY)) return { height: 0, minY: 0 };
+  const height = maxY - minY;
+  // Normalize: if in cm scale (height > 100), convert to meters
+  if (height > 100) return { height: height * 0.01, minY: minY * 0.01 };
+  return { height, minY };
+}
+
 function Runner({ modelPath }) {
   const { scene, animations } = useGLTF(modelPath);
+  // Always clone so this instance owns its own scene graph
+  const clonedScene = useMemo(() => scene.clone(true), [scene]);
   const groupRef = useRef();
   const { actions, mixer } = useAnimations(animations, groupRef);
 
@@ -29,6 +51,7 @@ function Runner({ modelPath }) {
   const currentAnimRef = useRef('');
   const flashTimerRef = useRef(0);
   const scaledRef = useRef(false);
+  const autoScaleRef = useRef(1); // stores uniform scale for slide squish
 
   const gameState = useGameStore(s => s.gameState);
 
@@ -48,7 +71,6 @@ function Runner({ modelPath }) {
     if (!target) return;
     if (currentAnimRef.current === target) return;
 
-    // Fade out previous
     if (currentAnimRef.current && actions[currentAnimRef.current]) {
       actions[currentAnimRef.current].fadeOut(ANIMATION_CROSSFADE);
     }
@@ -58,33 +80,16 @@ function Runner({ modelPath }) {
     currentAnimRef.current = target;
   }, [actions]);
 
-  // Game state → animation transition
   useEffect(() => {
     if (gameState === 'playing') playAnim('run');
     else if (gameState === 'menu' || gameState === 'character_select') playAnim('idle');
     else if (gameState === 'gameover') playAnim('hit', true);
   }, [gameState, playAnim]);
 
-  // Start idle on mount once actions are ready
   useEffect(() => {
     const t = setTimeout(() => playAnim('idle'), 200);
     return () => clearTimeout(t);
   }, [actions]);
-
-  // Auto-scale model to PLAYER_HEIGHT once
-  useEffect(() => {
-    if (scaledRef.current || !groupRef.current) return;
-    const box = new THREE.Box3().setFromObject(groupRef.current);
-    const height = box.max.y - box.min.y;
-    if (height > 0.01) {
-      const s = PLAYER_HEIGHT / height;
-      groupRef.current.scale.setScalar(s);
-      // Align feet to ground
-      const feetOffset = box.min.y * s;
-      groupRef.current.userData.feetOffset = feetOffset;
-      scaledRef.current = true;
-    }
-  });
 
   const handleLaneChange = useCallback((delta) => {
     if (useGameStore.getState().gameState !== 'playing') return;
@@ -118,6 +123,18 @@ function Runner({ modelPath }) {
     const dt = Math.min(delta, 0.1);
     const { gameState: gs, isInvincible: inv } = useGameStore.getState();
 
+    // Auto-scale using mesh geometry bounding box (avoids Armature scale issues)
+    if (!scaledRef.current) {
+      const { height, minY } = getMeshHeight(groupRef.current);
+      if (height > 0.01) {
+        const s = PLAYER_HEIGHT / height;
+        groupRef.current.scale.setScalar(s);
+        groupRef.current.userData.feetOffset = minY * s;
+        autoScaleRef.current = s;
+        scaledRef.current = true;
+      }
+    }
+
     // Lateral movement
     const dx = targetXRef.current - currentXRef.current;
     if (Math.abs(dx) > 0.01) {
@@ -150,16 +167,15 @@ function Runner({ modelPath }) {
       }
     }
 
-    // Expose runner X for collision detection (read by ObstacleManager)
     window.__runnerX = currentXRef.current;
 
-    // Apply position — y offset to keep feet on ground
     const feetOffset = groupRef.current.userData.feetOffset || 0;
     groupRef.current.position.x = currentXRef.current;
     groupRef.current.position.y = yPosRef.current - feetOffset;
 
-    // Slide squish on Y
-    const targetSY = isSlidingRef.current ? 0.5 : 1;
+    // Slide squish — relative to auto-scale, not absolute 1
+    const base = autoScaleRef.current;
+    const targetSY = isSlidingRef.current ? base * 0.5 : base;
     groupRef.current.scale.y = THREE.MathUtils.lerp(groupRef.current.scale.y, targetSY, 0.15);
 
     // Invincibility flash
@@ -176,9 +192,8 @@ function Runner({ modelPath }) {
 
   return (
     <group ref={groupRef} position={[getLaneX(LANE_CENTER), GROUND_Y, 0]}>
-      {/* Rotate 180° so the character faces forward (toward -Z) */}
-      <primitive object={scene} rotation={[0, Math.PI, 0]} />
-      {/* Shadow blob under player */}
+      <primitive object={clonedScene} rotation={[0, Math.PI, 0]} />
+      {/* Shadow blob */}
       <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[0.45, 16]} />
         <meshBasicMaterial color="#000000" transparent opacity={0.25} depthWrite={false} />
