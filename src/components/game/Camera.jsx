@@ -2,36 +2,31 @@ import { useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useGameStore } from '../../store/gameStore';
-import { CAMERA_OFFSET, CAMERA_LERP } from '../../utils/constants';
 
-const tempVec = new THREE.Vector3();
-const targetVec = new THREE.Vector3();
+const PLAY_TARGET = new THREE.Vector3(0, 4.5, 9);
+const MENU_TARGET = new THREE.Vector3(0, 3, 7);
+const LOOK_PLAY = new THREE.Vector3(0, 0.8, -20);
+const LOOK_MENU = new THREE.Vector3(0, 1, -5);
+const _lookAt = new THREE.Vector3();
 
 function Camera() {
   const { camera } = useThree();
-  const smoothPosRef = useRef(new THREE.Vector3(0, CAMERA_OFFSET.y, CAMERA_OFFSET.z));
+  const lookRef = useRef(LOOK_MENU.clone());
 
-  useFrame((state, delta) => {
+  useFrame((_, delta) => {
     const { gameState } = useGameStore.getState();
     const dt = Math.min(delta, 0.1);
+    const lerpSpeed = 6 * dt;
 
-    if (gameState === 'menu' || gameState === 'character_select') {
-      // Menu: fixed angle view
-      tempVec.set(0, 3, 5);
-      camera.position.lerp(tempVec, 0.05);
-      camera.lookAt(0, 1, 0);
-      return;
+    if (gameState === 'playing' || gameState === 'paused') {
+      camera.position.lerp(PLAY_TARGET, lerpSpeed);
+      lookRef.current.lerp(LOOK_PLAY, lerpSpeed);
+    } else {
+      camera.position.lerp(MENU_TARGET, lerpSpeed);
+      lookRef.current.lerp(LOOK_MENU, lerpSpeed);
     }
 
-    if (gameState !== 'playing' && gameState !== 'paused') return;
-
-    // Follow runner — runner is always at z=0, moves in x
-    // Camera stays behind and above
-    targetVec.set(CAMERA_OFFSET.x, CAMERA_OFFSET.y, CAMERA_OFFSET.z);
-
-    smoothPosRef.current.lerp(targetVec, CAMERA_LERP);
-    camera.position.copy(smoothPosRef.current);
-    camera.lookAt(0, 1, -15); // look ahead of runner
+    camera.lookAt(lookRef.current);
   });
 
   return null;

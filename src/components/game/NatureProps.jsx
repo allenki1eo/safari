@@ -1,102 +1,98 @@
-import { useRef, useMemo } from 'react';
+import { useRef, useMemo, useEffect } from 'react';
 import { useGLTF } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useGameStore } from '../../store/gameStore';
 import { NATURE_SCENERY } from '../../utils/assetManifest';
-import { TRACK_WIDTH, TRACK_SEGMENT_LENGTH, BIOME_CONFIGS } from '../../utils/constants';
-import { randomInRange, seededRandom } from '../../utils/helpers';
+import { TRACK_WIDTH } from '../../utils/constants';
+import { seededRandom } from '../../utils/helpers';
 
-// Scenery spawns per side
-const SIDE_PROPS_PER_SEGMENT = 6;
-const SIDE_MIN_X = TRACK_WIDTH / 2 + 1.5;
-const SIDE_MAX_X = TRACK_WIDTH / 2 + 18;
-const SCENERY_SPAWN_Z = -80;
-const SCENERY_DESPAWN_Z = 20;
+const NUM_PROPS = 24;
+const RECYCLE_Z = 22;
+const SIDE_MIN = TRACK_WIDTH / 2 + 2;   // 6.5
+const SIDE_MAX = TRACK_WIDTH / 2 + 20;  // 24.5
 
-// A single nature model loaded once and reused
-function NatureProp({ path, position, scale, rotY }) {
+// One static nature prop — position updated via innerRef
+function NatureProp({ innerRef, path, initialZ, x, scale, rotY }) {
   const { scene } = useGLTF(path);
   const clone = useMemo(() => scene.clone(true), [scene]);
 
   return (
-    <group position={position} rotation={[0, rotY, 0]} scale={scale}>
-      <primitive object={clone} />
+    <group ref={innerRef} position={[x, 0, initialZ]} rotation={[0, rotY, 0]}>
+      <primitive object={clone} scale={[scale, scale, scale]} />
     </group>
   );
 }
 
-// Manages a pool of scenery props that scroll with the track
 function NatureProps() {
   const currentBiome = useGameStore(s => s.currentBiome);
   const gameState = useGameStore(s => s.gameState);
 
-  // Select a curated set of nature props for the current biome
-  const biomeProps = useMemo(() => {
+  // Pick biome-appropriate props (memo'd on biome change)
+  const propDefs = useMemo(() => {
     const available = NATURE_SCENERY.filter(n =>
       !n.biomes || n.biomes.includes(currentBiome)
     );
-    return available.length > 0 ? available.slice(0, 8) : NATURE_SCENERY.slice(0, 4);
+    const pool = available.length >= 4 ? available : NATURE_SCENERY;
+    const rng = seededRandom(99);
+    return Array.from({ length: NUM_PROPS }, (_, i) => {
+      const def = pool[Math.floor(rng() * pool.length)];
+      const side = rng() > 0.5 ? 1 : -1;
+      const x = side * (SIDE_MIN + rng() * (SIDE_MAX - SIDE_MIN));
+      const z = -(i * (90 / NUM_PROPS) + rng() * 3 + 1);
+      const scale = 0.6 + rng() * 0.9;
+      const rotY = rng() * Math.PI * 2;
+      return { id: i, path: def.path, x, z, scale, rotY };
+    });
   }, [currentBiome]);
 
-  // Generate a static set of prop instances with pre-baked positions
-  const propInstances = useMemo(() => {
-    if (biomeProps.length === 0) return [];
-    const rng = seededRandom(42);
-    const instances = [];
-    const numSegments = 12; // covers visible range
+  const propRefs = useRef([]);
+  const propZ = useRef(propDefs.map(p => p.z));
 
-    for (let seg = 0; seg < numSegments; seg++) {
-      for (let i = 0; i < SIDE_PROPS_PER_SEGMENT; i++) {
-        const propDef = biomeProps[Math.floor(rng() * biomeProps.length)];
-        const side = rng() > 0.5 ? 1 : -1;
-        const x = side * (SIDE_MIN_X + rng() * (SIDE_MAX_X - SIDE_MIN_X));
-        const z = SCENERY_SPAWN_Z + seg * (TRACK_SEGMENT_LENGTH / 2) + rng() * TRACK_SEGMENT_LENGTH;
-        const scaleBase = 0.7 + rng() * 0.6;
-        instances.push({
-          id: `${seg}-${i}`,
-          path: propDef.path,
-          x,
-          z,
-          scale: [scaleBase, scaleBase, scaleBase],
-          rotY: rng() * Math.PI * 2,
-        });
-      }
-    }
-    return instances;
-  }, [biomeProps]);
-
-  // Scroll props
-  const propsRef = useRef(propInstances.map(p => ({ ...p })));
-  const speedRef = useRef(0);
+  // Sync positions when propDefs change
+  useEffect(() => {
+    propZ.current = propDefs.map(p => p.z);
+    propRefs.current.forEach((r, i) => {
+      if (r) r.position.z = propZ.current[i];
+    });
+  }, [propDefs]);
 
   useFrame((_, delta) => {
     if (gameState !== 'playing') return;
     const { speed } = useGameStore.getState();
-    speedRef.current = speed;
     const dt = Math.min(delta, 0.1);
+    const adv = speed * dt;
 
-    propsRef.current = propsRef.current.map(p => {
-      let newZ = p.z + speed * dt;
-      if (newZ > SCENERY_DESPAWN_Z) {
-        // Teleport to back
-        newZ = SCENERY_SPAWN_Z - (newZ - SCENERY_DESPAWN_Z);
+    let minZ = Infinity;
+    for (let i = 0; i < propZ.current.length; i++) {
+      if (propZ.current[i] < minZ) minZ = propZ.current[i];
+    }
+
+    for (let i = 0; i < propZ.current.length; i++) {
+      propZ.current[i] += adv;
+      if (propZ.current[i] > RECYCLE_Z) {
+        propZ.current[i] = minZ - (90 / NUM_PROPS);
+        minZ = propZ.current[i];
       }
-      return { ...p, z: newZ };
-    });
+      if (propRefs.current[i]) {
+        propRefs.current[i].position.z = propZ.current[i];
+      }
+    }
   });
 
-  if (gameState === 'loading' || biomeProps.length === 0) return null;
+  if (propDefs.length === 0) return null;
 
   return (
     <group>
-      {propsRef.current.map(prop => (
+      {propDefs.map((def, i) => (
         <NatureProp
-          key={prop.id}
-          path={prop.path}
-          position={[prop.x, 0, prop.z]}
-          scale={prop.scale}
-          rotY={prop.rotY}
+          key={`${def.path}-${i}`}
+          innerRef={el => (propRefs.current[i] = el)}
+          path={def.path}
+          initialZ={def.z}
+          x={def.x}
+          scale={def.scale}
+          rotY={def.rotY}
         />
       ))}
     </group>

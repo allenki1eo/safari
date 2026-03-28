@@ -1,8 +1,8 @@
-import { Suspense, useRef } from 'react';
+import { Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { useGameStore } from './store/gameStore';
 import { useGameLoop } from './hooks/useGameLoop';
-import { CHARACTERS, OUTFITS } from './utils/assetManifest';
+import { CHARACTERS } from './utils/assetManifest';
 
 // UI components
 import LoadingScreen from './components/ui/LoadingScreen';
@@ -28,14 +28,11 @@ import CoinBurst from './components/effects/CoinBurst';
 function GameScene() {
   const gameState = useGameStore(s => s.gameState);
   const selectedCharacterId = useGameStore(s => s.selectedCharacterId);
-  const runnerRef = useRef();
 
   const character = CHARACTERS.find(c => c.id === selectedCharacterId) || CHARACTERS[0];
-
-  // Game loop hook (runs inside Canvas context)
-  useGameLoop();
-
   const isActive = gameState === 'playing' || gameState === 'paused';
+
+  useGameLoop();
 
   return (
     <>
@@ -43,18 +40,27 @@ function GameScene() {
       <GameEnvironment />
       <Track />
 
+      {/* Player */}
       <Suspense fallback={null}>
-        <Runner modelPath={character.path} ref={runnerRef} />
+        <Runner modelPath={character.path} />
       </Suspense>
 
+      {/* Active game systems */}
       {isActive && (
-        <>
-          <ObstacleManager runnerRef={runnerRef} />
+        <Suspense fallback={null}>
+          <ObstacleManager />
           <CollectibleManager />
           <NatureProps />
           <DustParticles />
           <CoinBurst />
-        </>
+        </Suspense>
+      )}
+
+      {/* Nature scenery in menu too */}
+      {gameState === 'menu' && (
+        <Suspense fallback={null}>
+          <NatureProps />
+        </Suspense>
       )}
     </>
   );
@@ -62,22 +68,22 @@ function GameScene() {
 
 function App() {
   const gameState = useGameStore(s => s.gameState);
+  const showCanvas = gameState !== 'loading';
 
   return (
-    <div className="w-full h-full relative overflow-hidden bg-black"
-         style={{ width: '100vw', height: '100dvh' }}>
+    <div style={{ width: '100vw', height: '100dvh', position: 'relative', overflow: 'hidden', background: '#0A0A0A' }}>
 
-      {/* Loading Screen (DOM overlay, no Canvas needed) */}
+      {/* Loading screen — no Canvas needed */}
       {gameState === 'loading' && <LoadingScreen />}
 
-      {/* 3D Canvas — rendered for all states except loading */}
-      {gameState !== 'loading' && (
+      {/* 3D Canvas */}
+      {showCanvas && (
         <Canvas
           shadows
           gl={{ antialias: true, powerPreference: 'high-performance' }}
-          camera={{ position: [0, 4, 8], fov: 60, near: 0.1, far: 300 }}
-          className="w-full h-full"
-          style={{ position: 'absolute', inset: 0 }}
+          // Camera starts behind the player (positive Z)
+          camera={{ position: [0, 4.5, 9], fov: 60, near: 0.1, far: 400 }}
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
         >
           <Suspense fallback={null}>
             <GameScene />
@@ -85,13 +91,11 @@ function App() {
         </Canvas>
       )}
 
-      {/* UI Overlays */}
-      {gameState === 'menu' && <MainMenu />}
+      {/* UI overlays */}
+      {gameState === 'menu'             && <MainMenu />}
       {gameState === 'character_select' && <CharacterSelect />}
-      {gameState === 'gameover' && <GameOver />}
-      {gameState === 'leaderboard' && <Leaderboard />}
-
-      {/* HUD (shown during play and pause) */}
+      {gameState === 'gameover'         && <GameOver />}
+      {gameState === 'leaderboard'      && <Leaderboard />}
       <HUD />
     </div>
   );
