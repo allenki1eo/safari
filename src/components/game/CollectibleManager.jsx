@@ -1,4 +1,4 @@
-import { useRef, useState, useMemo } from 'react';
+import { useRef, useState, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useGameStore } from '../../store/gameStore';
@@ -133,6 +133,18 @@ function CollectibleManager() {
     activatePowerUp: s.activatePowerUp,
     activePowerUp: s.activePowerUp,
   }));
+
+  // Clear all collectibles when leaving play state
+  useEffect(() => {
+    if (gameState !== 'playing') {
+      setCoins([]);
+      setGems([]);
+      setPowerUps([]);
+      spawnTimerRef.current = 0;
+      gemTimerRef.current = randomInRange(8, 15);
+      powerUpTimerRef.current = randomInRange(15, 25);
+    }
+  }, [gameState]);
 
   useFrame((state, delta) => {
     if (gameState !== 'playing') return;

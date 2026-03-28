@@ -17,7 +17,7 @@ function AcaciaSvg({ x, size, opacity, delay }) {
 }
 
 export default function MainMenu() {
-  const { setGameState, highScore } = useGameStore();
+  const { setGameState, startGame, highScore } = useGameStore();
 
   const acacias = [
     { x: 0, size: 120, opacity: 0.35, delay: 0 },
@@ -89,7 +89,7 @@ export default function MainMenu() {
         {/* Buttons */}
         <div className="flex flex-col gap-3 w-64">
           <button
-            onClick={() => setGameState('playing')}
+            onClick={() => startGame()}
             className="w-full py-4 rounded-2xl font-black text-xl tracking-widest
                        active:scale-95 transition-all duration-100 shadow-xl"
             style={{

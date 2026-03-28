@@ -176,10 +176,10 @@ const sessionSlice = (set, get) => ({
   clearPowerUp: () => set({ activePowerUp: null, powerUpEndTime: 0 }),
 
   endGame: () => {
-    const { score, distance, coins } = get();
+    const { score, coins, highScore } = get();
+    const isNewHigh = score > highScore; // check BEFORE updating highScore
     get().updateHighScore(score);
     get().addTotalCoins(coins);
-    const isNewHigh = score > get().highScore;
     set({ gameState: 'gameover', isNewHighScore: isNewHigh });
   },
 });
