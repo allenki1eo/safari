@@ -1,4 +1,6 @@
 /* ─── UI Manager ─────────────────────────────────────────── */
+import { CHARACTER_SKINS } from './Player.js';
+import * as SFX from './Sound.js';
 
 const LEVELS = [
   { emoji: '🌾', name: 'Serengeti',        desc: 'Dodge wildebeest across the golden plains', locked: false },
@@ -25,7 +27,9 @@ export class UI {
     this.game = game;
     this._toastTimer = null;
     this._hintTimer  = null;
+    this._selectedSkin = 0;
     this._buildLevelGrid();
+    this._buildCharacterSelect();
     this._bindButtons();
   }
 
@@ -46,13 +50,10 @@ export class UI {
       if (!lvl.locked) {
         card.addEventListener('click', () => {
           try {
+            SFX.resumeAudio();
             this.game.startLevel(i);
           } catch (err) {
             console.error(err);
-            const d = document.createElement('div');
-            d.style.cssText = 'position:fixed;top:0;left:0;z-index:9999;background:red;color:white;padding:15px;white-space:pre-wrap;width:100%;font-size:16px;';
-            d.textContent = 'ERROR ON CLICK:\\n' + err.message + '\\n' + err.stack;
-            document.body.appendChild(d);
           }
         });
         card.style.cssText += `
@@ -63,6 +64,38 @@ export class UI {
       }
       grid.appendChild(card);
     });
+  }
+
+  /* ─── Character Selection Carousel ───────────────────────── */
+  _buildCharacterSelect() {
+    const container = document.getElementById('char-select');
+    if (!container) return;
+
+    const nameEl = document.getElementById('char-name');
+    const prevBtn = document.getElementById('char-prev');
+    const nextBtn = document.getElementById('char-next');
+
+    const updateName = () => {
+      if (nameEl) nameEl.textContent = CHARACTER_SKINS[this._selectedSkin];
+    };
+
+    prevBtn?.addEventListener('click', () => {
+      SFX.resumeAudio();
+      SFX.sfxLaneSwitch();
+      this._selectedSkin = (this._selectedSkin - 1 + CHARACTER_SKINS.length) % CHARACTER_SKINS.length;
+      this.game.player.setSkin(this._selectedSkin);
+      updateName();
+    });
+
+    nextBtn?.addEventListener('click', () => {
+      SFX.resumeAudio();
+      SFX.sfxLaneSwitch();
+      this._selectedSkin = (this._selectedSkin + 1) % CHARACTER_SKINS.length;
+      this.game.player.setSkin(this._selectedSkin);
+      updateName();
+    });
+
+    updateName();
   }
 
   _bindButtons() {
@@ -136,6 +169,20 @@ export class UI {
     if (el) el.textContent = name;
   }
 
+  setCombo(n) {
+    const el = document.getElementById('combo-display');
+    if (!el) return;
+    if (n >= 2) {
+      el.textContent = `x${n} COMBO`;
+      el.classList.add('active');
+      /* Scale pulse */
+      el.style.transform = 'translateX(-50%) scale(1.3)';
+      setTimeout(() => { el.style.transform = 'translateX(-50%) scale(1)'; }, 120);
+    } else {
+      el.classList.remove('active');
+    }
+  }
+
   /* ─── Swahili toast ─────────────────────────────────────── */
   showToast(text) {
     const toast = document.getElementById('toast');
@@ -176,7 +223,6 @@ export class UI {
     });
 
     this._show('trivia');
-    /* Auto-skip after 15s */
     setTimeout(() => {
       if (!answered) {
         answered = true;

@@ -4,6 +4,7 @@ import { Player }    from './Player.js';
 import { Level, loadingManager } from './Level.js';
 import { UI }        from './UI.js';
 import { MenuScene } from './MenuScene.js';
+import * as SFX      from './Sound.js';
 
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass }     from 'three/addons/postprocessing/RenderPass.js';
@@ -16,6 +17,9 @@ const SPEED_RAMP        = 0.22;
 const SPEED_MAX         = 28;
 const LEVEL_DURATION    = 90;  /* seconds per level */
 
+/* ─── Combo System ───────────────────────────────────────── */
+const COMBO_WINDOW = 2.5;  /* seconds between gems to keep combo alive */
+
 class Game {
   constructor() {
     this.state    = 'loading';
@@ -25,12 +29,18 @@ class Game {
     this.time     = 0;
     this.speed    = SCROLL_SPEED_BASE;
 
+    /* Combo */
+    this.combo       = 0;
+    this.comboTimer  = 0;
+    this.bestCombo   = 0;
+
     this.clock = new THREE.Clock(false);
 
     this._setupRenderer();
     this._setupScene();
     this._setupPostProcessing();
     this._setupLights();
+    this._buildSpeedLines();
 
     this.shakeIntensity = 0;
 
@@ -72,7 +82,7 @@ class Game {
   /* ─── Post-Processing ─────────────────────────────────── */
   _setupPostProcessing() {
     this.composer = new EffectComposer(this.renderer);
-    
+
     const renderPass = new RenderPass(this.scene, this.camera);
     this.composer.addPass(renderPass);
 
@@ -126,18 +136,80 @@ class Game {
     this.scene.add(this.fillLight);
   }
 
+  /* ─── Speed Lines (motion blur effect) ────────────────── */
+  _buildSpeedLines() {
+    const count = 40;
+    const positions = new Float32Array(count * 6); // line segments: 2 vertices each
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+    const mat = new THREE.LineBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+    });
+    this._speedLines = new THREE.LineSegments(geo, mat);
+    this._speedLines.frustumCulled = false;
+    this._speedLineCount = count;
+    this._speedLineData = [];
+
+    for (let i = 0; i < count; i++) {
+      this._speedLineData.push({
+        y: Math.random() * 5,
+        z: (Math.random() - 0.5) * 8,
+        length: 1 + Math.random() * 3,
+        x: (Math.random() - 0.5) * 30,
+      });
+    }
+    this.scene.add(this._speedLines);
+  }
+
+  _updateSpeedLines(dt, speed) {
+    const intensity = Math.max(0, (speed - 14) / (SPEED_MAX - 14)); // starts at speed 14
+    this._speedLines.material.opacity = intensity * 0.25;
+
+    if (intensity <= 0) return;
+
+    const pos = this._speedLines.geometry.attributes.position;
+    for (let i = 0; i < this._speedLineCount; i++) {
+      const d = this._speedLineData[i];
+      d.x -= speed * dt * 1.5;
+      if (d.x < -20) {
+        d.x = 20 + Math.random() * 10;
+        d.y = Math.random() * 5;
+        d.z = (Math.random() - 0.5) * 8;
+      }
+      const len = d.length * intensity;
+      pos.setXYZ(i * 2,     d.x,       d.y, d.z);
+      pos.setXYZ(i * 2 + 1, d.x + len, d.y, d.z);
+    }
+    pos.needsUpdate = true;
+  }
+
   /* ─── Input ───────────────────────────────────────────── */
   _setupInput() {
+    /* Unlock audio on first interaction */
+    const unlockAudio = () => {
+      SFX.resumeAudio();
+      document.removeEventListener('click', unlockAudio);
+      document.removeEventListener('touchstart', unlockAudio);
+      document.removeEventListener('keydown', unlockAudio);
+    };
+    document.addEventListener('click', unlockAudio);
+    document.addEventListener('touchstart', unlockAudio);
+    document.addEventListener('keydown', unlockAudio);
+
     window.addEventListener('keydown', e => {
       if (this.state !== 'playing') {
         if ((e.code === 'KeyP' || e.code === 'Escape') && this.state === 'paused') this.resume();
         return;
       }
       switch (e.code) {
-        case 'Space': case 'ArrowUp':  case 'KeyW': e.preventDefault(); this.player.jump();      break;
-        case 'ArrowDown': case 'KeyS':              e.preventDefault(); this.player.slide();     break;
-        case 'ArrowLeft':  case 'KeyA':              e.preventDefault(); this.player.moveLeft();  break;
-        case 'ArrowRight': case 'KeyD':              e.preventDefault(); this.player.moveRight(); break;
+        case 'Space': case 'ArrowUp':  case 'KeyW': e.preventDefault(); this.player.jump(); SFX.sfxJump();     break;
+        case 'ArrowDown': case 'KeyS':              e.preventDefault(); this.player.slide(); SFX.sfxSlide();   break;
+        case 'ArrowLeft':  case 'KeyA':              e.preventDefault(); this.player.moveLeft(); SFX.sfxLaneSwitch();  break;
+        case 'ArrowRight': case 'KeyD':              e.preventDefault(); this.player.moveRight(); SFX.sfxLaneSwitch(); break;
         case 'KeyP': case 'Escape':                  this.pause(); break;
       }
     });
@@ -155,16 +227,13 @@ class Game {
       const adx = Math.abs(dx), ady = Math.abs(dy);
 
       if (adx > ady && adx > 30) {
-        /* Horizontal swipe — lane change */
-        if (dx < 0) this.player.moveLeft();
-        else        this.player.moveRight();
+        if (dx < 0) { this.player.moveLeft(); SFX.sfxLaneSwitch(); }
+        else        { this.player.moveRight(); SFX.sfxLaneSwitch(); }
       } else if (ady > 25) {
-        /* Vertical swipe */
-        if (dy < 0) this.player.jump();
-        else        this.player.slide();
+        if (dy < 0) { this.player.jump(); SFX.sfxJump(); }
+        else        { this.player.slide(); SFX.sfxSlide(); }
       } else {
-        /* Tap */
-        this.player.jump();
+        this.player.jump(); SFX.sfxJump();
       }
     }, { passive: true });
 
@@ -190,23 +259,23 @@ class Game {
     loadingManager.onLoad = () => {
       if (hasDoneWarmup) return;
       hasDoneWarmup = true;
-      /* GPU Warm-up: Compile all shaders from the instantly loaded assets before showing game */
       this.renderer.compile(this.scene, this.camera);
-      
+
       setTimeout(() => {
         this.goToMenu();
       }, 400);
     };
     loadingManager.onError = (url) => console.warn('Failed to load asset', url);
 
-    /* Construct MenuScene early specifically to force all heavy Quaternius models into the LoadingManager queue */
     this.scene.fog = null;
     this.menuScene = new MenuScene(this.scene);
   }
 
   /* ─── Level flow ──────────────────────────────────────── */
   startLevel(idx) {
-    /* Destroy menu scene */
+    SFX.resumeAudio();
+    SFX.sfxMenuClick();
+
     if (this.menuScene) { this.menuScene.dispose(); this.menuScene = null; }
 
     this.levelIdx = idx;
@@ -215,11 +284,13 @@ class Game {
     this.time     = 0;
     this.speed    = SCROLL_SPEED_BASE + idx * 1.5;
     this.chaseMode = false;
+    this.combo     = 0;
+    this.comboTimer = 0;
+    this.bestCombo  = 0;
 
     this.level.load(idx);
     this.player.reset();
 
-    /* Restore game camera */
     this._setGameCamera();
     this.scene.fog = new THREE.FogExp2(0xFFB347, 0.018);
 
@@ -229,7 +300,10 @@ class Game {
     this.ui.setLevelName(this.level.name);
     this.ui.setLives(this.lives);
     this.ui.setScore(0);
+    this.ui.setCombo(0);
     this.ui.showControlsHint();
+
+    SFX.startAmbient();
   }
 
   pause() {
@@ -251,8 +325,8 @@ class Game {
     this.clock.stop();
     this.level.unload();
     this.player.hide();
+    SFX.stopAmbient();
 
-    /* Menu art is pre-built in _finishLoading() */
     if (!this.menuScene) {
       this.scene.fog = null;
       this.menuScene = new MenuScene(this.scene);
@@ -273,11 +347,19 @@ class Game {
     this.ui.setLives(0);
     this.state = 'gameover';
     this.clock.stop();
+    SFX.sfxDeath();
+    SFX.stopAmbient();
     this.ui.showGameOver(Math.floor(this.score));
   }
 
   _onHit() {
     if (this.player.isInvincible) return;
+    SFX.sfxHit();
+
+    /* Break combo on hit */
+    this.combo = 0;
+    this.comboTimer = 0;
+    this.ui.setCombo(0);
 
     if (this.chaseMode) {
       this.speed = Math.max(SCROLL_SPEED_BASE - 2, this.speed - 6.5);
@@ -293,7 +375,7 @@ class Game {
 
     this.lives = Math.max(0, this.lives - 1);
     this.ui.setLives(this.lives);
-    this.shakeIntensity = 1.0; /* Trigger camera shake */
+    this.shakeIntensity = 1.0;
     if (this.lives <= 0) {
       this._die();
     } else {
@@ -302,10 +384,25 @@ class Game {
   }
 
   _onCollect(type, word) {
-    const pts = type === 'gem' ? 50 : 15;
+    /* Combo system */
+    this.combo++;
+    this.comboTimer = COMBO_WINDOW;
+    if (this.combo > this.bestCombo) this.bestCombo = this.combo;
+
+    const multiplier = Math.min(this.combo, 10);
+    const basePts = type === 'gem' ? 50 : 15;
+    const pts = basePts * multiplier;
     this.score += pts;
     this.ui.setScore(Math.floor(this.score));
-    if (word) this.ui.showToast(word);
+    this.ui.setCombo(this.combo);
+
+    if (this.combo >= 3) {
+      SFX.sfxCombo(multiplier);
+    } else {
+      SFX.sfxGem();
+    }
+
+    if (word) this.ui.showToast(this.combo >= 3 ? `${word} x${multiplier}!` : word);
   }
 
   /* ─── Main Loop ───────────────────────────────────────── */
@@ -315,7 +412,6 @@ class Game {
     const animate = (ts) => {
       requestAnimationFrame(animate);
 
-      /* Compute dt (Clock only runs during gameplay) */
       const dt = Math.min(this.clock.getDelta(), 0.05);
 
       if (this.state === 'playing') {
@@ -324,7 +420,24 @@ class Game {
         this.score += this.speed * dt * 1.2;
         this.ui.setScore(Math.floor(this.score));
 
+        /* Combo timer decay */
+        if (this.combo > 0) {
+          this.comboTimer -= dt;
+          if (this.comboTimer <= 0) {
+            this.combo = 0;
+            this.ui.setCombo(0);
+          }
+        }
+
         this.player.update(dt, this.time);
+
+        /* Footstep sounds */
+        SFX.tickFootsteps(this.time, this.speed, this.player.onGround, this.player.isSliding);
+
+        /* Landing sound */
+        if (this.player.landSquashT > 0 && this.player.landSquashT > SCROLL_SPEED_BASE * 0.01) {
+          SFX.sfxLand();
+        }
 
         const ev = this.level.update(dt, this.speed, this.player.hitBox, this.time);
         if (ev.hit)     this._onHit();
@@ -333,7 +446,7 @@ class Game {
              this.chaseMode = true;
              this.ui.showToast("WOLF PACK IMMINENT!!");
              this.predator = this.level.spawnPredator();
-             this.predator.position.set(-20, 0, 0); // start far back
+             this.predator.position.set(-20, 0, 0);
           } else if (!ev.isEgg) {
              this._onCollect(ev.collect, ev.word);
           }
@@ -344,13 +457,15 @@ class Game {
         if (this.time >= LEVEL_DURATION) {
           this.state = 'levelcomplete';
           this.clock.stop();
+          SFX.sfxLevelComplete();
+          SFX.stopAmbient();
           this.ui.showLevelComplete(Math.floor(this.score), this.levelIdx + 1 < Level.LEVEL_COUNT);
         }
 
         /* Camera sway and speed FOV */
-        this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, 62 + (this.speed - SCROLL_SPEED_BASE), 0.1);
+        this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, 62 + (this.speed - SCROLL_SPEED_BASE) * 1.2, 0.1);
         this.camera.updateProjectionMatrix();
-        
+
         /* Camera shake */
         let shakeX = 0, shakeY = 0;
         if (this.shakeIntensity > 0) {
@@ -363,7 +478,7 @@ class Game {
         let targetCamX = -2.5, targetCamZ = 15;
 
         if (this.chaseMode && this.predator) {
-           const relativeSpeed = 16.5 - this.speed; // Wolf speed is ~16.5
+           const relativeSpeed = 16.5 - this.speed;
            this.predator.position.x += relativeSpeed * dt;
            this.predator.position.z = THREE.MathUtils.lerp(
              this.predator.position.z, this.player.group.position.z, 0.03
@@ -389,8 +504,14 @@ class Game {
         this.camera.position.y = 6.5 + Math.sin(this.time * 0.8) * 0.08 + shakeY;
         this.camera.lookAt(new THREE.Vector3(1, 1.2, playerZ * 0.3));
 
+        /* Speed lines */
+        this._updateSpeedLines(dt, this.speed);
+
+        /* Bloom increases with speed */
+        const speedFrac = (this.speed - SCROLL_SPEED_BASE) / (SPEED_MAX - SCROLL_SPEED_BASE);
+        this.bloomPass.strength = 0.18 + speedFrac * 0.2;
+
       } else if (this.state === 'menu') {
-        /* Animate menu scene (use real time, not game clock) */
         const now  = ts / 1000;
         const mdt  = Math.min(now - lastMenuT, 0.05);
         lastMenuT  = now;
@@ -403,5 +524,5 @@ class Game {
   }
 }
 
-/* ─── Boot — called directly, no DOMContentLoaded wrapper ── */
+/* ─── Boot ──────────────────────────────────────────────── */
 new Game();

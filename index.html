@@ -615,6 +615,81 @@
       width: 0;
       transition: width 0.3s;
     }
+
+    /* ─── Character Select Carousel ──────────────────────── */
+    .char-section {
+      width: min(400px, 90vw);
+      margin-bottom: 18px;
+    }
+
+    .char-carousel {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+    }
+
+    .char-arrow {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1.5px solid rgba(255, 255, 255, 0.2);
+      color: #fff;
+      font-size: 1.3rem;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: all;
+      backdrop-filter: blur(8px);
+    }
+
+    .char-arrow:hover {
+      background: rgba(255, 255, 255, 0.22);
+      border-color: var(--gold);
+      transform: scale(1.1);
+    }
+
+    .char-arrow:active {
+      transform: scale(0.95);
+    }
+
+    .char-name-display {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--gold);
+      min-width: 160px;
+      text-align: center;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    }
+
+    /* ─── Combo Display ──────────────────────────────────── */
+    #combo-display {
+      position: absolute;
+      top: 70px;
+      left: 50%;
+      transform: translateX(-50%) scale(1);
+      font-size: 1.6rem;
+      font-weight: 900;
+      color: var(--gold);
+      text-shadow: 0 0 12px rgba(252, 209, 22, 0.6), 0 2px 4px rgba(0,0,0,0.5);
+      pointer-events: none;
+      z-index: 12;
+      opacity: 0;
+      transition: opacity 0.2s, transform 0.12s ease-out;
+      letter-spacing: 2px;
+    }
+
+    #combo-display.active {
+      opacity: 1;
+    }
+
+    @keyframes combo-pop {
+      0% { transform: translateX(-50%) scale(1.4); }
+      100% { transform: translateX(-50%) scale(1); }
+    }
   </style>
 </head>
 
@@ -649,6 +724,16 @@
         </div>
       </div>
 
+      <!-- Character selection -->
+      <div class="char-section">
+        <p class="level-section-title">Choose your runner</p>
+        <div id="char-select" class="char-carousel">
+          <button class="char-arrow" id="char-prev">&#9664;</button>
+          <div class="char-name-display" id="char-name">Adventurer</div>
+          <button class="char-arrow" id="char-next">&#9654;</button>
+        </div>
+      </div>
+
       <!-- Level select at bottom -->
       <div class="level-section">
         <p class="level-section-title">Choose your destination</p>
@@ -665,6 +750,9 @@
       </div>
       <button id="pause-btn" title="Pause (P)">⏸</button>
     </div>
+
+    <!-- COMBO DISPLAY -->
+    <div id="combo-display"></div>
 
     <!-- SWAHILI TOAST -->
     <div id="toast"></div>

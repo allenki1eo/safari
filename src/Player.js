@@ -37,7 +37,7 @@ const ANIM = {
 const FADE = 0.15;
 
 /* Available character skins */
-const CHARACTER_SKINS = [
+export const CHARACTER_SKINS = [
   'Adventurer',
   'Casual Character',
   'Hoodie Character',
