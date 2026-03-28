@@ -215,37 +215,71 @@ class Game {
       }
     });
 
-    /* Touch — swipe up=jump, down=slide, left/right=lane change, tap=jump */
-    let tx0 = 0, ty0 = 0;
+    /* ── Touch / Swipe controls ──────────────────────────── *
+     *  Swipe left  → move left   Swipe right → move right
+     *  Swipe up    → jump        Swipe down  → slide
+     *  Tap (< 15px movement)    → jump
+     * ─────────────────────────────────────────────────── */
+    let tx0 = 0, ty0 = 0, tTime = 0;
+    /* Track when a UI button last triggered a state change so we can
+       ignore accidental canvas swipes that immediately follow a tap. */
+    this._lastUIAction = 0;
+
     this.canvas.addEventListener('touchstart', e => {
-      tx0 = e.touches[0].clientX;
-      ty0 = e.touches[0].clientY;
+      tx0   = e.touches[0].clientX;
+      ty0   = e.touches[0].clientY;
+      tTime = Date.now();
     }, { passive: true });
+
     this.canvas.addEventListener('touchend', e => {
       if (this.state !== 'playing') return;
-      const dx = e.changedTouches[0].clientX - tx0;
-      const dy = e.changedTouches[0].clientY - ty0;
-      const adx = Math.abs(dx), ady = Math.abs(dy);
+      /* Ignore if a UI button was just pressed (within 400 ms) */
+      if (Date.now() - this._lastUIAction < 400) return;
 
-      if (adx > ady && adx > 30) {
-        if (dx < 0) { this.player.moveLeft(); SFX.sfxLaneSwitch(); }
+      const dx  = e.changedTouches[0].clientX - tx0;
+      const dy  = e.changedTouches[0].clientY - ty0;
+      const adx = Math.abs(dx);
+      const ady = Math.abs(dy);
+      const dt  = Date.now() - tTime;   /* ms held */
+
+      /* Threshold: 20 px movement OR fast flick */
+      const SWIPE_DIST = 20;
+
+      if (adx > ady && adx > SWIPE_DIST) {
+        /* Horizontal swipe */
+        if (dx < 0) { this.player.moveLeft();  SFX.sfxLaneSwitch(); }
         else        { this.player.moveRight(); SFX.sfxLaneSwitch(); }
-      } else if (ady > 25) {
-        if (dy < 0) { this.player.jump(); SFX.sfxJump(); }
+      } else if (ady > SWIPE_DIST) {
+        /* Vertical swipe */
+        if (dy < 0) { this.player.jump();  SFX.sfxJump(); }
         else        { this.player.slide(); SFX.sfxSlide(); }
-      } else {
+      } else if (adx < 15 && ady < 15 && dt < 300) {
+        /* Quick tap — jump */
         this.player.jump(); SFX.sfxJump();
       }
     }, { passive: true });
 
-    /* UI buttons */
-    document.getElementById('pause-btn')?.addEventListener('click',      () => this.pause());
-    document.getElementById('resume-btn')?.addEventListener('click',     () => this.resume());
-    document.getElementById('pause-menu-btn')?.addEventListener('click', () => { this.resume(); this.goToMenu(); });
-    document.getElementById('retry-btn')?.addEventListener('click',      () => this.startLevel(this.levelIdx));
-    document.getElementById('go-menu-btn')?.addEventListener('click',    () => this.goToMenu());
-    document.getElementById('next-level-btn')?.addEventListener('click', () => this._nextLevel());
-    document.getElementById('lc-menu-btn')?.addEventListener('click',    () => this.goToMenu());
+    /* ── UI Buttons — click + touchend for instant mobile response ── */
+    const onBtn = (id, fn) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const handler = (e) => {
+        e.stopPropagation();
+        this._lastUIAction = Date.now();
+        SFX.resumeAudio();
+        fn();
+      };
+      el.addEventListener('click',    handler);
+      el.addEventListener('touchend', handler, { passive: false });
+    };
+
+    onBtn('pause-btn',      () => this.pause());
+    onBtn('resume-btn',     () => this.resume());
+    onBtn('pause-menu-btn', () => { this.resume(); this.goToMenu(); });
+    onBtn('retry-btn',      () => this.startLevel(this.levelIdx));
+    onBtn('go-menu-btn',    () => this.goToMenu());
+    onBtn('next-level-btn', () => this._nextLevel());
+    onBtn('lc-menu-btn',    () => this.goToMenu());
   }
 
   /* ─── Loading ─────────────────────────────────────────── */
