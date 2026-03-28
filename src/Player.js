@@ -111,53 +111,88 @@ export class Player {
     const path = `src/assets/characters/male/${skinName}.glb`;
 
     loadModel(path, (gltf) => {
-      /* Remove old character if swapping skins */
-      if (this.characterMesh) {
-        this.group.remove(this.characterMesh);
-      }
-
-      const model = SkeletonUtils.clone(gltf.scene);
-      model.traverse(c => {
-        if (c.isMesh) {
-          c.castShadow = true;
-          c.receiveShadow = true;
+      try {
+        /* Remove old character if swapping skins */
+        if (this.characterMesh) {
+          this.group.remove(this.characterMesh);
+          this.characterMesh = null;
         }
-      });
 
-      /* Scale to game height (~1.6 units) */
-      const box = new THREE.Box3().setFromObject(model);
-      const size = box.getSize(new THREE.Vector3());
-      const targetH = 1.6;
-      model.scale.setScalar(targetH / size.y);
+        /* Use the scene directly on first load (no clone needed for single player) */
+        const model = gltf.scene;
+        model.traverse(c => {
+          if (c.isMesh) {
+            c.castShadow = true;
+            c.receiveShadow = true;
+          }
+        });
 
-      /* Face direction of travel (-X, i.e. looking left/forward in our runner) */
-      model.rotation.y = Math.PI / 2;
+        /*
+         * Quaternius characters have an Armature node with scale [100,100,100]
+         * and rotation [-90deg X]. This inflates Box3.setFromObject().
+         * Compute bounding box from mesh geometry only for accurate sizing.
+         */
+        const meshBox = new THREE.Box3();
+        model.traverse(c => {
+          if (c.isMesh && c.geometry) {
+            c.geometry.computeBoundingBox();
+            const worldMat = c.matrixWorld;
+            c.updateWorldMatrix(true, false);
+            const b = c.geometry.boundingBox.clone().applyMatrix4(c.matrixWorld);
+            meshBox.union(b);
+          }
+        });
+        /* Fallback if meshBox is empty */
+        if (meshBox.isEmpty()) meshBox.setFromObject(model);
 
-      /* Pivot feet to Y=0 */
-      const scaledBox = new THREE.Box3().setFromObject(model);
-      model.position.y = -scaledBox.min.y;
+        const size = meshBox.getSize(new THREE.Vector3());
+        const targetH = 1.6;
+        const scaleFactor = targetH / Math.max(size.y, 0.001);
+        model.scale.setScalar(scaleFactor);
 
-      this.group.add(model);
-      this.characterMesh = model;
+        /* Face direction of travel */
+        model.rotation.y = Math.PI / 2;
 
-      /* ── Setup AnimationMixer ── */
-      this.mixer = new THREE.AnimationMixer(model);
-      this.actions = {};
-
-      for (const clip of gltf.animations) {
-        const action = this.mixer.clipAction(clip);
-        this.actions[clip.name] = action;
-
-        /* One-shot animations shouldn't loop */
-        if (clip.name === ANIM.hit || clip.name === ANIM.death ||
-            clip.name === ANIM.kick || clip.name === ANIM.roll) {
-          action.setLoop(THREE.LoopOnce);
-          action.clampWhenFinished = true;
+        /* Pivot feet to Y=0 — recompute after scaling */
+        model.updateMatrixWorld(true);
+        const feetBox = new THREE.Box3();
+        model.traverse(c => {
+          if (c.isMesh && c.geometry) {
+            c.updateWorldMatrix(true, false);
+            const b = c.geometry.boundingBox.clone().applyMatrix4(c.matrixWorld);
+            feetBox.union(b);
+          }
+        });
+        if (!feetBox.isEmpty()) {
+          model.position.y = -feetBox.min.y;
         }
-      }
 
-      /* Start with Run */
-      this._playAction(ANIM.run);
+        this.group.add(model);
+        this.characterMesh = model;
+
+        /* ── Setup AnimationMixer ── */
+        this.mixer = new THREE.AnimationMixer(model);
+        this.actions = {};
+
+        if (gltf.animations && gltf.animations.length > 0) {
+          for (const clip of gltf.animations) {
+            const action = this.mixer.clipAction(clip);
+            this.actions[clip.name] = action;
+
+            /* One-shot animations shouldn't loop */
+            if (clip.name === ANIM.hit || clip.name === ANIM.death ||
+                clip.name === ANIM.kick || clip.name === ANIM.roll) {
+              action.setLoop(THREE.LoopOnce);
+              action.clampWhenFinished = true;
+            }
+          }
+        }
+
+        /* Start with Run */
+        this._playAction(ANIM.run);
+      } catch (err) {
+        console.error('[Player] Failed to setup character model:', err);
+      }
     });
   }
 

@@ -15,6 +15,8 @@ export function loadModel(path, onLoad) {
     gltfLoader.load(path, (gltf) => {
       GLTF_CACHE[path] = gltf;
       onLoad(gltf);
+    }, undefined, (err) => {
+      console.error('[loadModel] Failed to load:', path, err);
     });
   }
 }
