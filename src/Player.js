@@ -1,7 +1,6 @@
 import * as THREE from 'three';
-import { loadingManager } from './Level.js';
-import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
-import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { loadModel, loadingManager } from './Level.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
 /* ─── Physics Constants ─────────────────────────────────────── */
 const JUMP_FORCE      = 15;
@@ -10,15 +9,47 @@ const SLIDE_DURATION  = 0.72;
 const DOUBLE_JUMP_CAP = 1;
 
 /* ─── Lane System ───────────────────────────────────────────── */
-const LANE_WIDTH   = 1.8;          // distance between lanes
-const LANES        = [-LANE_WIDTH, 0, LANE_WIDTH];  // left, center, right
-const LANE_LERP    = 12;           // how fast we slide between lanes
+const LANE_WIDTH   = 1.8;
+const LANES        = [-LANE_WIDTH, 0, LANE_WIDTH];
+const LANE_LERP    = 12;
 
 /* ─── Game-feel Constants ───────────────────────────────────── */
-const COYOTE_TIME    = 0.12;       // seconds after leaving ground where jump still works
-const JUMP_BUFFER    = 0.15;       // seconds before landing where jump input is queued
-const LAND_SQUASH_T  = 0.18;       // squash duration on landing
-const STUMBLE_DUR    = 0.35;       // stumble animation duration on hit
+const COYOTE_TIME    = 0.12;
+const JUMP_BUFFER    = 0.15;
+const LAND_SQUASH_T  = 0.18;
+const STUMBLE_DUR    = 0.35;
+
+/* ─── Animation clip names (Quaternius characters) ──────────── */
+const ANIM = {
+  run:       'CharacterArmature|Run',
+  runLeft:   'CharacterArmature|Run_Left',
+  runRight:  'CharacterArmature|Run_Right',
+  roll:      'CharacterArmature|Roll',         // slide
+  idle:      'CharacterArmature|Idle',
+  wave:      'CharacterArmature|Wave',
+  hit:       'CharacterArmature|HitRecieve',
+  death:     'CharacterArmature|Death',
+  kick:      'CharacterArmature|Kick_Left',    // jump pose
+  walk:      'CharacterArmature|Walk',
+};
+
+/* Default crossfade duration in seconds */
+const FADE = 0.15;
+
+/* Available character skins */
+const CHARACTER_SKINS = [
+  'Adventurer',
+  'Casual Character',
+  'Hoodie Character',
+  'Farmer',
+  'Punk',
+  'Worker',
+  'Business Man',
+  'Beach Character',
+  'King',
+  'Swat',
+  'Astronaut',
+];
 
 /* ─────────────────────────────────────────────────────────────── */
 export class Player {
@@ -39,61 +70,118 @@ export class Player {
     this.animT       = 0;
 
     /* Lane */
-    this.laneIdx     = 1;           // 0=left, 1=center, 2=right
+    this.laneIdx     = 1;
     this.targetZ     = 0;
 
     /* Game-feel timers */
-    this.coyoteTimer   = 0;         // time since last on ground
-    this.jumpBufferT   = 0;         // buffered jump input timer
-    this.landSquashT   = 0;         // squash animation timer
+    this.coyoteTimer   = 0;
+    this.jumpBufferT   = 0;
+    this.landSquashT   = 0;
     this.wasOnGround   = true;
 
     /* Stumble */
     this.stumbleT      = 0;
 
-    /* State: running | jumping | sliding */
+    /* State: running | jumping | sliding | hit | dead */
     this.pstate      = 'running';
+    this._prevState  = '';
 
-    /* Bounding box (world-space, updated each frame) */
+    /* Animation mixer */
+    this.mixer       = null;
+    this.actions     = {};       // name → AnimationAction
+    this._currentAction = null;
+
+    /* Bounding box */
     this.hitBox = new THREE.Box3();
 
-    /* Dust particles on feet */
+    /* Dust particles */
     this._dustParticles = [];
+
+    /* Skin index (for character selection) */
+    this.skinIdx = 0;
 
     this._build();
     this._addShadowCatcher();
     this._buildDustKicks();
   }
 
-  /* ─── Build character model ──────────────────────────────── */
+  /* ─── Build character from GLB ───────────────────────────── */
   _build() {
-    const mtlLoader = new MTLLoader(loadingManager);
-    mtlLoader.setPath('src/assets/characters/male/OBJ/');
-    mtlLoader.load('Male_Casual.mtl', (materials) => {
-      materials.preload();
-      const objLoader = new OBJLoader(loadingManager);
-      objLoader.setMaterials(materials);
-      objLoader.setPath('src/assets/characters/male/OBJ/');
-      objLoader.load('Male_Casual.obj', (object) => {
-        object.traverse(c => {
-          if (c.isMesh) {
-            c.castShadow = true;
-            c.receiveShadow = true;
-          }
-        });
+    const skinName = CHARACTER_SKINS[this.skinIdx % CHARACTER_SKINS.length];
+    const path = `src/assets/characters/male/${skinName}.glb`;
 
-        const box = new THREE.Box3().setFromObject(object);
-        const size = box.getSize(new THREE.Vector3());
-        object.scale.setScalar(1.6 / size.y);
-        object.rotation.y = Math.PI / 2;
+    loadModel(path, (gltf) => {
+      /* Remove old character if swapping skins */
+      if (this.characterMesh) {
+        this.group.remove(this.characterMesh);
+      }
 
-        const scaledBox = new THREE.Box3().setFromObject(object);
-        object.position.y = -scaledBox.min.y;
-
-        this.group.add(object);
-        this.characterMesh = object;
+      const model = SkeletonUtils.clone(gltf.scene);
+      model.traverse(c => {
+        if (c.isMesh) {
+          c.castShadow = true;
+          c.receiveShadow = true;
+        }
       });
+
+      /* Scale to game height (~1.6 units) */
+      const box = new THREE.Box3().setFromObject(model);
+      const size = box.getSize(new THREE.Vector3());
+      const targetH = 1.6;
+      model.scale.setScalar(targetH / size.y);
+
+      /* Face direction of travel (-X, i.e. looking left/forward in our runner) */
+      model.rotation.y = Math.PI / 2;
+
+      /* Pivot feet to Y=0 */
+      const scaledBox = new THREE.Box3().setFromObject(model);
+      model.position.y = -scaledBox.min.y;
+
+      this.group.add(model);
+      this.characterMesh = model;
+
+      /* ── Setup AnimationMixer ── */
+      this.mixer = new THREE.AnimationMixer(model);
+      this.actions = {};
+
+      for (const clip of gltf.animations) {
+        const action = this.mixer.clipAction(clip);
+        this.actions[clip.name] = action;
+
+        /* One-shot animations shouldn't loop */
+        if (clip.name === ANIM.hit || clip.name === ANIM.death ||
+            clip.name === ANIM.kick || clip.name === ANIM.roll) {
+          action.setLoop(THREE.LoopOnce);
+          action.clampWhenFinished = true;
+        }
+      }
+
+      /* Start with Run */
+      this._playAction(ANIM.run);
     });
+  }
+
+  /* ─── Animation helpers ──────────────────────────────────── */
+  _playAction(name, fadeDur = FADE) {
+    const next = this.actions[name];
+    if (!next) return;
+    if (this._currentAction === next && next.isRunning()) return;
+
+    next.reset();
+    next.setEffectiveWeight(1);
+    next.setEffectiveTimeScale(1);
+
+    if (this._currentAction && this._currentAction !== next) {
+      this._currentAction.crossFadeTo(next, fadeDur, true);
+    }
+    next.play();
+    this._currentAction = next;
+  }
+
+  _setAnimSpeed(speed) {
+    if (this._currentAction) {
+      this._currentAction.setEffectiveTimeScale(speed);
+    }
   }
 
   _addShadowCatcher() {
@@ -145,6 +233,7 @@ export class Player {
     this.slideTimer = 0;
     this.isInvincible = false;
     this.pstate     = 'running';
+    this._prevState = '';
     this.animT      = 0;
     this.laneIdx    = 1;
     this.targetZ    = 0;
@@ -153,7 +242,13 @@ export class Player {
     this.landSquashT  = 0;
     this.stumbleT     = 0;
     this.wasOnGround  = true;
-    this._restoreDefaultPose();
+
+    /* Reset animation to run */
+    if (this.mixer) {
+      this.mixer.stopAllAction();
+      this._currentAction = null;
+      this._playAction(ANIM.run);
+    }
   }
 
   hide() {
@@ -162,23 +257,25 @@ export class Player {
     for (const d of this._dustParticles) d.mesh.visible = false;
   }
 
+  /** Switch to a different character skin (0-based index) */
+  setSkin(idx) {
+    this.skinIdx = idx % CHARACTER_SKINS.length;
+    this._build();
+  }
+
   jump() {
     if (this.isSliding) {
-      // Cancel slide into jump
       this.isSliding = false;
       this.slideTimer = 0;
     }
 
-    // Can we jump right now?
     if (this.onGround || this.coyoteTimer > 0) {
       this._doJump(JUMP_FORCE);
     } else if (this.extraJumps > 0) {
-      // Double jump
       this._doJump(JUMP_FORCE * 0.82);
       this.extraJumps--;
-      this._spawnDust(6, 0.3);  // air dust burst
+      this._spawnDust(6, 0.3);
     } else {
-      // Buffer the jump for when we land
       this.jumpBufferT = JUMP_BUFFER;
     }
   }
@@ -194,9 +291,8 @@ export class Player {
 
   slide() {
     if (this.isSliding) return;
-    if (!this.onGround && this.group.position.y > 0.5) return;  // Can't slide high in air
+    if (!this.onGround && this.group.position.y > 0.5) return;
 
-    // If slightly airborne, snap down fast (ground pound slide)
     if (!this.onGround) {
       this.vy = -20;
     }
@@ -225,9 +321,10 @@ export class Player {
     this.isInvincible = true;
     this.invTimer = dur;
     this.stumbleT = STUMBLE_DUR;
+    this.pstate = 'hit';
   }
 
-  /* ─── Dust effect ─────────────────────────────────────────── */
+  /* ─── Dust effects ────────────────────────────────────────── */
   _spawnDust(count, spread) {
     let spawned = 0;
     for (const d of this._dustParticles) {
@@ -269,7 +366,10 @@ export class Player {
   update(dt, time) {
     this.animT += dt;
 
-    /* ── Coyote time tracking ── */
+    /* ── Update animation mixer ── */
+    if (this.mixer) this.mixer.update(dt);
+
+    /* ── Coyote time ── */
     if (this.onGround) {
       this.coyoteTimer = COYOTE_TIME;
     } else {
@@ -289,13 +389,11 @@ export class Player {
 
         if (this.pstate === 'jumping') this.pstate = 'running';
 
-        /* Landing effects */
         if (wasAirborne) {
           this.landSquashT = LAND_SQUASH_T;
           this._spawnDust(4, 0.2);
         }
 
-        /* Execute buffered jump */
         if (this.jumpBufferT > 0) {
           this.jumpBufferT = 0;
           this._doJump(JUMP_FORCE);
@@ -304,10 +402,10 @@ export class Player {
     }
     this.wasOnGround = this.onGround;
 
-    /* ── Jump buffer countdown ── */
+    /* ── Timers ── */
     if (this.jumpBufferT > 0) this.jumpBufferT -= dt;
+    if (this.landSquashT > 0) this.landSquashT -= dt;
 
-    /* ── Slide countdown ── */
     if (this.isSliding) {
       this.slideTimer -= dt;
       if (this.slideTimer <= 0) {
@@ -316,11 +414,12 @@ export class Player {
       }
     }
 
-    /* ── Stumble timer ── */
-    if (this.stumbleT > 0) this.stumbleT -= dt;
-
-    /* ── Land squash timer ── */
-    if (this.landSquashT > 0) this.landSquashT -= dt;
+    if (this.stumbleT > 0) {
+      this.stumbleT -= dt;
+      if (this.stumbleT <= 0 && this.pstate === 'hit') {
+        this.pstate = 'running';
+      }
+    }
 
     /* ── Invincibility flash ── */
     if (this.isInvincible) {
@@ -332,31 +431,51 @@ export class Player {
       }
     }
 
-    /* ── Lane movement (smooth lerp) ── */
+    /* ── Lane movement ── */
     const dz = this.targetZ - this.group.position.z;
     this.group.position.z += dz * Math.min(1, LANE_LERP * dt);
-    // Snap if very close
     if (Math.abs(dz) < 0.01) this.group.position.z = this.targetZ;
 
-    /* ── Animate ── */
-    this._animate(dz);
+    /* ── Skeletal animation state machine ── */
+    this._updateAnimation(dz);
 
-    /* ── Dust particles ── */
+    /* ── Body lean into lane changes ── */
+    const leanTarget = -dz * 0.25;
+    this.group.rotation.y = THREE.MathUtils.lerp(this.group.rotation.y, leanTarget, 0.15);
+
+    /* ── Squash & stretch on landing ── */
+    if (this.landSquashT > 0) {
+      const sq = this.landSquashT / LAND_SQUASH_T;
+      const amt = sq * 0.12;
+      this.group.scale.set(1 + amt, 1 - amt * 1.5, 1 + amt);
+    } else if (this.pstate === 'jumping') {
+      /* Stretch while airborne */
+      if (this.vy > 0) {
+        this.group.scale.set(0.96, 1.06, 0.96);
+      } else {
+        this.group.scale.set(1.04, 0.94, 1.04);
+      }
+    } else if (this.pstate === 'sliding') {
+      /* Squash during slide */
+      this.group.scale.set(1.08, 0.6, 1.08);
+    } else {
+      this.group.scale.set(1, 1, 1);
+    }
+
+    /* ── Dust ── */
     this._updateDust(dt);
-
-    /* ── Running dust kicks ── */
     if (this.pstate === 'running' && this.onGround && Math.random() < dt * 8) {
       this._spawnDust(1, 0.05);
     }
 
-    /* ── Blob shadow ── */
+    /* ── Shadow ── */
     this._shadow.position.x = this.group.position.x;
     this._shadow.position.z = this.group.position.z;
     const airFrac = Math.min(1, this.group.position.y / 4);
     this._shadow.material.opacity = 0.35 * (1 - airFrac);
     this._shadow.scale.setScalar(1 + this.group.position.y * 0.08);
 
-    /* ── Update hitbox (accounts for Z lane position) ── */
+    /* ── Hitbox ── */
     const py = this.group.position.y;
     const pz = this.group.position.z;
     if (this.isSliding) {
@@ -372,96 +491,45 @@ export class Player {
     }
   }
 
-  /* ─── Animation ───────────────────────────────────────────── */
-  _animate(laneDZ) {
-    const t = this.animT;
-    if (!this.characterMesh) return;
+  /* ─── Skeletal Animation State Machine ────────────────────── */
+  _updateAnimation(laneDZ) {
+    if (!this.mixer) return;
 
-    /* ── Stumble overlay ── */
-    if (this.stumbleT > 0) {
-      const st = this.stumbleT / STUMBLE_DUR;
-      this.characterMesh.rotation.z = Math.sin(st * Math.PI * 6) * 0.25 * st;
-      // Don't return — let other animations layer below
+    const state = this.pstate;
+
+    /* Only switch animation when state changes */
+    if (state === this._prevState) {
+      /* Within running state, blend strafe animations */
+      if (state === 'running' && Math.abs(laneDZ) > 0.15) {
+        const strafeAnim = laneDZ > 0 ? ANIM.runLeft : ANIM.runRight;
+        this._playAction(strafeAnim, 0.1);
+      } else if (state === 'running') {
+        this._playAction(ANIM.run, 0.2);
+      }
+      return;
     }
 
-    if (this.pstate === 'running') {
-      const runFreq = 8.5;
-      const s = Math.sin(t * runFreq);
-      const c = Math.cos(t * runFreq);
+    /* State just changed */
+    this._prevState = state;
 
-      /* Vertical bob — sharper foot strikes */
-      const bob = Math.abs(s);
-      this.characterMesh.position.y = bob * 0.1;
-
-      /* Forward lean — slight constant lean while running */
-      this.characterMesh.rotation.x = 0.08;
-
-      /* Shoulder rotation (simulates arm pump) */
-      this.characterMesh.rotation.z = s * 0.06;
-
-      /* Lean into lane changes */
-      const leanTarget = -laneDZ * 0.3;
-      this.group.rotation.y = THREE.MathUtils.lerp(
-        this.group.rotation.y, leanTarget, 0.15
-      );
-
-      /* Landing squash & stretch */
-      if (this.landSquashT > 0) {
-        const sq = this.landSquashT / LAND_SQUASH_T;
-        const squashAmt = sq * 0.15;
-        this.group.scale.set(1 + squashAmt, 1 - squashAmt * 1.5, 1 + squashAmt);
-      } else {
-        this.group.scale.set(1, 1, 1);
-      }
-
-    } else if (this.pstate === 'jumping') {
-      const airTime = Math.max(0, this.group.position.y / 3);
-
-      /* Tuck on the way up, extend on the way down */
-      if (this.vy > 0) {
-        // Going up — tuck
-        this.characterMesh.rotation.x = -0.25 - airTime * 0.1;
-        this.group.scale.set(0.95, 1.08, 0.95); // stretch vertically
-      } else {
-        // Coming down — extend/prepare for landing
-        this.characterMesh.rotation.x = 0.1;
-        this.group.scale.set(1.05, 0.93, 1.05); // squash anticipation
-      }
-
-      this.characterMesh.position.y = 0;
-
-      /* Lean into direction */
-      this.group.rotation.y = THREE.MathUtils.lerp(
-        this.group.rotation.y, -laneDZ * 0.4, 0.1
-      );
-
-      /* Slight spin on double jump */
-      if (this.extraJumps < DOUBLE_JUMP_CAP) {
-        this.characterMesh.rotation.z += 8 * (1 / 60); // continuous spin
-      } else {
-        this.characterMesh.rotation.z = 0;
-      }
-
-    } else if (this.pstate === 'sliding') {
-      /* Low slide — squash down, tilt forward */
-      const slideProgress = 1 - (this.slideTimer / SLIDE_DURATION);
-      this.group.scale.y = 0.55 + slideProgress * 0.1; // start low, rise slightly
-      this.group.scale.x = 1.1;
-      this.group.scale.z = 1.1;
-      this.characterMesh.rotation.x = 1.3 - slideProgress * 0.3;
-      this.characterMesh.position.y = 0;
-
-      /* Keep lane lean */
-      this.group.rotation.y = THREE.MathUtils.lerp(
-        this.group.rotation.y, -laneDZ * 0.2, 0.1
-      );
-    }
-  }
-
-  _restoreDefaultPose() {
-    if (this.characterMesh) {
-      this.characterMesh.position.y = 0;
-      this.characterMesh.rotation.set(0, Math.PI / 2, 0);
+    switch (state) {
+      case 'running':
+        this._playAction(ANIM.run, 0.15);
+        break;
+      case 'jumping':
+        this._playAction(ANIM.kick, 0.08);
+        this._setAnimSpeed(0.6);  // slow-mo the kick for a float feel
+        break;
+      case 'sliding':
+        this._playAction(ANIM.roll, 0.08);
+        this._setAnimSpeed(1.4);  // fast roll
+        break;
+      case 'hit':
+        this._playAction(ANIM.hit, 0.05);
+        break;
+      case 'dead':
+        this._playAction(ANIM.death, 0.1);
+        break;
     }
   }
 }
