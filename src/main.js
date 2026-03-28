@@ -101,8 +101,8 @@ class Game {
   }
 
   _setGameCamera() {
-    this.camera.position.set(-1.5, 5.5, 13);
-    this.camera.lookAt(new THREE.Vector3(1, 1.4, 0));
+    this.camera.position.set(-2.5, 6.5, 15);
+    this.camera.lookAt(new THREE.Vector3(1, 1.2, 0));
   }
 
   /* ─── Lights ──────────────────────────────────────────── */
@@ -134,23 +134,38 @@ class Game {
         return;
       }
       switch (e.code) {
-        case 'Space': case 'ArrowUp':  case 'KeyW': e.preventDefault(); this.player.jump();  break;
-        case 'ArrowDown': case 'KeyS':              e.preventDefault(); this.player.slide(); break;
+        case 'Space': case 'ArrowUp':  case 'KeyW': e.preventDefault(); this.player.jump();      break;
+        case 'ArrowDown': case 'KeyS':              e.preventDefault(); this.player.slide();     break;
+        case 'ArrowLeft':  case 'KeyA':              e.preventDefault(); this.player.moveLeft();  break;
+        case 'ArrowRight': case 'KeyD':              e.preventDefault(); this.player.moveRight(); break;
         case 'KeyP': case 'Escape':                  this.pause(); break;
       }
     });
 
-    /* Touch — swipe up = jump, swipe down = slide, tap = jump */
-    let ty0 = 0;
+    /* Touch — swipe up=jump, down=slide, left/right=lane change, tap=jump */
+    let tx0 = 0, ty0 = 0;
     this.canvas.addEventListener('touchstart', e => {
+      tx0 = e.touches[0].clientX;
       ty0 = e.touches[0].clientY;
     }, { passive: true });
     this.canvas.addEventListener('touchend', e => {
       if (this.state !== 'playing') return;
+      const dx = e.changedTouches[0].clientX - tx0;
       const dy = e.changedTouches[0].clientY - ty0;
-      if      (dy < -25) this.player.jump();
-      else if (dy >  25) this.player.slide();
-      else               this.player.jump();
+      const adx = Math.abs(dx), ady = Math.abs(dy);
+
+      if (adx > ady && adx > 30) {
+        /* Horizontal swipe — lane change */
+        if (dx < 0) this.player.moveLeft();
+        else        this.player.moveRight();
+      } else if (ady > 25) {
+        /* Vertical swipe */
+        if (dy < 0) this.player.jump();
+        else        this.player.slide();
+      } else {
+        /* Tap */
+        this.player.jump();
+      }
     }, { passive: true });
 
     /* UI buttons */
@@ -345,12 +360,15 @@ class Game {
           if (this.shakeIntensity < 0) this.shakeIntensity = 0;
         }
 
-        let targetCamX = -1.5, targetCamZ = 13;
+        let targetCamX = -2.5, targetCamZ = 15;
 
         if (this.chaseMode && this.predator) {
            const relativeSpeed = 16.5 - this.speed; // Wolf speed is ~16.5
            this.predator.position.x += relativeSpeed * dt;
-           
+           this.predator.position.z = THREE.MathUtils.lerp(
+             this.predator.position.z, this.player.group.position.z, 0.03
+           );
+
            if (this.predator.position.x >= this.player.group.position.x - 0.8) {
                this._die();
            } else if (this.predator.position.x < -35) {
@@ -359,15 +377,17 @@ class Game {
                this.ui.showToast("ESCAPED THE WOLF!");
                this.score += 500;
            }
-           
-           targetCamX = -4.0;
-           targetCamZ = 16.5; 
+
+           targetCamX = -4.5;
+           targetCamZ = 18;
         }
 
+        /* Camera follows player's lane with smooth lerp */
+        const playerZ = this.player.group.position.z;
         this.camera.position.x = THREE.MathUtils.lerp(this.camera.position.x, targetCamX + shakeX, 0.05);
-        this.camera.position.z = THREE.MathUtils.lerp(this.camera.position.z, targetCamZ, 0.05);
-        this.camera.position.y = 5.5 + Math.sin(this.time * 0.8) * 0.08 + shakeY;
-        this.camera.lookAt(new THREE.Vector3(1, 1.4, 0));
+        this.camera.position.z = THREE.MathUtils.lerp(this.camera.position.z, targetCamZ + playerZ * 0.5, 0.06);
+        this.camera.position.y = 6.5 + Math.sin(this.time * 0.8) * 0.08 + shakeY;
+        this.camera.lookAt(new THREE.Vector3(1, 1.2, playerZ * 0.3));
 
       } else if (this.state === 'menu') {
         /* Animate menu scene (use real time, not game clock) */
