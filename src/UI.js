@@ -48,14 +48,17 @@ export class UI {
         ${lvl.locked ? '<span class="level-lock">🔒</span>' : ''}
       `;
       if (!lvl.locked) {
-        card.addEventListener('click', () => {
+        const startFn = (e) => {
+          e.stopPropagation();
           try {
             SFX.resumeAudio();
             this.game.startLevel(i);
           } catch (err) {
             console.error(err);
           }
-        });
+        };
+        card.addEventListener('click',    startFn);
+        card.addEventListener('touchend', startFn, { passive: false });
         card.style.cssText += `
           background: linear-gradient(135deg,
             rgba(255,255,255,0.1) 0%,
@@ -118,18 +121,20 @@ export class UI {
       selectSkin((this._selectedSkin + 1) % CHARACTER_SKINS.length);
     });
 
-    /* Open / close character screen */
-    openBtn?.addEventListener('click', () => {
-      SFX.resumeAudio();
-      SFX.sfxMenuClick();
-      this._hide('menu');
-      this._show('char-screen');
+    /* Open / close character screen — click + touchend for mobile */
+    const addTap = (el, fn) => {
+      if (!el) return;
+      const h = (e) => { e.stopPropagation(); fn(); };
+      el.addEventListener('click',    h);
+      el.addEventListener('touchend', h, { passive: false });
+    };
+    addTap(openBtn, () => {
+      SFX.resumeAudio(); SFX.sfxMenuClick();
+      this._hide('menu'); this._show('char-screen');
     });
-    doneBtn?.addEventListener('click', () => {
-      SFX.resumeAudio();
-      SFX.sfxMenuClick();
-      this._hide('char-screen');
-      this._show('menu');
+    addTap(doneBtn, () => {
+      SFX.resumeAudio(); SFX.sfxMenuClick();
+      this._hide('char-screen'); this._show('menu');
     });
 
     updateDisplay();

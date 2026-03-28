@@ -43,7 +43,7 @@
       font-family: 'Outfit', 'Segoe UI', system-ui, -apple-system, sans-serif;
       color: #fff;
       -webkit-tap-highlight-color: transparent;
-      touch-action: none;
+      /* Do NOT set touch-action:none here — it breaks tap-to-click on buttons */
     }
 
     /* ─── Canvas & Vignette ──────────────────────────────── */
@@ -53,6 +53,7 @@
       inset: 0;
       width: 100%;
       height: 100%;
+      touch-action: none; /* Only the canvas needs this for swipe detection */
     }
 
     #vignette {
@@ -201,6 +202,9 @@
       position: relative;
       overflow: hidden;
       backdrop-filter: blur(12px);
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
     }
 
     .level-card::after {
@@ -321,6 +325,7 @@
       justify-content: center;
       backdrop-filter: blur(10px);
       transition: background 0.2s;
+      touch-action: manipulation;
     }
 
     #pause-btn:hover {
@@ -516,6 +521,9 @@
       transition: all 0.2s ease;
       min-width: 160px;
       pointer-events: all;
+      touch-action: manipulation; /* Instant tap response — no 300ms delay */
+      user-select: none;
+      -webkit-user-select: none;
     }
 
     .btn-primary {
@@ -678,6 +686,9 @@
       justify-content: center;
       pointer-events: all;
       backdrop-filter: blur(8px);
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
     }
 
     .char-nav-arrow:hover {
@@ -733,6 +744,9 @@
       transition: all 0.2s;
       text-align: center;
       pointer-events: all;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
     }
 
     .char-card:hover {
