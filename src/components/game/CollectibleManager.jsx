@@ -173,16 +173,12 @@ function CollectibleManager() {
         next = [...next, ...newCoins];
       }
 
-      // Check collection
-      // Magnet power-up attracts nearby coins
-      const isInv = isInvincible;
+      // Check collection — use actual runner X from window.__runnerX
       const hasActivePU = useGameStore.getState().activePowerUp;
+      const runnerX = window.__runnerX ?? 0;
       let collected = 0;
       next = next.map(coin => {
         if (coin.collected) return coin;
-        const coinPos = new THREE.Vector3(coin.x, coin.y, coin.z);
-        // We approximate runner position — runner is always near x=0-±3, z=0, y=0
-        const runnerX = 0; // approximated — real check in ObstacleManager
         const distZ = Math.abs(coin.z);
         const distX = Math.abs(coin.x - runnerX);
 
@@ -213,7 +209,8 @@ function CollectibleManager() {
 
       next = next.map(gem => {
         if (gem.collected) return gem;
-        if (Math.abs(gem.z) < GEM_COLLECT_RADIUS) {
+        const gRx = window.__runnerX ?? 0;
+        if (Math.abs(gem.z) < GEM_COLLECT_RADIUS && Math.abs(gem.x - gRx) < GEM_COLLECT_RADIUS) {
           collectGem();
           return { ...gem, collected: true };
         }
@@ -237,7 +234,8 @@ function CollectibleManager() {
 
       next = next.map(pu => {
         if (pu.collected) return pu;
-        if (Math.abs(pu.z) < POWERUP_COLLECT_RADIUS) {
+        const puRx = window.__runnerX ?? 0;
+        if (Math.abs(pu.z) < POWERUP_COLLECT_RADIUS && Math.abs(pu.x - puRx) < POWERUP_COLLECT_RADIUS) {
           activatePowerUp(pu.type);
           return { ...pu, collected: true };
         }
