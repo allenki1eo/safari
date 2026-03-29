@@ -12,17 +12,15 @@ import {
 import { clampLane, getLaneX } from '../../utils/helpers';
 
 const LANE_SWITCH_SPEED = 14;
-const FALL_MULTIPLIER   = 2.0;   // faster descent for snappy feel
+const FALL_MULTIPLIER   = 2.0;
 
 function Runner({ modelPath }) {
   const { scene, animations } = useGLTF(modelPath);
   const clonedScene = useMemo(() => scene.clone(true), [scene]);
 
-  // groupRef = position/visibility only (not scaled)
-  // modelRef = the 3-D model (scaled + squished)
-  const groupRef  = useRef();
-  const modelRef  = useRef();
-  const { actions, mixer } = useAnimations(animations, modelRef);
+  // Single group for EVERYTHING — model + shadow. Position, scale, visibility.
+  const groupRef = useRef();
+  const { actions, mixer } = useAnimations(animations, groupRef);
 
   const laneRef        = useRef(LANE_CENTER);
   const targetXRef     = useRef(getLaneX(LANE_CENTER));
@@ -37,12 +35,13 @@ function Runner({ modelPath }) {
   const scaledRef      = useRef(false);
   const autoScaleRef   = useRef(1);
   const frameRef       = useRef(0);
+  const feetOffsetRef  = useRef(0);
 
   const gameState = useGameStore(s => s.gameState);
 
   // ── Animation helper ──────────────────────────────────────────────────────
   const playAnim = useCallback((name, once = false) => {
-    if (!actions) return;
+    if (!actions || Object.keys(actions).length === 0) return;
     const FALLBACKS = {
       run:   ['Run', 'Running', 'Walk', 'Walking', 'run_forward',
               'CharacterArmature|Run'],
@@ -72,14 +71,21 @@ function Runner({ modelPath }) {
 
   // ── Game-state → animation ────────────────────────────────────────────────
   useEffect(() => {
+    if (!actions || Object.keys(actions).length === 0) return;
     if (gameState === 'playing') playAnim('run');
     else if (gameState === 'menu' || gameState === 'character_select') playAnim('idle');
     else if (gameState === 'gameover') playAnim('hit', true);
-  }, [gameState, playAnim]);
+  }, [gameState, actions, playAnim]);
 
+  // Play idle ONLY when not playing (mount-time fallback)
   useEffect(() => {
-    const t = setTimeout(() => playAnim('idle'), 250);
-    return () => clearTimeout(t);
+    if (!actions || Object.keys(actions).length === 0) return;
+    const gs = useGameStore.getState().gameState;
+    if (gs === 'playing') {
+      playAnim('run');
+    } else {
+      playAnim('idle');
+    }
   }, [actions]);
 
   // ── Input handlers ────────────────────────────────────────────────────────
@@ -113,26 +119,26 @@ function Runner({ modelPath }) {
 
   // ── Per-frame logic ───────────────────────────────────────────────────────
   useFrame((_, delta) => {
-    if (!groupRef.current || !modelRef.current) return;
+    if (!groupRef.current) return;
     const dt = Math.min(delta, 0.1);
     const { gameState: gs, isInvincible: inv } = useGameStore.getState();
     frameRef.current++;
 
-    // ── Auto-scale (on modelRef only — excludes shadow mesh) ──────────────
+    // ── Auto-scale after 3 frames (model fully in scene) ─────────────────
     if (!scaledRef.current && frameRef.current >= 3) {
-      modelRef.current.updateMatrixWorld(true);
-      const box = new THREE.Box3().setFromObject(modelRef.current);
+      groupRef.current.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(groupRef.current);
       const h = box.max.y - box.min.y;
 
       if (isFinite(h) && h > 0.05) {
         const s = PLAYER_HEIGHT / h;
-        modelRef.current.scale.setScalar(s);
+        groupRef.current.scale.setScalar(s);
 
         // Recompute box at new scale for feet placement
-        modelRef.current.updateMatrixWorld(true);
-        const newBox = new THREE.Box3().setFromObject(modelRef.current);
+        groupRef.current.updateMatrixWorld(true);
+        const newBox = new THREE.Box3().setFromObject(groupRef.current);
         if (isFinite(newBox.min.y)) {
-          modelRef.current.position.y = -newBox.min.y;
+          feetOffsetRef.current = -newBox.min.y;
         }
         autoScaleRef.current = s;
         scaledRef.current = true;
@@ -175,16 +181,16 @@ function Runner({ modelPath }) {
     window.__runnerX = currentXRef.current;
     window.__runnerY = yPosRef.current;
 
-    // ── Apply position to groupRef (positioning wrapper) ──────────────────
+    // ── Apply position ───────────────────────────────────────────────────
     groupRef.current.position.x = currentXRef.current;
-    groupRef.current.position.y = yPosRef.current;
+    groupRef.current.position.y = yPosRef.current + feetOffsetRef.current;
 
-    // ── Slide squish on modelRef (not groupRef, to keep shadow stable) ────
+    // ── Slide squish — relative to auto-scale ─────────────────────────────
     if (scaledRef.current) {
       const base = autoScaleRef.current;
       const targetSY = isSlidingRef.current ? base * 0.5 : base;
-      modelRef.current.scale.y = THREE.MathUtils.lerp(
-        modelRef.current.scale.y, targetSY, 0.2
+      groupRef.current.scale.y = THREE.MathUtils.lerp(
+        groupRef.current.scale.y, targetSY, 0.2
       );
     }
 
@@ -201,12 +207,8 @@ function Runner({ modelPath }) {
   });
 
   return (
-    <group ref={groupRef} position={[getLaneX(LANE_CENTER), GROUND_Y, 0]}>
-      {/* Model group — scaled independently from shadow */}
-      <group ref={modelRef}>
-        <primitive object={clonedScene} rotation={[0, Math.PI, 0]} />
-      </group>
-      {/* Shadow blob — stays at fixed size */}
+    <group ref={groupRef}>
+      <primitive object={clonedScene} rotation={[0, Math.PI, 0]} />
       <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[0.4, 16]} />
         <meshBasicMaterial color="#000000" transparent opacity={0.22} depthWrite={false} />
