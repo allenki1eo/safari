@@ -32,6 +32,9 @@ function box(w, h, d, mat, y0 = 0) {
   return mesh;
 }
 
+/* ─── Animal GLTF asset paths ──────────────────────────── */
+const A = 'src/assets/animals/';
+
 /* ─── Nature GLTF asset paths ───────────────────────────── */
 const N = 'src/assets/nature/';
 
@@ -58,6 +61,9 @@ const CONFIGS = [
       { kind: 'twisted-tree',w:0.8,  h: 1.4,  hGap: 0,  model: N+'TwistedTree_1.gltf' },
       { kind: 'stone-pile', w: 1.0,  h: 0.65, hGap: 0,  model: N+'RockPath_Round_Wide.gltf' },
       { kind: 'archway',    w: 0.4,  h: 2.6,  hGap: 1.05, model: N+'CommonTree_3.gltf' },
+      { kind: 'deer',       w: 0.8,  h: 0.95, hGap: 0, animal: A+'Deer.gltf', animalSpeed: 0.6 },
+      { kind: 'horse',      w: 0.9,  h: 1.1,  hGap: 0, animal: A+'Horse.gltf', animalSpeed: 0.7 },
+      { kind: 'stag',       w: 0.85, h: 1.0,  hGap: 0, animal: A+'Stag.gltf', animalSpeed: 0.5 },
     ],
     spawnMin: 2.2, spawnMax: 3.6,
     scenery: [
@@ -88,6 +94,8 @@ const CONFIGS = [
       { kind: 'stone',      w: 0.7,  h: 0.55,hGap: 0,  model: N+'Pebble_Square_3.gltf' },
       { kind: 'fallen-tree',w: 1.2,  h: 0.55,hGap: 0,  model: N+'TwistedTree_3.gltf', rotY: Math.PI/2 },
       { kind: 'arch-rock',  w: 0.45, h: 2.8, hGap: 1.1, model: N+'CommonTree_4.gltf' },
+      { kind: 'husky',      w: 0.7,  h: 0.8,  hGap: 0, animal: A+'Husky.gltf', animalSpeed: 0.65 },
+      { kind: 'shiba',      w: 0.65, h: 0.75, hGap: 0, animal: A+'ShibaInu.gltf', animalSpeed: 0.55 },
     ],
     spawnMin: 2.0, spawnMax: 3.2,
     scenery: [
@@ -118,6 +126,8 @@ const CONFIGS = [
       { kind: 'pine-block', w: 0.9,  h: 1.5, hGap: 0,  model: N+'Pine_2.gltf' },
       { kind: 'twisted-tree',w:0.8,  h: 1.3, hGap: 0,  model: N+'TwistedTree_4.gltf' },
       { kind: 'iceArch',    w: 0.45, h: 2.7, hGap: 1.05, model: N+'Pine_3.gltf' },
+      { kind: 'wolf',       w: 0.8,  h: 0.9,  hGap: 0, animal: A+'Wolf.gltf', animalSpeed: 0.8 },
+      { kind: 'stag2',      w: 0.85, h: 1.0,  hGap: 0, animal: A+'Stag.gltf', animalSpeed: 0.6 },
     ],
     spawnMin: 1.8, spawnMax: 2.8,
     scenery: [
@@ -166,8 +176,11 @@ export class Level {
     this._loaded     = false;
     this.name        = '';
 
-    /* Reusable geometries */
-    this._gemGeo = new THREE.OctahedronGeometry(0.22, 0);
+    /* Gem collection animation queue */
+    this._gemFX = [];  // { mesh, timer, maxTime }
+
+    /* Reusable geometries — larger gem for easier collection */
+    this._gemGeo = new THREE.OctahedronGeometry(0.38, 0);
     this._gemMat = new THREE.MeshStandardMaterial({ color: 0xFFD700, roughness: 0.1, metalness: 0.9, emissive: 0xFFAA00, emissiveIntensity: 0.4 });
 
   }
@@ -196,6 +209,7 @@ export class Level {
     for (const m of this._env)     this.scene.remove(m);
     for (const o of this._obsPool) this.scene.remove(o.group);
     for (const g of this._gemPool) this.scene.remove(g.mesh);
+    for (const fx of this._gemFX)  this.scene.remove(fx.mesh);
     if (this._particles) this.scene.remove(this._particles);
     for (const d of this._decors) this.scene.remove(d.group);
 
@@ -205,6 +219,7 @@ export class Level {
     this._obstacles = [];
     this._gems      = [];
     this._decors   = [];
+    this._gemFX    = [];
     this._particles = null;
     this._loaded    = false;
   }
@@ -550,15 +565,16 @@ export class Level {
       }
       grp.userData = { arch: true, gapTop: tmpl.hGap, gapBot: 0 };
     } else {
-      /* Solid obstacle — GLTF model or animated animal */
-      if (tmpl.kind === 'wildebeest') {
-        grp.add(this._makeAnimal(tmpl));
+      /* Solid obstacle — animated animal or GLTF model */
+      if (tmpl.kind === 'wildebeest' || tmpl.animal) {
+        const animalPath = tmpl.animal || (A + 'Bull.gltf');
+        this._loadAnimalObstacle(grp, tmpl, animalPath);
       } else if (tmpl.model) {
         this._loadNatureObstacle(grp, tmpl);
       } else {
         grp.add(box(tmpl.w, tmpl.h, 0.5, m(0x888888, 0.9)));
       }
-      grp.userData = { arch: false };
+      grp.userData = { arch: false, animalSpeed: tmpl.animalSpeed || 0 };
     }
     return grp;
   }
@@ -577,24 +593,27 @@ export class Level {
     });
   }
 
-  _makeAnimal(tmpl) {
-    const grp = new THREE.Group();
-    loadModel('src/assets/animals/Bull.gltf', gltf => {
+  /** Load an animated animal obstacle — mixer is placed on the OUTER group */
+  _loadAnimalObstacle(outerGrp, tmpl, modelPath) {
+    loadModel(modelPath, gltf => {
       const mesh = SkeletonUtils.clone(gltf.scene);
       if (gltf.animations && gltf.animations.length > 0) {
         const mixer = new THREE.AnimationMixer(mesh);
-        const clip = gltf.animations.find(a => a.name === 'Gallop' || a.name === 'Run' || a.name === 'Walk') || gltf.animations[0];
-        mixer.clipAction(clip).play();
-        grp.userData.mixer = mixer;
+        const clip = gltf.animations.find(a =>
+          a.name === 'Gallop' || a.name === 'Run' || a.name === 'Walk'
+        ) || gltf.animations[0];
+        const action = mixer.clipAction(clip);
+        action.play();
+        /* Hoist mixer to the OUTER group so the update loop can find it */
+        outerGrp.userData.mixer = mixer;
       }
       const b = new THREE.Box3().setFromObject(mesh);
       const size = b.getSize(new THREE.Vector3());
-      mesh.scale.setScalar(tmpl.h / size.y);
-      mesh.rotation.y = -Math.PI / 2;
+      mesh.scale.setScalar(tmpl.h / Math.max(size.y, 0.01));
+      mesh.rotation.y = -Math.PI / 2;  /* face -X (toward player) */
       mesh.traverse(c => { if (c.isMesh) c.castShadow = c.receiveShadow = true; });
-      grp.add(mesh);
+      outerGrp.add(mesh);
     });
-    return grp;
   }
 
   /* ─── Gem pool ──────────────────────────────────────────── */
@@ -718,10 +737,15 @@ export class Level {
     /* Move and check obstacles */
     for (const obs of this._obsPool) {
       if (!obs.active) continue;
-      obs.group.position.x -= speed * dt;
 
+      /* Animals run slower than scroll speed (they move toward player but not as fast) */
+      const animalSpd = obs.group.userData.animalSpeed || 0;
+      const effectiveSpeed = animalSpd > 0 ? speed * (1 - animalSpd * 0.4) : speed;
+      obs.group.position.x -= effectiveSpeed * dt;
+
+      /* Animate animal mixer */
       if (obs.group.userData.mixer) {
-        obs.group.userData.mixer.update(dt * (speed / 10));
+        obs.group.userData.mixer.update(dt * 1.2);
       }
 
       /* Update hitbox */
@@ -769,7 +793,9 @@ export class Level {
       gem.mesh.position.y = gem._baseY + Math.sin(time * 4 + gem._phase) * 0.18;
       gem.mesh.rotation.y += dt * 2.5;
 
+      /* Expanded hitbox for easier collection */
       gem.hb.setFromObject(gem.mesh);
+      gem.hb.expandByVector(new THREE.Vector3(0.35, 0.4, 0.35));
 
       if (gem.mesh.position.x < -16) {
         gem.active = false;
@@ -778,10 +804,28 @@ export class Level {
       }
       if (!ev.collect && gem.hb.intersectsBox(playerHB)) {
         gem.active = false;
+        /* Collection animation — clone position, scale up + fade */
+        this._spawnGemFX(gem.mesh.position.clone());
         gem.mesh.visible = false;
         ev.collect = 'gem';
         ev.word    = gem.word;
         ev.isEgg   = gem.isEgg;
+      }
+    }
+
+    /* Animate gem collection effects */
+    for (let i = this._gemFX.length - 1; i >= 0; i--) {
+      const fx = this._gemFX[i];
+      fx.timer -= dt;
+      const t = 1 - fx.timer / fx.maxTime;  // 0→1
+      const s = 1 + t * 2.5;
+      fx.mesh.scale.setScalar(s);
+      fx.mesh.position.y += dt * 3;
+      fx.mesh.material.opacity = 1 - t;
+      fx.mesh.rotation.y += dt * 8;
+      if (fx.timer <= 0) {
+        this.scene.remove(fx.mesh);
+        this._gemFX.splice(i, 1);
       }
     }
 
@@ -812,7 +856,7 @@ export class Level {
     const LANES = [-1.8, 0, 1.8];
     const lane = LANES[Math.floor(Math.random() * LANES.length)];
 
-    const y = 0.8 + Math.random() * 1.4;
+    const y = 0.5 + Math.random() * 0.6;  /* max 1.1 — within player hitbox */
     free.mesh.position.set(26 + Math.random() * 4, y, lane);
     if (free.isEgg) free.mesh.position.z = 0;   // egg always center
     free._baseY  = y;
@@ -820,6 +864,18 @@ export class Level {
     free.word    = SWAHILI[Math.floor(Math.random() * SWAHILI.length)];
     free.mesh.visible = true;
     free.active  = true;
+  }
+
+  /* ─── Gem collection VFX ─────────────────────────────────── */
+  _spawnGemFX(pos) {
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0xFFD700, emissive: 0xFFAA00, emissiveIntensity: 0.8,
+      transparent: true, opacity: 1, depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.38, 0), mat);
+    mesh.position.copy(pos);
+    this.scene.add(mesh);
+    this._gemFX.push({ mesh, timer: 0.45, maxTime: 0.45 });
   }
 
   /* ─── Lighting update ───────────────────────────────────── */

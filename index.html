@@ -43,7 +43,8 @@
       font-family: 'Outfit', 'Segoe UI', system-ui, -apple-system, sans-serif;
       color: #fff;
       -webkit-tap-highlight-color: transparent;
-      /* Do NOT set touch-action:none here — it breaks tap-to-click on buttons */
+      overscroll-behavior: none;           /* prevent pull-to-refresh & rubber-band */
+      -webkit-overflow-scrolling: auto;
     }
 
     /* ─── Canvas & Vignette ──────────────────────────────── */
@@ -80,12 +81,11 @@
       align-items: center;
       justify-content: center;
       pointer-events: all;
-      transition: opacity 0.45s ease;
+      touch-action: none;  /* prevent browser gestures on overlay screens */
     }
 
     .screen.hidden {
-      opacity: 0;
-      pointer-events: none;
+      display: none !important;  /* truly remove from layout — no bleed-through */
     }
 
     /* ═══════════════════════════════════════════════════════

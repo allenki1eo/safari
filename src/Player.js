@@ -495,15 +495,15 @@ export class Player {
       const amt = sq * 0.12;
       this.group.scale.set(1 + amt, 1 - amt * 1.5, 1 + amt);
     } else if (this.pstate === 'jumping') {
-      /* Stretch while airborne */
+      /* Subtle stretch while airborne */
       if (this.vy > 0) {
-        this.group.scale.set(0.96, 1.06, 0.96);
+        this.group.scale.set(0.98, 1.04, 0.98);
       } else {
-        this.group.scale.set(1.04, 0.94, 1.04);
+        this.group.scale.set(1.02, 0.97, 1.02);
       }
     } else if (this.pstate === 'sliding') {
-      /* Squash during slide */
-      this.group.scale.set(1.08, 0.6, 1.08);
+      /* Moderate squash during slide */
+      this.group.scale.set(1.05, 0.78, 1.05);
     } else {
       this.group.scale.set(1, 1, 1);
     }
@@ -527,12 +527,12 @@ export class Player {
     if (this.isSliding) {
       this.hitBox.setFromCenterAndSize(
         new THREE.Vector3(0.05, py + 0.42, pz),
-        new THREE.Vector3(0.32, 0.84, 0.7)
+        new THREE.Vector3(0.6, 0.84, 0.9)
       );
     } else {
       this.hitBox.setFromCenterAndSize(
-        new THREE.Vector3(0.05, py + 0.92, pz),
-        new THREE.Vector3(0.32, 1.72, 0.7)
+        new THREE.Vector3(0.05, py + 0.85, pz),
+        new THREE.Vector3(0.6, 1.8, 0.9)
       );
     }
   }
@@ -563,12 +563,12 @@ export class Player {
         this._playAction(ANIM.run, 0.15);
         break;
       case 'jumping':
-        this._playAction(ANIM.kick, 0.08);
-        this._setAnimSpeed(0.6);  // slow-mo the kick for a float feel
+        this._playAction(ANIM.run, 0.08);
+        this._setAnimSpeed(0.4);  // slow-mo run mid-air for a float feel
         break;
       case 'sliding':
         this._playAction(ANIM.roll, 0.08);
-        this._setAnimSpeed(1.4);  // fast roll
+        this._setAnimSpeed(1.0);  // natural roll speed
         break;
       case 'hit':
         this._playAction(ANIM.hit, 0.05);
