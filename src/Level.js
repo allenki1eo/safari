@@ -607,10 +607,41 @@ export class Level {
         /* Hoist mixer to the OUTER group so the update loop can find it */
         outerGrp.userData.mixer = mixer;
       }
-      const b = new THREE.Box3().setFromObject(mesh);
-      const size = b.getSize(new THREE.Vector3());
-      mesh.scale.setScalar(tmpl.h / Math.max(size.y, 0.01));
+
+      /*
+       * Quaternius animal models have an Armature with scale [100,100,100]
+       * which inflates Box3.setFromObject(). Compute bounds from mesh
+       * geometry only (same technique as Player).
+       */
+      mesh.updateMatrixWorld(true);
+      const meshBox = new THREE.Box3();
+      mesh.traverse(c => {
+        if (c.isMesh && c.geometry) {
+          c.geometry.computeBoundingBox();
+          c.updateWorldMatrix(true, false);
+          const gb = c.geometry.boundingBox.clone().applyMatrix4(c.matrixWorld);
+          meshBox.union(gb);
+        }
+      });
+      if (meshBox.isEmpty()) meshBox.setFromObject(mesh);
+
+      const size = meshBox.getSize(new THREE.Vector3());
+      mesh.scale.setScalar(tmpl.h / Math.max(size.y, 0.001));
+
       mesh.rotation.y = -Math.PI / 2;  /* face -X (toward player) */
+
+      /* Re-ground: feet at y=0 after scaling */
+      mesh.updateMatrixWorld(true);
+      const feetBox = new THREE.Box3();
+      mesh.traverse(c => {
+        if (c.isMesh && c.geometry) {
+          c.updateWorldMatrix(true, false);
+          const gb = c.geometry.boundingBox.clone().applyMatrix4(c.matrixWorld);
+          feetBox.union(gb);
+        }
+      });
+      if (!feetBox.isEmpty()) mesh.position.y = -feetBox.min.y;
+
       mesh.traverse(c => { if (c.isMesh) c.castShadow = c.receiveShadow = true; });
       outerGrp.add(mesh);
     });
