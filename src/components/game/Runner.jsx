@@ -12,40 +12,47 @@ import {
 import { clampLane, getLaneX } from '../../utils/helpers';
 
 const LANE_SWITCH_SPEED = 14;
-// Fast-fall multiplier when descending (snappier jump feel)
-const FALL_MULTIPLIER = 1.8;
+const FALL_MULTIPLIER   = 2.0;
 
 function Runner({ modelPath }) {
   const { scene, animations } = useGLTF(modelPath);
-  // Clone so this instance owns its scene graph and doesn't share with previews
   const clonedScene = useMemo(() => scene.clone(true), [scene]);
+
+  // Single group for EVERYTHING — model + shadow. Position, scale, visibility.
   const groupRef = useRef();
   const { actions, mixer } = useAnimations(animations, groupRef);
 
-  const laneRef       = useRef(LANE_CENTER);
-  const targetXRef    = useRef(getLaneX(LANE_CENTER));
-  const currentXRef   = useRef(getLaneX(LANE_CENTER));
-  const yVelRef       = useRef(0);
-  const yPosRef       = useRef(GROUND_Y);
-  const isJumpingRef  = useRef(false);
-  const isSlidingRef  = useRef(false);
-  const slideTimerRef = useRef(0);
-  const currentAnimRef= useRef('');
-  const flashTimerRef = useRef(0);
-  const scaledRef     = useRef(false);
-  const autoScaleRef  = useRef(1); // uniform scale after auto-sizing
+  const laneRef        = useRef(LANE_CENTER);
+  const targetXRef     = useRef(getLaneX(LANE_CENTER));
+  const currentXRef    = useRef(getLaneX(LANE_CENTER));
+  const yVelRef        = useRef(0);
+  const yPosRef        = useRef(GROUND_Y);
+  const isJumpingRef   = useRef(false);
+  const isSlidingRef   = useRef(false);
+  const slideTimerRef  = useRef(0);
+  const currentAnimRef = useRef('');
+  const flashTimerRef  = useRef(0);
+  const scaledRef      = useRef(false);
+  const autoScaleRef   = useRef(1);
+  const frameRef       = useRef(0);
+  const feetOffsetRef  = useRef(0);
 
   const gameState = useGameStore(s => s.gameState);
 
+  // ── Animation helper ──────────────────────────────────────────────────────
   const playAnim = useCallback((name, once = false) => {
-    if (!actions) return;
+    if (!actions || Object.keys(actions).length === 0) return;
     const FALLBACKS = {
-      run:       ['Run', 'Running', 'Walk', 'Walking', 'run_forward', 'CharacterArmature|Run'],
-      jump:      ['Jump', 'Jump_Start', 'jumping', 'Jump_loop', 'CharacterArmature|Jump'],
-      slide:     ['Slide', 'Crouch', 'crouch', 'Duck', 'CharacterArmature|Duck'],
-      hit:       ['Hit', 'HitRecieve', 'Death', 'death', 'Fall', 'CharacterArmature|Death'],
-      idle:      ['Idle', 'idle_loop', 'T-Pose', 'CharacterArmature|Idle'],
-      celebrate: ['Celebrate', 'Victory', 'Dance', 'Wave'],
+      run:   ['Run', 'Running', 'Walk', 'Walking', 'run_forward',
+              'CharacterArmature|Run'],
+      jump:  ['Jump', 'Jump_Start', 'jumping', 'Jump_Idle',
+              'CharacterArmature|Jump'],
+      slide: ['Slide', 'Roll', 'Crouch', 'crouch', 'Duck',
+              'CharacterArmature|Duck', 'CharacterArmature|Roll'],
+      hit:   ['Hit', 'HitRecieve', 'Death', 'death', 'Fall',
+              'CharacterArmature|Death'],
+      idle:  ['Idle', 'idle_loop', 'T-Pose',
+              'CharacterArmature|Idle'],
     };
     const candidates = [name, ...(FALLBACKS[name] || [])];
     let target = candidates.find(n => actions[n]);
@@ -57,22 +64,31 @@ function Runner({ modelPath }) {
     }
     const a = actions[target].reset().fadeIn(ANIMATION_CROSSFADE);
     if (once) { a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; }
-    else { a.setLoop(THREE.LoopRepeat, Infinity); }
+    else      { a.setLoop(THREE.LoopRepeat, Infinity); }
     a.play();
     currentAnimRef.current = target;
   }, [actions]);
 
+  // ── Game-state → animation ────────────────────────────────────────────────
   useEffect(() => {
+    if (!actions || Object.keys(actions).length === 0) return;
     if (gameState === 'playing') playAnim('run');
     else if (gameState === 'menu' || gameState === 'character_select') playAnim('idle');
     else if (gameState === 'gameover') playAnim('hit', true);
-  }, [gameState, playAnim]);
+  }, [gameState, actions, playAnim]);
 
+  // Play idle ONLY when not playing (mount-time fallback)
   useEffect(() => {
-    const t = setTimeout(() => playAnim('idle'), 200);
-    return () => clearTimeout(t);
+    if (!actions || Object.keys(actions).length === 0) return;
+    const gs = useGameStore.getState().gameState;
+    if (gs === 'playing') {
+      playAnim('run');
+    } else {
+      playAnim('idle');
+    }
   }, [actions]);
 
+  // ── Input handlers ────────────────────────────────────────────────────────
   const handleLaneChange = useCallback((delta) => {
     if (useGameStore.getState().gameState !== 'playing') return;
     const newLane = clampLane(laneRef.current + delta);
@@ -101,28 +117,35 @@ function Runner({ modelPath }) {
 
   useInput({ onLaneChange: handleLaneChange, onJump: handleJump, onSlide: handleSlide });
 
+  // ── Per-frame logic ───────────────────────────────────────────────────────
   useFrame((_, delta) => {
     if (!groupRef.current) return;
     const dt = Math.min(delta, 0.1);
     const { gameState: gs, isInvincible: inv } = useGameStore.getState();
+    frameRef.current++;
 
-    // ── Auto-scale: world-space bounding box (includes Armature scale) ──────
-    if (!scaledRef.current) {
+    // ── Auto-scale after 3 frames (model fully in scene) ─────────────────
+    if (!scaledRef.current && frameRef.current >= 3) {
       groupRef.current.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(groupRef.current);
       const h = box.max.y - box.min.y;
-      if (isFinite(h) && h > 0.01) {
+
+      if (isFinite(h) && h > 0.05) {
         const s = PLAYER_HEIGHT / h;
         groupRef.current.scale.setScalar(s);
-        // Align feet: after scale, bottom of model should be at GROUND_Y
-        groupRef.current.position.y = GROUND_Y - box.min.y * s;
-        groupRef.current.userData.baseY = GROUND_Y - box.min.y * s;
+
+        // Recompute box at new scale for feet placement
+        groupRef.current.updateMatrixWorld(true);
+        const newBox = new THREE.Box3().setFromObject(groupRef.current);
+        if (isFinite(newBox.min.y)) {
+          feetOffsetRef.current = -newBox.min.y;
+        }
         autoScaleRef.current = s;
         scaledRef.current = true;
       }
     }
 
-    // ── Lateral movement ────────────────────────────────────────────────────
+    // ── Lateral movement ──────────────────────────────────────────────────
     const dx = targetXRef.current - currentXRef.current;
     if (Math.abs(dx) > 0.01) {
       currentXRef.current += Math.sign(dx) * Math.min(Math.abs(dx), LANE_SWITCH_SPEED * dt);
@@ -130,7 +153,7 @@ function Runner({ modelPath }) {
       currentXRef.current = targetXRef.current;
     }
 
-    // ── Jump physics (fast-fall for snappier feel) ──────────────────────────
+    // ── Jump physics (fast-fall on descent) ───────────────────────────────
     if (isJumpingRef.current) {
       const g = yVelRef.current < 0 ? GRAVITY * FALL_MULTIPLIER : GRAVITY;
       yVelRef.current += g * dt;
@@ -140,13 +163,12 @@ function Runner({ modelPath }) {
         yVelRef.current = 0;
         isJumpingRef.current = false;
         if (gs === 'playing') {
-          if (isSlidingRef.current) playAnim('slide');
-          else playAnim('run');
+          playAnim(isSlidingRef.current ? 'slide' : 'run');
         }
       }
     }
 
-    // ── Slide timer ─────────────────────────────────────────────────────────
+    // ── Slide timer ───────────────────────────────────────────────────────
     if (isSlidingRef.current) {
       slideTimerRef.current -= dt;
       if (slideTimerRef.current <= 0) {
@@ -155,19 +177,24 @@ function Runner({ modelPath }) {
       }
     }
 
+    // ── Expose runner position for collision + camera ─────────────────────
     window.__runnerX = currentXRef.current;
+    window.__runnerY = yPosRef.current;
 
-    // ── Apply position ──────────────────────────────────────────────────────
-    const baseY = groupRef.current.userData.baseY ?? GROUND_Y;
+    // ── Apply position ───────────────────────────────────────────────────
     groupRef.current.position.x = currentXRef.current;
-    groupRef.current.position.y = baseY + yPosRef.current;
+    groupRef.current.position.y = yPosRef.current + feetOffsetRef.current;
 
-    // ── Slide squish — relative to auto-scale, not absolute 1 ───────────────
-    const base = autoScaleRef.current;
-    const targetSY = isSlidingRef.current ? base * 0.55 : base;
-    groupRef.current.scale.y = THREE.MathUtils.lerp(groupRef.current.scale.y, targetSY, 0.18);
+    // ── Slide squish — relative to auto-scale ─────────────────────────────
+    if (scaledRef.current) {
+      const base = autoScaleRef.current;
+      const targetSY = isSlidingRef.current ? base * 0.5 : base;
+      groupRef.current.scale.y = THREE.MathUtils.lerp(
+        groupRef.current.scale.y, targetSY, 0.2
+      );
+    }
 
-    // ── Invincibility flash ─────────────────────────────────────────────────
+    // ── Invincibility flash ───────────────────────────────────────────────
     if (inv) {
       flashTimerRef.current += dt;
       groupRef.current.visible = Math.sin(flashTimerRef.current * 20) > 0;
@@ -180,12 +207,11 @@ function Runner({ modelPath }) {
   });
 
   return (
-    <group ref={groupRef} position={[getLaneX(LANE_CENTER), GROUND_Y, 0]}>
+    <group ref={groupRef}>
       <primitive object={clonedScene} rotation={[0, Math.PI, 0]} />
-      {/* Shadow blob */}
-      <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[0.45, 16]} />
-        <meshBasicMaterial color="#000000" transparent opacity={0.25} depthWrite={false} />
+      <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[0.4, 16]} />
+        <meshBasicMaterial color="#000000" transparent opacity={0.22} depthWrite={false} />
       </mesh>
     </group>
   );
