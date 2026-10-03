@@ -2,15 +2,36 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#D4A853" />
-    <meta name="description" content="Safari - Tanzanian Wildlife Endless Runner" />
-    <link rel="manifest" href="/manifest.json" />
-    <title>Safari - Kimbia! Usisimame.</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#2b1a0e" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Kimbia" />
+    <title>Kimbia! — Spirit of the Serengeti</title>
+    <meta name="description" content="Outrun Fisi the hyena king across the Serengeti! Ride elephants, soar with eagles and dash with cheetahs to bring back the Song of the Savanna. Free to play in your browser." />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Kimbia! — Spirit of the Serengeti" />
+    <meta property="og:description" content="Ride elephants, soar with eagles, outrun the hyena king. Can you beat my score?" />
+    <meta property="og:image" content="/og.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Kimbia! — Spirit of the Serengeti" />
+    <meta name="twitter:description" content="Ride elephants, soar with eagles, outrun the hyena king." />
+    <meta name="twitter:image" content="/og.png" />
+    <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="preload" href="/fonts/lilita-one-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/nunito-latin.woff2" as="font" type="font/woff2" crossorigin />
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    <canvas id="scene"></canvas>
+    <div id="ui"></div>
+    <div id="boot">
+      <div class="boot-sun"></div>
+      <div class="boot-title">KIMBIA!</div>
+      <div class="boot-bar"><i></i></div>
+    </div>
+    <script type="module" src="/app/main.js"></script>
   </body>
 </html>

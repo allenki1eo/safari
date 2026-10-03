@@ -1,21 +1,16 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite';
 
 export default defineConfig({
-  plugins: [react()],
-  assetsInclude: ['**/*.glb', '**/*.gltf', '**/*.bin'],
-  optimizeDeps: {
-    exclude: ['@react-three/fiber', '@react-three/drei', '@react-three/rapier'],
-  },
+  // `static/` holds the PWA files; the legacy `public/` folder is intentionally not shipped.
+  publicDir: 'static',
+  // inline config stops Vite from loading the legacy tailwind postcss.config.js
+  css: { postcss: {} },
   build: {
-    target: 'esnext',
+    target: 'es2020',
+    chunkSizeWarningLimit: 900,
     rollupOptions: {
-      output: {
-        manualChunks: {
-          three: ['three'],
-          r3f: ['@react-three/fiber', '@react-three/drei'],
-        },
-      },
+      output: { manualChunks: { three: ['three'] } },
     },
   },
-})
+  server: { host: true },
+});
