@@ -413,3 +413,7 @@ input { font: inherit; }
 .seg { display: flex; padding: 3px; border-radius: 12px; background: rgba(0,0,0,0.3); }
 .seg button { padding: 6px 12px; border-radius: 9px; font-size: 14px; color: rgba(255,244,222,0.75); }
 .seg button.on { background: var(--sun); color: var(--earth); }
+
+.lb-placed { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.lb-note { font-family: var(--body); font-size: 13px; font-weight: 800; color: var(--sun-2); }
+.lb-ask { margin: 0; font-size: 13px; line-height: 1.4; color: rgba(255,244,222,0.85); }

@@ -107,7 +107,12 @@ For a local database without Turso Cloud, set `TURSO_DATABASE_URL=file:data/kimb
 
 Scores live in [Turso](https://turso.tech) (libSQL). The browser only calls `/api/scores`. `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are read on the server — do not prefix them with `VITE_`, or Vite will ship them to the client.
 
-`npm run db:init` runs `migrations/001_scores.sql`. The API also applies that file on first use (`CREATE TABLE IF NOT EXISTS`), so a new database is ready as soon as the env vars are set. The board returns the top 20 rows ordered by score, then by earlier submission. Rank is computed in SQL and any rank sent by the client is ignored. Names are 1–16 characters. Score, distance, seeds, and allies must be non-negative integers.
+- **One row per runner.** Each player has a single row with their best run. A new run replaces it only if it scores higher. Every posted run is also logged in `scores`.
+- **Unique names.** Names are 1–16 characters and unique ignoring case and spacing ("Zuri" = "zuri" = " ZURI "). Each device creates a random secret key on first use, and the server stores only its SHA-256 hash. Holding the key is what makes a name yours, so nobody can post under someone else's name. Renaming (in Settings) keeps your best score.
+- **Automatic posting.** Players pick a name once, on their first game over. After that, every run posts by itself and the card shows their rank and whether they set a new personal best.
+- **Migrations.** `migrations/001_scores.sql` and `002_players.sql` run in order through `npm run db:init`, or automatically on the API's first request. `002` folds the old one-row-per-run table into one player per name, keeping each name's best. The first device to post under a folded name claims it.
+
+The board returns the top 20 runners by best score, with earlier players ahead on ties. Rank is computed in SQL and anything the client sends as a rank is ignored.
 
 ## Analytics
 
