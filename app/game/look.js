@@ -58,6 +58,10 @@ export function detectQuality(pref) {
   if (pref === 'high' || pref === 'low') return pref;
   const cores = navigator.hardwareConcurrency ?? 4;
   const mem = navigator.deviceMemory ?? 4;
+  const ua = navigator.userAgent || '';
+  // Budget Androids report 8 cores and 4 GB yet struggle with shadows and bloom (and some fail
+  // to build those shaders at all), so they need more headroom before High is the default.
+  if (/Android/i.test(ua)) return cores >= 8 && mem >= 8 ? 'high' : 'low';
   return cores >= 6 && mem >= 4 ? 'high' : 'low';
 }
 

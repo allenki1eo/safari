@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { curve, bend, bakeRigid, finishProp, time as timeU } from './materials.js';
+import { curve, bend, bakeRigid, finishProp, time as timeU, runnerShadowTexture } from './materials.js';
 import { Look, detectQuality } from './look.js';
 import { Animals, makeEagle, makeHornbill, makeTruck, makeRamp, makeTotem, makePrizeBox, makeLetterToken, makeBoostGem } from './models.js';
 import { makeRunner } from './people.js';
@@ -61,6 +61,18 @@ export class Game {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.pixelRatio = dpr;
+    // Some phone GPUs can't build the High-quality shaders (shadows and the post pipeline add a
+    // lot): rather than leave the ground missing or black, drop to Low and carry on.
+    this.renderer.debug.onShaderError = (gl, program, vs, fs) => {
+      console.error('[kimbia] shader failed to build', gl.getProgramInfoLog(program), gl.getShaderInfoLog(fs), gl.getShaderInfoLog(vs));
+      if (this.look?.quality === 'high' && !this.shaderFallback) {
+        this.shaderFallback = true;
+        setTimeout(() => {
+          this.look.set('low');
+          this.emit('quality');
+        }, 0);
+      }
+    };
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(62, 1, 0.1, 2000);
@@ -1360,10 +1372,42 @@ export class Game {
     // lean into lane changes
     r.root.rotation.z = (LANES[p.lane] - p.x) * -0.12;
     r.root.rotation.y = 0;
-    r.shadow.position.y = 0.03 - p.y - yOff + (p.ground || 0);
-    r.shadow.visible = !pw.tai && !pw.tembo;
+    this.placeRunnerShadow(r, pose, yOff);
     const blink = p.invuln > 0 && !pw.tai && !pw.tembo && Math.floor(this.time * 14) % 2 === 0;
     r.root.visible = !blink;
+  }
+
+  /**
+   * The runner's shadow stays on the ground under them: it shrinks, softens and slides away
+   * from the sun as they jump, stretches out behind them in a slide, and grows into Tembo's
+   * shadow on a ride. When Tai carries them it's a faint smudge far below.
+   */
+  placeRunnerShadow(r, pose, yOff) {
+    const p = this.p;
+    const s = r.shadow;
+    if (!s.userData.own) {
+      s.material = s.material.clone(); // its own opacity and a darker blob, apart from the others
+      s.material.map = runnerShadowTexture();
+      s.userData.own = true;
+    }
+    const ground = p.ground || 0;
+    const h = Math.max(0, p.y - ground) + (pose === 'fly' ? 6 : 0);
+    const lift = Math.min(h, 6);
+    const shrink = 1 / (1 + lift * 0.28);
+    const slide = pose === 'slide';
+    const ride = pose === 'ride';
+    const w = (ride ? 2.4 : slide ? 1.1 : 0.9) * shrink;
+    const d = (ride ? 3.6 : slide ? 2.0 : 0.9) * shrink;
+    s.scale.set(w, d, 1);
+    // cast away from the sun, further the higher they are
+    const sun = this.world.sunDir; // towards the sun
+    const k = Math.min(0.6, 0.25 / Math.max(0.2, sun.y)); // low sun, longer reach (kept modest)
+    const ox = Math.max(-1.2, Math.min(1.2, -sun.x * lift * k));
+    const oz = Math.max(-1.6, Math.min(1.6, -sun.z * lift * k));
+    s.position.set(ox, 0.03 - p.y - yOff + ground, (slide ? 0.55 : 0) + oz);
+    const base = this.look?.quality === 'high' ? 0.55 : 1;
+    s.material.opacity = base * (pose === 'fly' ? 0.25 : 1 - Math.min(0.7, lift * 0.15));
+    s.visible = true;
   }
 
   updateAllies(dt) {
