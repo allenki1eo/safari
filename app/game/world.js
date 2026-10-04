@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { bend, mat, G, mesh, bakeRigid, finishProp, pathTexture, grassTexture, waterMaterial, SWAY_EXT, setBlobStrength } from './materials.js';
+import { bend, mat, G, mesh, bakeRigid, finishProp, pathTexture, grassTexture, waterMaterial, SWAY_EXT, GROUND_LIGHT, setBlobStrength } from './materials.js';
 import {
   Animals, makeAcacia, makeBaobab, makeKopje, makeTermiteMound, makeGrass, makeBush, makeKilimanjaro,
 } from './models.js';
@@ -316,13 +316,13 @@ export class World {
     this.segments = [];
     for (let i = 0; i < SEG_COUNT; i++) {
       const g = new THREE.Group();
-      const grassMat = bend(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, map: grassTexture() }), { key: 'grass' });
+      const grassMat = bend(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, map: grassTexture() }), { key: 'grass', ...GROUND_LIGHT });
       const grass = new THREE.Mesh(grassGeo, grassMat);
       grass.userData.keep = true;
       grass.receiveShadow = true;
       g.add(grass);
       // the trail surface itself: a textured strip with worn lanes, tyre tracks and footprints
-      const trailMat = bend(new THREE.MeshLambertMaterial({ map: pathTexture() }), { key: 'trail' });
+      const trailMat = bend(new THREE.MeshLambertMaterial({ map: pathTexture() }), { key: 'trail', ...GROUND_LIGHT });
       const trail = new THREE.Mesh(trailGeo, trailMat);
       trail.position.y = 0.035;
       trail.receiveShadow = true;
@@ -333,12 +333,14 @@ export class World {
       const path = new THREE.Group();
       path.add(mesh(G.boxLong, shade(1.0), LANE_W * 3 + 0.9, 0.05, SEG_LEN, 0, 0, 0));
       for (const s of [-1, 1]) path.add(mesh(G.boxLong, shade(1.08), 0.5, 0.07, SEG_LEN, s * (LANE_W * 1.5 + 0.55), 0, 0));
+      // bright ridges splitting the trail into three lanes, above the textured surface
+      for (const x of [-LANE_W * 0.5, LANE_W * 0.5]) path.add(mesh(G.boxLong, shade(1.45), 0.14, 0.05, SEG_LEN, x, 0.075, 0));
       for (let k = 0; k < 6; k++) {
         const s = Math.random() < 0.5 ? -1 : 1;
         path.add(mesh(G.dodec, shade(0.7), rand(0.1, 0.22), rand(0.08, 0.15), rand(0.1, 0.2), s * rand(4.1, 5.2), 0.06, rand(-SEG_LEN / 2, SEG_LEN / 2)));
       }
       bakeRigid(path, true);
-      const pathMat = bend(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }));
+      const pathMat = bend(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), { key: 'path', ...GROUND_LIGHT });
       path.children.forEach((c) => {
         c.material = pathMat;
         c.receiveShadow = true;
@@ -385,7 +387,13 @@ export class World {
     geo.setAttribute('position', new THREE.Float32BufferAttribute([-0.05, 0, 0, 0.05, 0, 0, 0, 1, 0.02], 3));
     geo.setAttribute('normal', new THREE.Float32BufferAttribute([0, 0.3, 1, 0, 0.3, 1, 0, 0.3, 1], 3));
     geo.setAttribute('aSway', new THREE.Float32BufferAttribute([0, 0, 0.28], 1));
-    this.bladeMat = bend(new THREE.MeshLambertMaterial({ color: 0xd4b05a, side: THREE.DoubleSide }), SWAY_EXT);
+    this.bladeMat = bend(new THREE.MeshLambertMaterial({ color: 0xd4b05a, side: THREE.DoubleSide }), {
+      ...SWAY_EXT,
+      key: 'swayground',
+      fragmentHead: GROUND_LIGHT.fragmentHead,
+      fragmentLight: GROUND_LIGHT.fragmentLight,
+      uniforms: { ...GROUND_LIGHT.uniforms },
+    });
     this.bladeTiles = [];
     const TL = 40;
     const per = 1800;
