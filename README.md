@@ -60,7 +60,8 @@ After Bwindi the run loops into a *legend lap*. Regions you reach unlock on the 
 ## Tech
 
 - [three.js](https://threejs.org) and vanilla ES modules, bundled with [Vite](https://vitejs.dev). About 175 KB gzipped in total.
-- **Rigged characters, built in code.** The six runners are East African kids with lifelike proportions, smooth-shaded skin and sculpted faces (brow, nose, lips and eyes in one surface), each with their own hair (afro puffs, box braids, a high-top, a kitambaa headwrap). Before a run you pick one outfit for the device — a racing kit, a football jersey, a kanga wrap, a ranger vest, or a road cloak — and it is saved locally and worn in the select screen and on the track. The savanna animals are rigged too: lion, cheetah, Fisi's hyena pack, zebra, wildebeest, buffalo, giraffe, elephant, rhino and hippo. Each one is a single skinned mesh with keyframed animation clips: running, jumping, a baseball slide, riding, flying, waving, stumbling and falling for the runners, and walks, gallops, bounding sprints, grazing and tail swishes for the animals. Coat and fabric patterns (stripes, spots, giraffe patches, hide grain, kitenge zigzags, shuka checks) are painted by a shader. No model files are downloaded (`app/game/rigkit.js`, `people.js`, `wardrobe.js`, `fauna.js`).
+- **Runners:** fully modelled characters from Quaternius's CC0 [Universal Base Characters](https://quaternius.itch.io/universal-base-characters), animated with the CC0 [Universal Animation Library](https://quaternius.itch.io/universal-animation-library) (sprint, jump, slide, roll, sit, stumble, fall). Each runner is dressed in code (`app/game/kids.js`): a skin tone, an outfit painted onto the body with kitenge, kanga, shuka and jersey patterns, hair, and their kit (headwrap, sweatband, bucket hat, beaded collar, braids). Before a run you pick one outfit for the device (a racing kit, a football jersey, a kanga wrap, a ranger vest or a road cloak); it is saved locally and worn on the select screen and the track. `scripts/build-kids.mjs` compresses everything to about 1.3 MB for a run. The hand-built runner in `people.js` stands in until the files arrive.
+- **Animals:** every savanna animal is a textured, animated model from [0 A.D.](https://play0ad.com) by Wildfire Games, licensed [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) (`static/models/animals/`, licence text alongside; credited in Settings). Lion, lioness, African elephant, giraffe, zebra, wildebeest, rhino and hippo are 0 A.D.'s own; 0 A.D. has no hyena, cheetah or Cape buffalo, so Fisi's pack is its wolf, the cheetah its tiger and the buffalo its black bull, each given a new coat in a shader (`app/game/wildlife.js`). Those model files, and any changes to them, stay under that licence; the game's code is unaffected. The code-rigged animals (`app/game/rigkit.js`, `fauna.js`) stand in while the models load.
 - **No model, texture or audio files.** Trees, trucks and the remaining animals are built from low-poly primitives in `app/game/models.js`. Music (kalimba, djembe, shaker) and sound effects are synthesized with WebAudio in `app/game/audio.js`.
 - A curved-world vertex shader gives the rolling horizon (`app/game/materials.js`).
 - Static meshes are merged into vertex-coloured batches at build time, keeping each frame around 150–250 draw calls on phones. Pixel ratio adapts automatically if the frame rate drops.
@@ -72,9 +73,11 @@ app/
   game/world.js      sky, day/night cycle, ground, scenery, herds, particles
   game/models.js     procedural low-poly characters, animals, props
   game/rigkit.js     toolkit for skinned characters: shapes, bones, patterns, keyframed clips
-  game/people.js     the six runners: bodies, faces, hair and their animations
-  game/wardrobe.js   wearable outfits laid over the runners
-  game/fauna.js      rigged savanna animals and their gaits
+  game/kids.js       the runners: loading the modelled characters, dressing them, their clips
+  game/people.js     hand-built stand-in runners (used while the models load)
+  game/wardrobe.js   outfits for the hand-built runners
+  game/fauna.js      code-rigged animals (cheetah, hyenas, buffalo) and stand-ins
+  game/wildlife.js   0 A.D. animals: loading, sizing, clips, Tembo's blanket
   game/materials.js  curved-world shader, material cache, mesh baking
   game/audio.js      procedural soundtrack + SFX
   game/input.js      swipe + keyboard
@@ -91,7 +94,9 @@ server/              libSQL access, validation, and the Vite dev/preview middlew
 migrations/          SQL schema for the scores table
 tests/               vitest suites (pattern fairness, regions, save data)
 static/              PWA manifest, service worker, icons, fonts, og image
-scripts/             database init
+static/models/       the runners' character models and clips (CC0, Quaternius)
+static/models/animals/  0 A.D. animal models (CC BY-SA 3.0, Wildfire Games)
+scripts/             database init, character build
 ```
 
 ## Develop

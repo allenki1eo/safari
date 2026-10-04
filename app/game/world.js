@@ -6,9 +6,10 @@ import {
 import {
   RegionAnimals, makeFeverTree, makeGroundsel, makeLobelia, makeMontane, makeSnowRock, makePalm, makeDoum,
   makePapyrus, makeHut, makeStoneHouse, makeBanana, makeJungleTree, makeFern, makeTreeFern, makeFlowers, makeDhow,
+  makeNgalawa, makeBanda, makeParasol, makeMangrove, makeCoralRock, makeSeaweedFarm, makeFishRack, makeLighthouse,
 } from './regionModels.js';
 import { darDay } from '../data/daily.js';
-import { HERD_STEP, herdCursor, planHerd } from './layout.js';
+import { HERD_STEP, MODE_SPEED, ROAMERS, herdCursor, nextMode, planHerd } from './layout.js';
 import { REGIONS, regionIndexAt, PROP_TYPES, JOURNEY_LEN } from '../data/regions.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -93,12 +94,24 @@ const PROPS = {
   treefern: [() => makeTreeFern(rand(0.9, 1.3)), 6, 22],
   flowers: [() => makeFlowers(rand(0.8, 1.3)), 5.5, 22, true],
   dhow: [() => makeDhow(rand(0.9, 1.3)), 24, 70],
+  ngalawa: [() => makeNgalawa(rand(0.9, 1.2)), 15, 34],
+  banda: [() => makeBanda(rand(0.9, 1.1)), 8, 22],
+  parasol: [() => makeParasol(rand(0.9, 1.1)), 6, 16, true],
+  mangrove: [() => makeMangrove(rand(0.9, 1.3)), 9, 26],
+  coralrock: [() => makeCoralRock(rand(0.8, 1.4)), 5.5, 18, true],
+  seaweed: [() => makeSeaweedFarm(1), 15, 26],
+  fishrack: [() => makeFishRack(rand(0.9, 1.1)), 6.5, 16, true],
+  lighthouse: [() => makeLighthouse(1), 24, 40],
 };
+// these belong in (or at the edge of) the water
+const WET = new Set(['dhow', 'papyrus', 'ngalawa', 'seaweed', 'mangrove']);
+const AFLOAT = new Set(['dhow', 'ngalawa']);
 for (const t of PROP_TYPES) if (!PROPS[t]) throw new Error(`missing prop factory: ${t}`);
 // how far each plant's tips move in the wind (metres)
 const SWAY = {
   acacia: 0.22, baobab: 0.06, bush: 0.08, grass: 0.18, fever: 0.28, groundsel: 0.05, lobelia: 0.04, montane: 0.16,
   palm: 0.45, doum: 0.28, papyrus: 0.3, banana: 0.3, jungle: 0.16, fern: 0.14, treefern: 0.22, flowers: 0.1,
+  mangrove: 0.12, parasol: 0.04,
 };
 
 const HERD = {
@@ -111,6 +124,8 @@ const HERD = {
   buffalo: () => RegionAnimals.buffalo(),
   flamingo: () => RegionAnimals.flamingo(),
   hippo: () => RegionAnimals.hippo(),
+  dolphin: () => RegionAnimals.dolphin(),
+  crab: () => RegionAnimals.crab(),
   gorilla: () => RegionAnimals.gorilla(),
 };
 
@@ -500,20 +515,19 @@ export class World {
     let [type] = weighted(region.props);
     const water = region.ground.water ? region.ground.waterSide ?? -1 : 0;
     let side = Math.random() < 0.5 ? -1 : 1;
-    if (region.ocean && Math.random() < 0.08) {
-      type = 'dhow';
-      side = water;
-    }
+    if (region.ocean && Math.random() < 0.08) type = 'dhow';
+    // boats, seaweed farms and mangroves go to the water's side
+    if (water && WET.has(type) && type !== 'papyrus') side = water;
     const [factory, xMin, xMax, small] = PROPS[type];
     const obj = this.take(type, factory, (o) => {
-      finishProp(bakeRigid(o, true), { sway: SWAY[type] ?? 0, ao: type !== 'dhow' });
+      finishProp(bakeRigid(o, true), { sway: SWAY[type] ?? 0, ao: !AFLOAT.has(type) });
       o.traverse((c) => c.isMesh && !c.material.transparent && (c.castShadow = true));
     });
     let x = side * rand(xMin, xMax);
     // keep land props out of the water (papyrus and dhows like it wet)
-    if (water && side === water && type !== 'dhow' && type !== 'papyrus') x = side * rand(xMin, Math.min(xMax, 13));
-    obj.position.set(x, type === 'dhow' ? 0.1 : 0, 0);
-    obj.rotation.y = type === 'dhow' ? rand(-0.4, 0.4) : rand(0, Math.PI * 2);
+    if (water && side === water && !WET.has(type)) x = side * rand(xMin, Math.min(xMax, 13));
+    obj.position.set(x, AFLOAT.has(type) ? 0.1 : type === 'seaweed' ? 0.15 : 0, 0);
+    obj.rotation.y = AFLOAT.has(type) || type === 'seaweed' ? rand(-0.4, 0.4) : rand(0, Math.PI * 2);
     obj.userData.wz = wz;
     obj.userData.cull = small ? -100 : -185;
     obj.visible = true;
@@ -533,11 +547,36 @@ export class World {
     });
     const anim = a.userData.anim;
     a.position.set(plan.x, plan.y, 0);
-    Object.assign(a.userData, { wz, xr, mode, walkV: plan.walkV, dir: plan.dir });
+    Object.assign(a.userData, { wz, xr, mode, walkV: plan.walkV, dir: plan.dir, roams: ROAMERS.has(kind), modeT: rand(2, 8) });
     a.rotation.y = plan.rot;
+    // the region's walkers keep to their sideways stroll; roamers head wherever they face
+    if (mode === 'walk' && !ROAMERS.has(kind)) a.rotation.y = plan.dir > 0 ? -Math.PI / 2 : Math.PI / 2;
     a.visible = true;
     if (!a.parent) this.scene.add(a);
     this.herd.push({ root: a, anim });
+  }
+
+  /**
+   * A plains animal living its own life: it grazes, wanders and now and then trots, always
+   * moving the way it faces (the models face -z), and turns back before reaching the trail.
+   */
+  roam(a, u, dt) {
+    if ((u.modeT -= dt) <= 0) {
+      u.mode = nextMode(u.mode, Math.random());
+      u.modeT = u.mode === 'run' ? rand(1.5, 4) : rand(3, 9);
+      if (u.mode !== 'idle') a.rotation.y += rand(-1.2, 1.2);
+    }
+    const v = MODE_SPEED[u.mode] * u.walkV;
+    if (!v) return;
+    u.t = (u.t ?? 0) + dt;
+    if (u.mode === 'walk') a.rotation.y += Math.sin(u.t * 0.7 + u.walkV * 9) * 0.25 * dt;
+    const dx = -Math.sin(a.rotation.y);
+    const dz = -Math.cos(a.rotation.y);
+    a.position.x += dx * v * dt;
+    u.wz -= dz * v * dt;
+    const ax = Math.abs(a.position.x);
+    const outward = Math.sign(a.position.x) === Math.sign(dx);
+    if ((ax < u.xr[0] && !outward) || (ax > u.xr[1] + 6 && outward)) a.rotation.y = Math.atan2(dx, -dz);
   }
 
   /** Clears and re-populates everything around journey distance J. */
@@ -692,7 +731,8 @@ export class World {
         this.herd.splice(i, 1);
         continue;
       }
-      if (u.mode === 'walk') {
+      if (u.roams) this.roam(a, u, dt);
+      else if (u.mode === 'walk') {
         a.position.x += u.dir * u.walkV * dt;
         const ax = Math.abs(a.position.x);
         const outward = Math.sign(a.position.x) === u.dir;

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { G, mat, basic, mesh, taper, blobShadow, bakeRigid } from './materials.js';
+import { G, mat, basic, bend, mesh, taper, blobShadow, bakeRigid } from './materials.js';
 import { Animals, quad, spots, makeTermiteMound } from './models.js';
 
 /* Low-poly art for the journey beyond the Serengeti. */
@@ -297,6 +297,79 @@ const soft = (c) => mat(c, { flat: false });
 export const RegionAnimals = {
   buffalo: () => Animals.buffalo(),
 
+  /** A bottlenose dolphin that leaps out of the sea in long arcs. */
+  dolphin() {
+    const g = new Group();
+    const body = new Group();
+    g.add(body);
+    const grey = mat(0x6f8796, { flat: false });
+    const belly = mat(0xd9e2e6, { flat: false });
+    body.add(mesh(G.sphere, grey, 0.32, 0.34, 1.05));
+    body.add(mesh(G.sphere, belly, 0.26, 0.24, 0.85, 0, -0.1, -0.05));
+    body.add(mesh(G.sphere, grey, 0.13, 0.12, 0.32, 0, -0.03, -1.12));
+    const fin = mesh(G.cone4, grey, 0.08, 0.38, 0.22, 0, 0.42, 0.05);
+    fin.rotation.x = 0.5;
+    body.add(fin);
+    for (const s of [-1, 1]) {
+      const f = mesh(G.box, grey, 0.28, 0.03, 0.14, s * 0.32, -0.15, -0.35);
+      f.rotation.z = s * 0.4;
+      body.add(f);
+    }
+    const tail = mesh(G.box, grey, 0.62, 0.04, 0.2, 0, 0.0, 1.12);
+    body.add(tail);
+    bakeRigid(body);
+    let t = Math.random() * 6;
+    const period = rand(2.6, 4.2);
+    return {
+      root: g,
+      update(dt) {
+        t += dt;
+        // a leap, then a long swim under water
+        const k = (t % period) / period;
+        const leap = Math.min(1, k / 0.32);
+        const up = k < 0.32 ? Math.sin(leap * Math.PI) : -1;
+        body.position.set(0, up * 1.8 - 0.6, (0.5 - leap) * 3.5);
+        body.rotation.x = k < 0.32 ? (leap - 0.5) * 2.2 : 0;
+        body.visible = k < 0.34;
+      },
+    };
+  },
+
+  /** A ghost crab that scuttles sideways across the sand. */
+  crab() {
+    const g = new Group();
+    const shell = mat(pick([0xe8a35a, 0xd98c4a, 0xf0b97a]));
+    const body = new Group();
+    body.position.y = 0.12;
+    g.add(body);
+    body.add(mesh(G.sphere, shell, 0.22, 0.09, 0.18));
+    for (const s of [-1, 1]) {
+      body.add(mesh(G.sphere, mat(0x1a1410), 0.025, 0.025, 0.025, s * 0.06, 0.1, -0.14));
+      const claw = mesh(G.sphere, shell, 0.08, 0.05, 0.06, s * 0.2, 0.0, -0.18);
+      body.add(claw);
+    }
+    const legs = [];
+    for (const s of [-1, 1]) for (let i = 0; i < 3; i++) {
+      const l = mesh(G.box, shell, 0.2, 0.02, 0.02, s * 0.24, -0.04, -0.06 + i * 0.07);
+      l.rotation.z = s * -0.5;
+      body.add(l);
+      legs.push(l);
+    }
+    let t = Math.random() * 10;
+    let dir = Math.random() < 0.5 ? -1 : 1;
+    return {
+      root: g,
+      update(dt) {
+        t += dt;
+        // dash, stop, dash the other way
+        const moving = Math.sin(t * 0.9) > -0.2;
+        if (moving) g.position.x += dir * dt * 1.4;
+        if (Math.sin(t * 0.45) > 0.98) dir = -dir;
+        body.position.y = 0.12 + (moving ? Math.abs(Math.sin(t * 22)) * 0.02 : 0);
+        legs.forEach((l, i) => (l.rotation.x = moving ? Math.sin(t * 22 + i) * 0.5 : 0));
+      },
+    };
+  },
   flamingo() {
     const g = new Group();
     const pink = soft(pick([0xf28fa8, 0xf5a3b8, 0xee7f9c]));
@@ -581,6 +654,149 @@ export function makeRockfall(style) {
 }
 
 /** Dhow — the lateen-rigged sailing boats of the Swahili coast (decor on water). */
+/* ============================================================== coast */
+
+/** An ngalawa: the Swahili outrigger canoe, with a lateen sail. */
+export function makeNgalawa(scale = 1) {
+  const g = new Group();
+  const wood = mat(pick([0x8a5a32, 0x6b4526, 0x9a6a3a]));
+  const hull = mesh(G.sphere, wood, 0.42, 0.32, 2.6, 0, 0.18, 0);
+  g.add(hull);
+  g.add(mesh(G.box, mat(0x2e6f9a), 0.86, 0.06, 3.6, 0, 0.42, 0)); // painted gunwale
+  for (const z of [-0.9, 0.9]) {
+    g.add(mesh(G.cyl6, mat(0x5a3a22), 0.05, 3.4, 0.05, 0, 0.5, z)).rotation.z = Math.PI / 2;
+    for (const s of [-1, 1]) g.add(mesh(G.sphere, wood, 0.16, 0.12, 1.0, s * 1.6, 0.16, z * 0.15));
+  }
+  g.add(mesh(G.cyl6, mat(0x5a3a22), 0.05, 3.6, 0.05, 0, 2.1, -0.6));
+  const sail = new THREE.Shape();
+  sail.moveTo(0, 0);
+  sail.lineTo(0, 3.2);
+  sail.lineTo(2.4, 0.3);
+  sail.lineTo(0, 0);
+  const sm = new THREE.Mesh(new THREE.ShapeGeometry(sail), bend(new THREE.MeshLambertMaterial({ color: pick([0xfaf3e0, 0xf3e2c0, 0xe9d3b0]), side: THREE.DoubleSide })));
+  sm.position.set(0.04, 0.6, -0.5);
+  sm.rotation.y = Math.PI / 2;
+  g.add(sm);
+  g.scale.setScalar(scale);
+  return g;
+}
+
+/** A makuti banda: an open beach shelter with a thatched palm-leaf roof and two loungers. */
+export function makeBanda(scale = 1) {
+  const g = new Group();
+  const pole = mat(0x7a5a3a);
+  for (const [x, z] of [[-1.4, -1.4], [1.4, -1.4], [-1.4, 1.4], [1.4, 1.4]]) g.add(mesh(G.cyl6, pole, 0.09, 2.6, 0.09, x, 1.3, z));
+  const thatch = mat(0xc9a35a);
+  const roof = mesh(G.cone4, thatch, 2.6, 1.6, 2.6, 0, 3.3, 0);
+  roof.rotation.y = Math.PI / 4;
+  g.add(roof);
+  const fringe = mesh(G.cone4, mat(0xb08a42), 2.75, 0.35, 2.75, 0, 2.55, 0);
+  fringe.rotation.y = Math.PI / 4;
+  g.add(fringe);
+  for (const x of [-0.7, 0.7]) {
+    g.add(mesh(G.box, mat(0xf2ead8), 0.7, 0.12, 1.7, x, 0.35, 0.2));
+    const back = mesh(G.box, mat(0xf2ead8), 0.7, 0.1, 0.6, x, 0.6, -0.75);
+    back.rotation.x = 0.8;
+    g.add(back);
+    g.add(mesh(G.box, mat(pick([0x1b998b, 0xd7263d, 0xf4d35e])), 0.6, 0.04, 1.2, x, 0.43, 0.3));
+  }
+  g.add(blobShadow(4.5, 4.5));
+  g.scale.setScalar(scale);
+  return g;
+}
+
+/** A thatched beach parasol with a striped kikoi towel beneath. */
+export function makeParasol(scale = 1) {
+  const g = new Group();
+  g.add(mesh(G.cyl6, mat(0x7a5a3a), 0.06, 2.4, 0.06, 0, 1.2, 0));
+  g.add(mesh(G.cone, mat(0xc9a35a), 1.5, 0.7, 1.5, 0, 2.5, 0));
+  const c = pick([[0xd7263d, 0xf4d35e], [0x1b998b, 0xffffff], [0x2e6f9a, 0xf4d35e]]);
+  for (let i = 0; i < 5; i++) g.add(mesh(G.box, mat(c[i % 2]), 0.95, 0.02, 0.36, 0.6, 0.02, -0.72 + i * 0.36));
+  g.add(blobShadow(3, 3));
+  g.scale.setScalar(scale);
+  return g;
+}
+
+/** A mangrove: a bushy crown held up on arching stilt roots. */
+export function makeMangrove(scale = 1) {
+  const g = new Group();
+  const bark = mat(0x5a4632);
+  g.add(mesh(taper(0.7, 6), bark, 0.18, 1.8, 0.18, 0, 1.9, 0));
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * Math.PI * 2;
+    const root = mesh(G.cyl6, bark, 0.05, 1.4, 0.05, Math.cos(a) * 0.45, 0.6, Math.sin(a) * 0.45);
+    root.rotation.set(Math.sin(a) * 0.55, 0, -Math.cos(a) * 0.55);
+    g.add(root);
+  }
+  const leaf = mat(pick([0x3f6f34, 0x4a7a3a, 0x356a30]));
+  for (let i = 0; i < 6; i++) g.add(mesh(G.ico1, leaf, rand(0.9, 1.3), rand(0.6, 0.85), rand(0.9, 1.3), rand(-0.9, 0.9), 3.1 + rand(-0.2, 0.4), rand(-0.9, 0.9)));
+  g.add(blobShadow(3.5, 3.5));
+  g.scale.setScalar(scale);
+  return g;
+}
+
+/** Weathered coral-rag rocks along the tideline. */
+export function makeCoralRock(scale = 1) {
+  const g = new Group();
+  const rock = mat(pick([0xcfc2a2, 0xbfb08e, 0xd8ccb0]));
+  for (let i = 0; i < 3; i++) {
+    const r = mesh(G.dodec, rock, rand(0.5, 1.1), rand(0.35, 0.7), rand(0.5, 1.0), rand(-0.8, 0.8), 0.25, rand(-0.6, 0.6));
+    r.rotation.set(rand(0, 3), rand(0, 3), 0);
+    g.add(r);
+  }
+  for (let i = 0; i < 5; i++) g.add(mesh(G.sphere, mat(0x8f8468), 0.08, 0.05, 0.08, rand(-0.9, 0.9), rand(0.4, 0.7), rand(-0.6, 0.6)));
+  g.add(mesh(G.box, mat(0xff8a5c), 0.18, 0.03, 0.18, rand(-1, 1), 0.04, 1.0)).rotation.y = 0.6; // a starfish
+  g.scale.setScalar(scale);
+  return g;
+}
+
+/** A seaweed farm: rows of stakes and lines in the shallows, as off Paje. */
+export function makeSeaweedFarm(scale = 1) {
+  const g = new Group();
+  const stake = mat(0x7a5a3a);
+  const weed = mat(0x6f8f3a);
+  for (let r = 0; r < 4; r++) {
+    for (let i = 0; i < 6; i++) g.add(mesh(G.cyl6, stake, 0.04, 1.0, 0.04, -3 + i * 1.2, 0.3, r * 1.4));
+    g.add(mesh(G.box, mat(0xe9e2d0), 6.2, 0.02, 0.02, 0, 0.55, r * 1.4));
+    for (let i = 0; i < 10; i++) g.add(mesh(G.ico, weed, 0.12, 0.1, 0.12, -3 + i * 0.66, 0.5, r * 1.4));
+  }
+  g.scale.setScalar(scale);
+  return g;
+}
+
+/** Fish drying on a pole rack, with a net hung beside it. */
+export function makeFishRack(scale = 1) {
+  const g = new Group();
+  const pole = mat(0x7a5a3a);
+  for (const x of [-1.1, 1.1]) g.add(mesh(G.cyl6, pole, 0.06, 1.6, 0.06, x, 0.8, 0));
+  g.add(mesh(G.cyl6, pole, 0.04, 2.4, 0.04, 0, 1.5, 0)).rotation.z = Math.PI / 2;
+  for (let i = 0; i < 7; i++) {
+    const f = mesh(G.sphere, mat(0xb9c4c8), 0.06, 0.22, 0.03, -0.9 + i * 0.3, 1.25, 0);
+    g.add(f);
+  }
+  g.add(mesh(G.box, mat(0x3a5a6a, { transparent: true, opacity: 0.6 }), 1.6, 1.2, 0.02, 0, 0.85, 0.6));
+  g.add(blobShadow(2.8, 1.8));
+  g.scale.setScalar(scale);
+  return g;
+}
+
+/** A red-and-white lighthouse with a glowing lamp. */
+export function makeLighthouse(scale = 1) {
+  const g = new Group();
+  for (let i = 0; i < 6; i++) g.add(mesh(taper(0.92, 10), mat(i % 2 ? 0xd7263d : 0xf5efe2), 1.3 - i * 0.12, 2, 1.3 - i * 0.12, 0, 1 + i * 2, 0));
+  g.add(mesh(G.cyl, mat(0x2a2a2a), 0.75, 0.2, 0.75, 0, 12.1, 0));
+  g.add(mesh(G.cyl, basic(0xfff3b0), 0.5, 1.0, 0.5, 0, 12.7, 0));
+  g.add(mesh(G.cone, mat(0xd7263d), 0.8, 0.9, 0.8, 0, 13.6, 0));
+  g.add(mesh(G.dodec, mat(0xbfb08e), 2.2, 0.8, 2.2, 0, 0.2, 0));
+  g.scale.setScalar(scale);
+  return g;
+}
+
+/** A beached outrigger canoe lying across a lane: an obstacle on Zanzibar's beach. */
+export function makeBeachedCanoe() {
+  return makeNgalawa(0.72);
+}
+
 export function makeDhow(scale = 1) {
   const g = new Group();
   const hull = mat(0x8a5a32);

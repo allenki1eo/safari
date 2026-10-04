@@ -136,6 +136,36 @@ export const MISSION_POOL = [
   { id: 'nearmiss', text: 'Pull off {n} close calls', stat: 'nearMiss', n: [3, 8, 15, 25, 40] },
   { id: 'regions', text: 'Cross into {n} new regions in one run', stat: 'regions', n: [1, 2, 3, 4, 6] },
   { id: 'combo', text: 'Reach a ×{n} seed combo', stat: 'bestCombo', n: [15, 30, 50, 80, 120] },
+  { id: 'boxes', text: 'Open {n} Zawadi prize boxes in one run', stat: 'boxes', n: [1, 2, 3, 5, 8] },
+  { id: 'words', text: 'Finish the word hunt {n}× in one run', stat: 'words', n: [1, 1, 1, 2, 2] },
 ];
+
+/**
+ * The word hunt: golden letters turn up on the trail, one word at a time. Each day deals the
+ * words in a fresh order (daily.js huntWord); spell one and the next begins. Places, parks
+ * and Swahili, each with a line for the prize card.
+ */
+export const HUNT_WORDS = [
+  { word: 'SERENGETI', line: 'From the Maa for “endless plains”: home of the Great Migration' },
+  { word: 'NGORONGORO', line: 'A collapsed volcano, now a crater brimming with wildlife' },
+  { word: 'TANZANIA', line: 'Tanganyika + Zanzibar, joined in 1964' },
+  { word: 'RUAHA', line: 'Wild, remote and named for the Great Ruaha River' },
+  { word: 'KILIMANJARO', line: 'Africa’s highest mountain: 5,895 m of snow above the savanna' },
+  { word: 'ZANZIBAR', line: 'The Spice Island: cloves, carved doors and turquoise sea' },
+  { word: 'TARANGIRE', line: 'Ancient baobabs and some of Africa’s biggest elephant herds' },
+  { word: 'MANYARA', line: 'A lake of flamingos, and lions that climb trees' },
+  { word: 'MIKUMI', line: 'Open plains by the Uluguru Mountains, a little Serengeti' },
+  { word: 'GOMBE', line: 'The forest where Jane Goodall lived among chimpanzees' },
+  { word: 'KATAVI', line: 'Remote rivers packed shoulder to shoulder with hippos' },
+  { word: 'SAADANI', line: 'Where the bush runs right down to the beach' },
+  { word: 'NYERERE', line: 'Africa’s largest park, named for the nation’s founding father' },
+  { word: 'KIMBIA', line: 'Swahili for “run!”' },
+  { word: 'PUNDAMILIA', line: 'Swahili for zebra: the “striped donkey”' },
+  { word: 'TWIGA', line: 'Swahili for giraffe' },
+  { word: 'TEMBO', line: 'Swahili for elephant' },
+  { word: 'SIMBA', line: 'Swahili for lion' },
+];
+/** Seeds paid per letter of a finished word, plus a shield charm. */
+export const HUNT_PER_LETTER = 150;
 
 export const SHOUTS = ['Hakuna shida!', 'Safi sana!', 'Pole pole? Never!', 'Kimbia!', 'Poa!', 'Hatari!', 'Mambo poa!'];

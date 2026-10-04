@@ -232,3 +232,17 @@ export function whatsAppHref(run) {
   const url = challengeUrl(run);
   return `https://wa.me/?text=${encodeURIComponent(`${shareText(run)} ${url}`)}`;
 }
+
+/**
+ * The day's word hunt: the words of `list` in an order dealt fresh each Dar day, and the one
+ * to find after `done` words are spelled. Every player gets the same chain on the same day.
+ */
+export function huntWord(list, day, done = 0) {
+  const order = list.map((_, i) => i);
+  const rng = rngAt(day, 11, 0);
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  return list[order[done % order.length]];
+}

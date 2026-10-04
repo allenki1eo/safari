@@ -27,6 +27,7 @@ const defaults = () => ({
   quality: 'auto', // graphics: auto | high | low
   lastDaily: '',
   streak: 0,
+  hunt: { day: '', done: 0, got: 0 }, // word hunt: words spelled today, letters of the current one
 });
 
 function read() {

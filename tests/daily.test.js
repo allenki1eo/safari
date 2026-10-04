@@ -83,7 +83,7 @@ describe('daily route', () => {
     expect(planHerd(region, day, 88)).toEqual(here);
     expect(planHerd(region, '2026-10-05', 88)).not.toEqual(here);
     expect(here.kind).toBeTruthy();
-    expect(planHerd(REGIONS.find((r) => r.id === 'zanzibar'), day, 88)).toBeNull();
+    expect(planHerd({ ...region, herd: [] }, day, 88)).toBeNull();
   });
 });
 
@@ -166,5 +166,42 @@ describe('share link', () => {
     expect(ghostDistance(ghost, 40)).toBe(100);
     expect(ghostDistance(null, 5)).toBeNull();
     expect(ghostDistance({ distance: 100, duration: 0 }, 5)).toBeNull();
+  });
+});
+
+describe('word hunt', () => {
+  it('deals every word once per round, the same for everyone on a day', async () => {
+    const { HUNT_WORDS } = await import('../app/data/content.js');
+    const { huntWord } = await import('../app/data/daily.js');
+    const day = '2026-10-04';
+    const round = HUNT_WORDS.map((_, i) => huntWord(HUNT_WORDS, day, i).word);
+    expect(new Set(round).size).toBe(HUNT_WORDS.length);
+    expect(huntWord(HUNT_WORDS, day, HUNT_WORDS.length)).toEqual(huntWord(HUNT_WORDS, day, 0));
+    expect(huntWord(HUNT_WORDS, day, 3)).toEqual(huntWord(HUNT_WORDS, day, 3));
+    const other = HUNT_WORDS.map((_, i) => huntWord(HUNT_WORDS, '2026-10-05', i).word);
+    expect(other).not.toEqual(round);
+  });
+
+  it('only uses letters the trail tokens can show', async () => {
+    const { HUNT_WORDS } = await import('../app/data/content.js');
+    for (const { word, line } of HUNT_WORDS) {
+      expect(word).toMatch(/^[A-Z]{4,11}$/);
+      expect(line.length).toBeGreaterThan(5);
+    }
+    expect(HUNT_WORDS.map((w) => w.word)).toEqual(expect.arrayContaining(['NGORONGORO', 'SERENGETI', 'TANZANIA', 'RUAHA']));
+  });
+});
+
+describe('herd behaviour', () => {
+  it('mixes modes for plains animals but keeps them deterministic per day', async () => {
+    const { ROAMERS, nextMode } = await import('../app/game/layout.js');
+    const region = REGIONS[0];
+    const modes = new Set();
+    for (let wz = 0; wz < 4000; wz += HERD_STEP) {
+      const h = planHerd(region, '2026-10-04', wz);
+      if (ROAMERS.has(h.kind)) modes.add(h.mode);
+    }
+    expect([...modes].sort()).toEqual(['idle', 'run', 'walk']);
+    for (const m of ['idle', 'walk', 'run']) for (const r of [0, 0.3, 0.6, 0.95]) expect(['idle', 'walk', 'run']).toContain(nextMode(m, r));
   });
 });

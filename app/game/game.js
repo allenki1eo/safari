@@ -1,25 +1,41 @@
 import * as THREE from 'three';
 import { curve, bend, bakeRigid, finishProp, time as timeU } from './materials.js';
 import { Look, detectQuality } from './look.js';
-import { Animals, makeEagle, makeHornbill, makeTruck, makeRamp, makeTotem } from './models.js';
+import { Animals, makeEagle, makeHornbill, makeTruck, makeRamp, makeTotem, makePrizeBox, makeLetterToken } from './models.js';
 import { makeRunner } from './people.js';
+import { makeKidRunner, preloadKids } from './kids.js';
+import { preloadWildlife } from './wildlife.js';
 import {
-  RegionAnimals, makeLogStyled, makeGateStyled, makeBoulderStyled, makeMoundStyled, makeCart, makeRockfall,
+  RegionAnimals, makeLogStyled, makeGateStyled, makeBoulderStyled, makeMoundStyled, makeCart, makeRockfall, makeBeachedCanoe,
 } from './regionModels.js';
 import { World, Particles, LANE_W } from './world.js';
 import { audio } from './audio.js';
 import { makeChunk, KINDS, TRUCK_LEN, JUMP_V, GRAVITY } from './patterns.js';
-import { RUNNERS, ALLIES, ALLY_IDS, TUTORIAL, SHOUTS, outfitId } from '../data/content.js';
+import { RUNNERS, ALLIES, ALLY_IDS, TUTORIAL, SHOUTS, outfitId, HUNT_WORDS, HUNT_PER_LETTER } from '../data/content.js';
 import { REGIONS, regionIndexAt, regionAt } from '../data/regions.js';
 import { save, persist, multiplier } from '../data/save.js';
 import {
-  chunkPlan, darDay, ghostDistance, lionClip, nearMissSpec, rngAt, waterClear, wildebeestFill,
+  chunkPlan, darDay, ghostDistance, huntWord, lionClip, nearMissSpec, rngAt, waterClear, wildebeestFill,
 } from '../data/daily.js';
 
 const LANES = [-LANE_W, 0, LANE_W];
 const castShadows = (root) => root.traverse((o) => o.isMesh && !o.material.transparent && (o.castShadow = true));
 const SLIDE_T = 0.62;
 const SHIELD_T = 30;
+// what a Zawadi box can hold (weights)
+const PRIZES = [
+  { w: 30, id: 'seeds', n: 50 },
+  { w: 17, id: 'seeds', n: 120 },
+  { w: 7, id: 'seeds', n: 300 },
+  { w: 2.5, id: 'seeds', n: 1000 },
+  { w: 11, id: 'charm' },
+  { w: 13, id: 'ally' },
+  { w: 12, id: 'double' },
+  { w: 8, id: 'score', n: 2500 },
+];
+const PRIZE_WEIGHT = PRIZES.reduce((s, p) => s + p.w, 0);
+const JUMP_BUFFER = 0.16; // a jump pressed this long before landing still happens
+const COYOTE = 0.1; // and one pressed this long after running off a roof
 const COMBO_STEPS = [[10, 50], [25, 150], [50, 400], [100, 1000], [200, 2500]];
 const WARN_ICONS = { rhino: '🦏', buffalo: '🐃', wildebeest: '🦬', rockfall: '🪨', crossing: '🐘', truck: '🚚' };
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -55,6 +71,8 @@ export class Game {
     this.obstacles = [];
     this.coins = [];
     this.totems = [];
+    preloadKids(save.runner);
+    preloadWildlife();
     this.buildCoins();
     this.buildAllies();
     this.buildChasers();
@@ -115,7 +133,7 @@ export class Game {
     const def = RUNNERS.find((r) => r.id === id) ?? RUNNERS[0];
     const outfit = outfitId(save.outfit);
     if (this.runner) this.scene.remove(this.runner.root);
-    this.runner = makeRunner(def, outfit);
+    this.runner = makeKidRunner(def, makeRunner(def, outfit), outfit);
     castShadows(this.runner.root);
     this.scene.add(this.runner.root);
     this.runnerId = def.id;
@@ -129,7 +147,7 @@ export class Game {
       duma: Animals.cheetah(),
       twiga: Animals.giraffe(),
       hondo: makeHornbill(),
-      simba: Animals.lion(),
+      simba: Animals.lion({ king: true }),
     };
     this.allyModels.tembo.root.scale.setScalar(0.62);
     this.allyModels.tai.root.scale.setScalar(0.9);
@@ -190,8 +208,14 @@ export class Game {
   resetRun() {
     for (const o of this.obstacles) this.scene.remove(o.mesh);
     for (const t of this.totems) this.scene.remove(t.mesh);
+    for (const b of this.boxes ?? []) this.scene.remove(b.mesh);
+    this.letterOut = false;
     this.obstacles = [];
     this.totems = [];
+    this.boxes = [];
+    this.seedBoost = 0;
+    this.jumpBuffer = 0;
+    this.coyote = 0;
     this.coins = [];
     this.D = 0;
     this.speed = 15;
@@ -199,7 +223,7 @@ export class Game {
     this.seeds = 0;
     this.combo = 0;
     this.comboT = 0;
-    this.stats = { seeds: 0, distance: 0, jumps: 0, slides: 0, allies: 0, score: 0, roofs: 0, smash: 0, nearMiss: 0, regions: 0, bestCombo: 0 };
+    this.stats = { seeds: 0, distance: 0, jumps: 0, slides: 0, allies: 0, score: 0, roofs: 0, smash: 0, nearMiss: 0, regions: 0, bestCombo: 0, boxes: 0, words: 0 };
     this.shield = 0;
     this.lap = 0;
     this.runTime = 0;
@@ -220,6 +244,10 @@ export class Game {
     this.freeze = 0;
     this.ghostPassed = false;
     this.nextTotemAt = 260 + rngAt(this.day, 3, 0)() * 140;
+    this.nextBoxAt = 160 + rngAt(this.day, 6, 0)() * 120;
+    this.nextLetterAt = 200 + Math.random() * 160;
+    if (save.hunt?.day !== this.day) save.hunt = { day: this.day, done: 0, got: 0 };
+    save.hunt.done ??= 0;
     this.revives = 0;
     this.deathT = 0;
     for (const a of Object.values(this.allyModels)) a.root.visible = false;
@@ -323,14 +351,8 @@ export class Game {
       }
       case 'up':
         if (flying || this.powers.tembo) return;
-        if (p.grounded) {
-          p.vy = JUMP_V * (this.powers.twiga ? 1.6 : 1);
-          p.grounded = false;
-          p.slide = 0;
-          this.stats.jumps++;
-          audio.jump();
-          this.fx.dust(p.x, 0, this.world.dustColor(), 4);
-        }
+        if (p.grounded || this.coyote > 0) this.jump();
+        else this.jumpBuffer = JUMP_BUFFER;
         break;
       case 'down':
         if (flying || this.powers.tembo) return;
@@ -342,6 +364,18 @@ export class Game {
         p.slide = SLIDE_T;
         break;
     }
+  }
+
+  jump() {
+    const p = this.p;
+    p.vy = JUMP_V * (this.powers.twiga ? 1.6 : 1);
+    p.grounded = false;
+    p.slide = 0;
+    this.coyote = 0;
+    this.jumpBuffer = 0;
+    this.stats.jumps++;
+    audio.jump();
+    this.fx.dust(p.x, 0, this.world.dustColor(), 4);
   }
 
   /* -------------------------------------------------------------- loop */
@@ -433,6 +467,7 @@ export class Game {
       if (pw[k] <= 0) this.endPower(k);
     }
     if (p.invuln > 0) p.invuln -= dt;
+    if (this.seedBoost > 0) this.seedBoost -= dt;
     if (this.chaseT > 0) this.chaseT -= dt;
     if (this.comboT > 0) this.comboT -= dt;
     else if (this.combo) {
@@ -462,9 +497,13 @@ export class Game {
       const ground = this.groundAt(p.x, p.y);
       p.ground = ground;
       if (p.grounded) {
-        if (ground < p.y - 0.05) p.grounded = false;
-        else p.y = ground;
+        if (ground < p.y - 0.05) {
+          p.grounded = false;
+          this.coyote = COYOTE;
+        } else p.y = ground;
       }
+      if (this.coyote > 0) this.coyote -= dt;
+      if (this.jumpBuffer > 0) this.jumpBuffer -= dt;
       if (!p.grounded) {
         p.vy -= GRAVITY * (p.vy < 0 ? 1.15 : 1) * dt;
         p.y += p.vy * dt;
@@ -474,6 +513,7 @@ export class Game {
           p.grounded = true;
           audio.land();
           this.fx.dust(p.x, 0, this.world.dustColor(), 5);
+          if (this.jumpBuffer > 0 && p.slide <= 0) this.jump();
         }
       }
     }
@@ -530,6 +570,7 @@ export class Game {
       case 'boulder': m = makeBoulderStyled(style.rock); break;
       case 'mound': m = makeMoundStyled(); break;
       case 'cart': m = makeCart(); break;
+      case 'canoe': m = makeBeachedCanoe(); break;
       case 'rockfall': m = makeRockfall(style.rock); break;
       case 'ramp': m = makeRamp(k.len, k.ramp); break;
       case 'truck': {
@@ -554,8 +595,9 @@ export class Game {
     if (anim) m = anim.root;
     else if (kind !== 'rockfall' && kind !== 'water') finishProp(bakeRigid(m, true));
     castShadows(m);
-    // animals in the lane face the runner
-    if (kind === 'croc' || kind === 'gorilla') m.rotation.y = Math.PI;
+    // animals in the lane face the runner (the models face down the track, -z), so chargers
+    // run head first rather than backwards
+    if (anim && kind !== 'crossing') m.rotation.y = Math.PI;
     if (kind === 'crossing') {
       m.scale.setScalar(0.72);
       m.rotation.y = opts.cross.dir > 0 ? -Math.PI / 2 : Math.PI / 2;
@@ -911,6 +953,8 @@ export class Game {
         rng: plan.rng,
         region: regionAt(this.startJ + plan.z),
         wantTotem: plan.z + 150 > this.nextTotemAt,
+        // a slot for the next prize box, or for the next hunt letter when one is due
+        wantBox: plan.z > this.nextBoxAt || (plan.z > this.nextLetterAt && !this.letterOut && save.hunt.got < this.huntWord().word.length),
       });
       this.applyChunk(chunk.ops);
       this.nextChunk += chunk.len + plan.gap;
@@ -924,6 +968,7 @@ export class Game {
         case 'line': this.coinLine(op[1], op[2], op[3], op[4], op[5], op[6]); break;
         case 'arc': this.coinArc(op[1], op[2]); break;
         case 'totem': this.addTotem(op[1], op[2], op[3]); break;
+        case 'box': this.addBox(op[1], op[2], op[3]); break;
       }
     }
   }
@@ -956,6 +1001,110 @@ export class Game {
     this.scene.add(m);
     this.totems.push({ id, lane, wz, mesh: m });
     this.nextTotemAt = wz + 420 + rngAt(this.day, 3, wz)() * 280;
+  }
+
+  addBox(lane, wz, y = 0) {
+    // some of the open-ground slots carry the next letter of the day's word instead
+    const { word } = this.huntWord();
+    if (y === 0 && wz > this.nextLetterAt && save.hunt.got < word.length && !this.letterOut) {
+      const char = word[save.hunt.got];
+      const m = makeLetterToken(char);
+      m.position.set(LANES[lane], 0, 0);
+      this.scene.add(m);
+      this.boxes.push({ lane, wz, y, mesh: m, letter: char });
+      this.letterOut = true;
+      this.nextLetterAt = wz + 200 + Math.random() * 180;
+      return;
+    }
+    if (wz <= this.nextBoxAt) return; // the slot was asked for a letter that can't sit here
+    const m = makePrizeBox();
+    m.position.set(LANES[lane], y, 0);
+    this.scene.add(m);
+    this.boxes.push({ lane, wz, y, mesh: m });
+    // roughly every 250-450 m, a little more often the further you get
+    this.nextBoxAt = wz + 250 + rngAt(this.day, 6, wz)() * 200 - Math.min(80, this.D / 100);
+  }
+
+  /** Opens a Zawadi box: seeds, a shield charm, a surprise ally, double seeds or bonus points. */
+  openBox(b) {
+    this.stats.boxes++;
+    const m = multiplier();
+    const roll = Math.random() * PRIZE_WEIGHT;
+    let acc = 0;
+    const prize = PRIZES.find((p) => (acc += p.w) >= roll) ?? PRIZES[0];
+    let out;
+    switch (prize.id) {
+      case 'seeds':
+        this.seeds += prize.n;
+        this.stats.seeds = this.seeds;
+        this.emit('seed', this.seeds);
+        out = prize.n >= 1000
+          ? { emoji: '💰', title: 'JACKPOT!', sub: `+${prize.n.toLocaleString()} seeds`, big: true }
+          : { emoji: '🌾', title: `+${prize.n} seeds`, sub: 'Zawadi!' };
+        break;
+      case 'charm':
+        save.charms = (save.charms ?? 0) + 1;
+        persist();
+        this.emit('shield', { on: this.shield > 0 });
+        out = { emoji: '🛡️', title: 'Ngao charm!', sub: 'One more shield for the road' };
+        break;
+      case 'ally': {
+        const id = ALLY_IDS[Math.floor(Math.random() * ALLY_IDS.length)];
+        out = { emoji: ALLIES[id].emoji, title: `${ALLIES[id].name} joins you!`, sub: ALLIES[id].power };
+        this.activate(id);
+        break;
+      }
+      case 'double':
+        this.seedBoost = 15;
+        out = { emoji: '✨', title: 'Double seeds!', sub: 'Every seed counts twice for 15s' };
+        break;
+      default:
+        this.score += prize.n * m;
+        out = { emoji: '⭐', title: `+${(prize.n * m).toLocaleString()} points`, sub: 'Zawadi!' };
+    }
+    audio.powerup();
+    audio.chime();
+    this.haptic(30);
+    const z = this.D - b.wz;
+    this.fx.sparkle(LANES[b.lane], b.y + 1.2, z, 0xffd34d, 18);
+    this.fx.debris(LANES[b.lane], b.y + 1.1, z, [0xc0392b, 0xf4d35e, 0x1b998b], 14);
+    this.emit('prize', out);
+  }
+
+  /** The word being hunted: today's chain, after the words already spelled. */
+  huntWord() {
+    return huntWord(HUNT_WORDS, save.hunt.day || this.day, save.hunt.done);
+  }
+
+  collectLetter(b) {
+    this.letterOut = false;
+    const { word, line } = this.huntWord();
+    save.hunt.got++;
+    persist();
+    const z = this.D - b.wz;
+    this.fx.sparkle(LANES[b.lane], 1.3, z, 0xffe58a, 16);
+    audio.chime();
+    this.haptic(20);
+    const done = save.hunt.got >= word.length;
+    this.emit('letter', { got: save.hunt.got, word, done });
+    if (!done) {
+      this.emit('shout', { text: b.letter, sub: `${word.slice(0, save.hunt.got)}… word hunt` });
+      return;
+    }
+    const prize = word.length * HUNT_PER_LETTER;
+    this.seeds += prize;
+    this.stats.seeds = this.seeds;
+    this.stats.words++;
+    save.charms = (save.charms ?? 0) + 1;
+    // on to the next word in today's chain
+    save.hunt.done++;
+    save.hunt.got = 0;
+    persist();
+    this.emit('seed', this.seeds);
+    this.emit('shield', { on: this.shield > 0 });
+    audio.powerup();
+    this.emit('prize', { emoji: '🏆', title: `${word}!`, sub: `${line} · +${prize} seeds & a shield`, big: true });
+    this.emit('hunt', { word: this.huntWord().word, got: 0, delay: 3000 });
   }
 
   /* ------------------------------------------------------------- pickups */
@@ -999,10 +1148,31 @@ export class Game {
         this.activate(t.id);
       }
     }
+
+    for (let i = this.boxes.length - 1; i >= 0; i--) {
+      const b = this.boxes[i];
+      b.mesh.position.z = this.D - b.wz;
+      b.mesh.userData.spin(this.time);
+      const dz = b.wz - this.D;
+      if (dz < -8) {
+        this.scene.remove(b.mesh);
+        this.boxes.splice(i, 1);
+        if (b.letter) this.letterOut = false;
+        continue;
+      }
+      // Hondo's magnet pulls boxes in too
+      const reach = magnet ? 2.6 : 1.15;
+      if (Math.abs(dz) < 1.3 && Math.abs(LANES[b.lane] - p.x) < reach && Math.abs(p.y + 0.8 - (b.y + 1.05)) < 1.6) {
+        this.scene.remove(b.mesh);
+        this.boxes.splice(i, 1);
+        if (b.letter) this.collectLetter(b);
+        else this.openBox(b);
+      }
+    }
   }
 
   collectSeed(c) {
-    this.seeds++;
+    this.seeds += this.seedBoost > 0 ? 2 : 1;
     this.stats.seeds = this.seeds;
     this.combo++;
     this.comboT = 0.9;

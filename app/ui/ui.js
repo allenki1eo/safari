@@ -1,10 +1,10 @@
-import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO, OUTFITS, outfitId } from '../data/content.js';
+import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO, OUTFITS, outfitId, HUNT_WORDS } from '../data/content.js';
 import { REGIONS, COUNTRIES } from '../data/regions.js';
 import { save, persist, ensureMissions, checkMissions, claimMissionSet, multiplier, claimDaily } from '../data/save.js';
 import { audio } from '../game/audio.js';
 import { whatsAppHref } from './share.js';
 import { fetchBoard, leaveDecision, postScore, renderRows, runnerName, scoreSavePlan } from './leaderboard.js';
-import { darDay, ghostFrom, parseShareLink, routeForLink } from '../data/daily.js';
+import { darDay, ghostFrom, huntWord, parseShareLink, routeForLink } from '../data/daily.js';
 
 const $ = (html) => {
   const t = document.createElement('template');
@@ -99,6 +99,10 @@ export class UI {
     game.on('combo', (n) => this.onCombo(n));
     game.on('shield', (e) => this.onShield(e));
     game.on('lap', (e) => this.onLap(e));
+    game.on('prize', (e) => this.onPrize(e));
+    game.on('letter', (e) => this.paintHunt(e.word, e.got));
+    // the next word in today's chain takes over once the prize card has had its moment
+    game.on('hunt', (e) => setTimeout(() => this.paintHunt(e.word, e.got, true), e.delay));
     game.on('quality', () => this.toast('✨', 'Switched to Low graphics to keep things smooth — change it in Settings.'));
   }
 
@@ -287,12 +291,13 @@ export class UI {
           </div>
           <div class="hud-right">
             <div class="row">
-              <div class="chip seeds-chip"><span class="seed lg"></span><span class="n">0</span></div>
+              <div class="chip seeds-chip"><span class="seed lg"></span><span class="n">0</span><b class="x2" hidden>×2</b></div>
               <button class="icon-btn" data-act="pause" aria-label="Pause" style="width:46px;height:46px">${ICON.pause}</button>
             </div>
             <div class="dist">0m</div>
           </div>
         </div>
+        <div class="hunt" aria-label="Word hunt"></div>
         <div class="combo"></div>
         <div class="powers"></div>
         <div class="warns"></div>
@@ -311,6 +316,7 @@ export class UI {
       mult: el.querySelector('.mult'),
       seeds: el.querySelector('.seeds-chip .n'),
       seedsChip: el.querySelector('.seeds-chip'),
+      x2: el.querySelector('.seeds-chip .x2'),
       dist: el.querySelector('.dist'),
       ghost: el.querySelector('.ghost-chip'),
       powers: el.querySelector('.powers'),
@@ -321,6 +327,8 @@ export class UI {
     this.powerEls = {};
     this.last = {};
     this.overlay(el);
+    const today = save.hunt?.day === darDay();
+    this.paintHunt(huntWord(HUNT_WORDS, darDay(), today ? save.hunt.done ?? 0 : 0).word, today ? save.hunt.got : 0);
   }
 
   removeHud() {
@@ -343,6 +351,9 @@ export class UI {
     const d = Math.floor(g.D);
     if (d !== this.last.d) E.dist.textContent = `${fmt((this.last.d = d))}m`;
     if (g.seeds !== this.last.seeds) E.seeds.textContent = fmt((this.last.seeds = g.seeds));
+    const boost = g.seedBoost > 0;
+    if (boost !== this.last.boost) E.x2.hidden = !(this.last.boost = boost);
+    if (boost) E.x2.classList.toggle('ending', g.seedBoost < 2.5);
     const m = multiplier() * (g.powers.simba ? 2 : 1);
     if (m !== this.last.mult) {
       this.last.mult = m;
@@ -470,6 +481,32 @@ export class UI {
     const el = $(`<div class="tip"><span class="i">${t.icon}</span>${esc(t.text)}</div>`);
     this.hud.appendChild(el);
     setTimeout(() => el.remove(), 3300);
+  }
+
+  /** Shows the word being hunted, its found letters lit; a new word slides in fresh. */
+  paintHunt(word, got, fresh = false) {
+    const row = this.hud?.querySelector('.hunt');
+    if (!row) return;
+    if (row.dataset.word !== word) {
+      row.dataset.word = word;
+      row.innerHTML = [...word].map((c) => `<i>${c}</i>`).join('');
+      row.classList.toggle('long', word.length > 8);
+      row.setAttribute('aria-label', `Word hunt: ${word}`);
+    }
+    row.querySelectorAll('i').forEach((el, i) => el.classList.toggle('on', i < got));
+    row.classList.toggle('done', got >= word.length);
+    row.classList.remove('pop', 'fresh');
+    void row.offsetWidth;
+    row.classList.add(fresh ? 'fresh' : 'pop');
+  }
+
+  /** A Zawadi box bursts open: the prize pops up over the trail. */
+  onPrize({ emoji, title, sub, big }) {
+    if (!this.hud) return;
+    this.hud.querySelector('.prize')?.remove();
+    const el = $(`<div class="prize ${big ? 'big' : ''}"><div class="gift">🎁</div><div class="e">${emoji}</div><b>${esc(title)}</b><span>${esc(sub ?? '')}</span></div>`);
+    this.hud.appendChild(el);
+    setTimeout(() => el.remove(), big ? 2400 : 1800);
   }
 
   shout({ text, sub, warn }) {
@@ -628,6 +665,7 @@ export class UI {
             <div class="stat"><b><span class="seed"></span>${fmt(run.seeds)}</b><span>Seeds</span></div>
             <div class="stat"><b>${fmt(run.distance)}m</b><span>Distance</span></div>
             <div class="stat"><b>${run.stats.allies}</b><span>Allies</span></div>
+            <div class="stat"><b>🎁 ${run.stats.boxes ?? 0}</b><span>Zawadi</span></div>
           </div>
           <div class="lb">
             <div class="lb-head"><b>Savanna board</b><span class="muted">Top runs</span></div>
@@ -1164,6 +1202,7 @@ export class UI {
           <input class="name-input" maxlength="16" placeholder="e.g. Zuri" value="${esc(save.name)}" />
           <div class="stack"><button class="btn" data-act="close" data-click>Done</button></div>
           <p class="muted" style="text-align:center;font-size:12px;margin:16px 0 0">Swipe to move · Arrow keys / WASD on desktop</p>
+          <p class="muted credits" style="text-align:center;font-size:11px;margin:10px 0 0;line-height:1.5">Runners: Quaternius (CC0). Animals: © Wildfire Games, from <a href="https://play0ad.com" target="_blank" rel="noopener">0 A.D.</a>, <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener">CC BY-SA 3.0</a>.</p>
         </div>
       </div>`);
     el.addEventListener('click', (e) => {
