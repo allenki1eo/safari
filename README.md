@@ -35,7 +35,8 @@ Grab glowing totems on the trail:
 - **Six unlockable runners** (Zuri, Juma, Neema, Baraka, Amani, Kito) and ally upgrades.
 - **Daily rewards** with a 7-day streak.
 - **Challenge sharing**: the game renders a score card image and a link (`/?c=<score>&n=<name>`) that greets your friend with *"Allen challenges you to beat 12,000!"*
-- **Installable PWA** that works offline.
+- **Global leaderboard**: after a run, post your name and score. Rank is decided on the server. Open the board from the trophy on the title screen, or from the game-over card.
+- **Installable PWA** that works offline. The score API is network-only; the rest of the game still plays offline.
 
 ## Tech
 
@@ -56,7 +57,11 @@ app/
   data/content.js    story, chapters, runners, allies, missions
   data/save.js       local progress, missions, daily reward
   ui/ui.js           all screens (title, intro, HUD, game over, shop…)
+  ui/leaderboard.js  fetch + render the global board (no database credentials)
   ui/share.js        share-card renderer + Web Share
+api/scores.js        Vercel function: GET the top 20, POST a score
+server/              libSQL access, validation, and the Vite dev/preview middleware
+migrations/          SQL schema for the scores table
 static/              PWA manifest, service worker, icons, fonts, og image
 ```
 
@@ -64,11 +69,20 @@ static/              PWA manifest, service worker, icons, fonts, og image
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
-npm run build    # outputs dist/
+cp .env.example .env   # then fill in Turso credentials
+npm run db:init        # create the scores table
+npm run dev            # http://localhost:5173  (also serves /api/scores)
+npm run build          # outputs dist/
 ```
+
+For a local database without Turso Cloud, set `TURSO_DATABASE_URL=file:data/kimbia.db` and leave the token empty. Cloud databases use a `libsql://` URL and require `TURSO_AUTH_TOKEN`.
+
+## Leaderboard
+
+Scores live in [Turso](https://turso.tech) (libSQL). The browser only calls `/api/scores`. `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are read on the server — do not prefix them with `VITE_`, or Vite will ship them to the client.
+
+`npm run db:init` runs `migrations/001_scores.sql`. The API also applies that file on first use (`CREATE TABLE IF NOT EXISTS`), so a new database is ready as soon as the env vars are set. The board returns the top 20 rows ordered by score, then by earlier submission. Rank is computed in SQL and any rank sent by the client is ignored. Names are 1–16 characters. Score, distance, seeds, and allies must be non-negative integers.
 
 ## Deploy to Vercel
 
-The repo includes `vercel.json` (Vite framework, `dist` output, long-lived caching for hashed assets).
-Import the repository in Vercel, or run `npx vercel --prod`. No environment variables are needed.
+The repo includes `vercel.json` (Vite framework, `dist` output, `/api/scores` as a Node function, long-lived caching for hashed assets). Import the repository in Vercel and set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` for Production and Preview. Then run `npm run db:init` once with those same values, or open the game and post a score so the API creates the table.

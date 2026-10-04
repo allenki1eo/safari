@@ -15,6 +15,15 @@
         { "key": "Cache-Control", "value": "no-cache" },
         { "key": "Service-Worker-Allowed", "value": "/" }
       ]
+    },
+    {
+      "source": "/api/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "no-store" }]
     }
-  ]
+  ],
+  "functions": {
+    "api/scores.js": {
+      "includeFiles": "migrations/**"
+    }
+  }
 }
