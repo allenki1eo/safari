@@ -250,7 +250,7 @@ input { font: inherit; }
 .lb-tabs button.on { background: linear-gradient(180deg, var(--sun), var(--flame)); color: var(--earth); }
 .new-best { display: inline-block; padding: 4px 12px; border-radius: 10px; background: linear-gradient(90deg, var(--sun), var(--flame)); color: var(--earth); font-family: var(--display); font-size: 18px; animation: pop 0.5s 0.4s ease both, wiggle 1.4s 1s ease-in-out infinite; }
 @keyframes wiggle { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
-.stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 16px 0; }
+.stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 16px 0; }
 .stat { padding: 10px 4px; border-radius: 14px; background: rgba(0,0,0,0.22); }
 .stat b { display: flex; align-items: center; justify-content: center; gap: 6px; font-family: var(--display); font-weight: 400; font-size: 22px; color: var(--sun-2); }
 .stat span { font-size: 12px; color: rgba(255,244,222,0.7); text-transform: uppercase; letter-spacing: 1px; }

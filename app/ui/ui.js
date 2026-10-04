@@ -656,6 +656,7 @@ export class UI {
             <div class="stat"><b><span class="seed"></span>${fmt(run.seeds)}</b><span>Seeds</span></div>
             <div class="stat"><b>${fmt(run.distance)}m</b><span>Distance</span></div>
             <div class="stat"><b>${run.stats.allies}</b><span>Allies</span></div>
+            <div class="stat"><b>🎁 ${run.stats.boxes ?? 0}</b><span>Zawadi</span></div>
           </div>
           <div class="lb">
             <div class="lb-head"><b>Savanna board</b><span class="muted">Top runs</span></div>
