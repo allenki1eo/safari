@@ -97,6 +97,27 @@ describe('obstacle patterns', () => {
     }
   });
 
+  it('puts prize boxes on open ground or on top of a truck, never inside an obstacle', () => {
+    const rng = mulberry32(11);
+    let seen = 0;
+    for (const region of REGIONS) {
+      for (let n = 0; n < 300; n++) {
+        const { ops } = makeChunk({ z: 500, D: 2000, speed: 28, region, wantBox: true, rng });
+        const lanes = hardIntervals(ops);
+        const trucks = ops.filter((o) => o[0] === 'obs' && o[1] === 'truck');
+        for (const [, lane, wz, y] of ops.filter((o) => o[0] === 'box')) {
+          seen++;
+          if (y > 0) {
+            expect(trucks.some((t) => t[2] === lane && Math.abs(t[3] - wz) < KINDS.truck.len / 2)).toBe(true);
+          } else {
+            expect(lanes[lane].some(([a, b]) => wz > a - 1.5 && wz < b + 1.5)).toBe(false);
+          }
+        }
+      }
+    }
+    expect(seen).toBeGreaterThan(100);
+  });
+
   it('only spawns region specials where they belong', () => {
     const rng = mulberry32(3);
     const zanzibar = REGIONS.find((r) => r.id === 'zanzibar');

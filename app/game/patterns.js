@@ -6,6 +6,7 @@
  *   ['line', lane, from, to, step, y, rampUp]   straight line of seeds
  *   ['arc', lane, centerWz]              seeds following a jump arc
  *   ['totem', allyId|null, lane, wz]     ally totem
+ *   ['box', lane, wz, y]                 Zawadi prize box (y > 0 sits on a truck roof)
  */
 
 export const GRAVITY = 58;
@@ -38,7 +39,7 @@ export const KINDS = {
 const L = [0, 1, 2];
 
 /** Builds one chunk. `rng` defaults to Math.random but tests inject a seeded one. */
-export function makeChunk({ z, D, speed, region, wantTotem = false, rng = Math.random }) {
+export function makeChunk({ z, D, speed, region, wantTotem = false, wantBox = false, rng = Math.random }) {
   const rand = (a, b) => a + rng() * (b - a);
   const randi = (n) => Math.floor(rng() * n);
   const pick = (a) => a[randi(a.length)];
@@ -55,6 +56,7 @@ export function makeChunk({ z, D, speed, region, wantTotem = false, rng = Math.r
   const line = (lane, from, to, step = 2, y = 0, rampUp = false) => ops.push(['line', lane, from, to, step, y, rampUp]);
   const arc = (lane, c) => ops.push(['arc', lane, c]);
   const totem = (lane, wz) => ops.push(['totem', null, lane, wz]);
+  const prize = (lane, wz, y = 0) => wantBox && ops.push(['box', lane, wz, y]);
   const block = () => pick(region.blocks);
   /** lead distance so a charger moving at v arrives around the chunk position */
   const lead = (v) => (z - D) * (v / Math.max(speed, 1));
@@ -86,22 +88,26 @@ export function makeChunk({ z, D, speed, region, wantTotem = false, rng = Math.r
       const free = L.filter((x) => x !== l);
       line(pick(free), z - 6, z + 10);
       if (wantTotem) totem(free[0], z + 2);
+      prize(free[1], z + 2);
       return { len: 6, ops, pat };
     }
     case 'double': {
       const free = randi(3);
       L.filter((l) => l !== free).forEach((l) => obs(block(), l, z + 2));
       line(free, z - 8, z + 12);
+      prize(free, z + 14);
       return { len: 6, ops, pat };
     }
     case 'logs': {
       L.forEach((l) => obs('log', l, z + 2));
       arc(randi(3), z + 2);
+      prize(randi(3), z + 9);
       return { len: 4, ops, pat };
     }
     case 'gates': {
       L.forEach((l) => obs('gate', l, z + 2));
       line(randi(3), z - 3, z + 6, 1.5, 0.6);
+      prize(randi(3), z + 9);
       return { len: 4, ops, pat };
     }
     case 'mix': {
@@ -128,6 +134,8 @@ export function makeChunk({ z, D, speed, region, wantTotem = false, rng = Math.r
       const free = L.filter((l) => !lanes.includes(l));
       if (free.length && rng() < 0.5) obs('log', free[0], z + longest * 0.5);
       if (free.length && wantTotem) totem(free[0], z + longest * 0.75);
+      // the best prizes wait for those who climb: a box on the far end of the first convoy
+      prize(lanes[0], z + KINDS.ramp.len + TRUCK_LEN * 0.6, KINDS.truck.top);
       return { len: longest, ops, pat };
     }
     case 'oncoming': {

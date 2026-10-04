@@ -125,6 +125,11 @@ export const MISSION_POOL = [
   { id: 'nearmiss', text: 'Pull off {n} close calls', stat: 'nearMiss', n: [3, 8, 15, 25, 40] },
   { id: 'regions', text: 'Cross into {n} new regions in one run', stat: 'regions', n: [1, 2, 3, 4, 6] },
   { id: 'combo', text: 'Reach a ×{n} seed combo', stat: 'bestCombo', n: [15, 30, 50, 80, 120] },
+  { id: 'boxes', text: 'Open {n} Zawadi prize boxes in one run', stat: 'boxes', n: [1, 2, 3, 5, 8] },
 ];
+
+/** The daily word hunt: golden letters turn up on the trail; spell it once a day for a prize. */
+export const HUNT_WORD = 'KIMBIA';
+export const HUNT_PRIZE = 1000;
 
 export const SHOUTS = ['Hakuna shida!', 'Safi sana!', 'Pole pole? Never!', 'Kimbia!', 'Poa!', 'Hatari!', 'Mambo poa!'];

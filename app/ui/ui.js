@@ -1,4 +1,4 @@
-import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO } from '../data/content.js';
+import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO, HUNT_WORD } from '../data/content.js';
 import { REGIONS, COUNTRIES } from '../data/regions.js';
 import { save, persist, ensureMissions, checkMissions, claimMissionSet, multiplier, claimDaily } from '../data/save.js';
 import { audio } from '../game/audio.js';
@@ -99,6 +99,8 @@ export class UI {
     game.on('combo', (n) => this.onCombo(n));
     game.on('shield', (e) => this.onShield(e));
     game.on('lap', (e) => this.onLap(e));
+    game.on('prize', (e) => this.onPrize(e));
+    game.on('letter', (e) => this.paintHunt(e.got));
     game.on('quality', () => this.toast('✨', 'Switched to Low graphics to keep things smooth — change it in Settings.'));
   }
 
@@ -287,12 +289,13 @@ export class UI {
           </div>
           <div class="hud-right">
             <div class="row">
-              <div class="chip seeds-chip"><span class="seed lg"></span><span class="n">0</span></div>
+              <div class="chip seeds-chip"><span class="seed lg"></span><span class="n">0</span><b class="x2" hidden>×2</b></div>
               <button class="icon-btn" data-act="pause" aria-label="Pause" style="width:46px;height:46px">${ICON.pause}</button>
             </div>
             <div class="dist">0m</div>
           </div>
         </div>
+        <div class="hunt" aria-label="Daily word hunt">${[...HUNT_WORD].map((c) => `<i>${c}</i>`).join('')}</div>
         <div class="combo"></div>
         <div class="powers"></div>
         <div class="warns"></div>
@@ -311,6 +314,7 @@ export class UI {
       mult: el.querySelector('.mult'),
       seeds: el.querySelector('.seeds-chip .n'),
       seedsChip: el.querySelector('.seeds-chip'),
+      x2: el.querySelector('.seeds-chip .x2'),
       dist: el.querySelector('.dist'),
       ghost: el.querySelector('.ghost-chip'),
       powers: el.querySelector('.powers'),
@@ -321,6 +325,7 @@ export class UI {
     this.powerEls = {};
     this.last = {};
     this.overlay(el);
+    this.paintHunt(save.hunt?.day === darDay() ? save.hunt.got : 0);
   }
 
   removeHud() {
@@ -343,6 +348,9 @@ export class UI {
     const d = Math.floor(g.D);
     if (d !== this.last.d) E.dist.textContent = `${fmt((this.last.d = d))}m`;
     if (g.seeds !== this.last.seeds) E.seeds.textContent = fmt((this.last.seeds = g.seeds));
+    const boost = g.seedBoost > 0;
+    if (boost !== this.last.boost) E.x2.hidden = !(this.last.boost = boost);
+    if (boost) E.x2.classList.toggle('ending', g.seedBoost < 2.5);
     const m = multiplier() * (g.powers.simba ? 2 : 1);
     if (m !== this.last.mult) {
       this.last.mult = m;
@@ -470,6 +478,26 @@ export class UI {
     const el = $(`<div class="tip"><span class="i">${t.icon}</span>${esc(t.text)}</div>`);
     this.hud.appendChild(el);
     setTimeout(() => el.remove(), 3300);
+  }
+
+  /** Lights up the letters of the day's word found so far. */
+  paintHunt(got) {
+    const row = this.hud?.querySelector('.hunt');
+    if (!row) return;
+    row.querySelectorAll('i').forEach((el, i) => el.classList.toggle('on', i < got));
+    row.classList.toggle('done', got >= HUNT_WORD.length);
+    row.classList.remove('pop');
+    void row.offsetWidth;
+    row.classList.add('pop');
+  }
+
+  /** A Zawadi box bursts open: the prize pops up over the trail. */
+  onPrize({ emoji, title, sub, big }) {
+    if (!this.hud) return;
+    this.hud.querySelector('.prize')?.remove();
+    const el = $(`<div class="prize ${big ? 'big' : ''}"><div class="gift">🎁</div><div class="e">${emoji}</div><b>${esc(title)}</b><span>${esc(sub ?? '')}</span></div>`);
+    this.hud.appendChild(el);
+    setTimeout(() => el.remove(), big ? 2400 : 1800);
   }
 
   shout({ text, sub, warn }) {

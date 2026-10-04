@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { G, mat, basic, mesh, taper, blobShadow, emojiTexture, bakeRigid } from './materials.js';
+import { G, mat, basic, bend, mesh, taper, blobShadow, emojiTexture, bakeRigid } from './materials.js';
 
 import { makeAnimal } from './fauna.js';
 
@@ -535,6 +535,102 @@ export function makeTotem(emoji, ring) {
     torus.position.y = disc.position.y;
   };
   return g;
+}
+
+let kitengeTex;
+/** A kitenge print for the prize boxes: gold zigzags and teal dots on red. */
+function kitengeTexture() {
+  if (kitengeTex) return kitengeTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = '#c0392b';
+  g.fillRect(0, 0, 128, 128);
+  g.strokeStyle = '#f4d35e';
+  g.lineWidth = 7;
+  for (let y = 8; y < 140; y += 32) {
+    g.beginPath();
+    for (let x = -16; x <= 144; x += 16) g.lineTo(x, y + ((x / 16) % 2 ? 9 : -9));
+    g.stroke();
+  }
+  g.fillStyle = '#1b998b';
+  for (let y = 24; y < 128; y += 32) for (let x = 8; x < 128; x += 16) {
+    g.beginPath();
+    g.arc(x, y, 3.2, 0, Math.PI * 2);
+    g.fill();
+  }
+  kitengeTex = new THREE.CanvasTexture(c);
+  kitengeTex.colorSpace = THREE.SRGBColorSpace;
+  return kitengeTex;
+}
+
+/** A Zawadi (gift) box: kitenge-wrapped, gold ribbon and bow, floating in a beam of light. */
+export function makePrizeBox() {
+  const g = new Group();
+  const box = new Group();
+  box.position.y = 1.05;
+  g.add(box);
+  const wrap = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.86, 0.86), bend(new THREE.MeshLambertMaterial({ map: kitengeTexture(), emissive: 0x401008 })));
+  box.add(wrap);
+  const gold = mat(0xffc83d, { emissive: 0x7a4a00, flat: false });
+  box.add(mesh(G.box, gold, 0.9, 0.9, 0.16));
+  box.add(mesh(G.box, gold, 0.16, 0.9, 0.9));
+  for (const s of [-1, 1]) {
+    const loop = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.05, 6, 14), gold);
+    loop.position.set(s * 0.13, 0.52, 0);
+    loop.rotation.set(0, Math.PI / 2, s * 0.5);
+    box.add(loop);
+  }
+  box.add(mesh(G.sphere, gold, 0.07, 0.07, 0.07, 0, 0.48, 0));
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 2.6, 14, 1, true), basic(0xffd34d, { transparent: true, opacity: 0.2, additive: true, side: THREE.DoubleSide }));
+  beam.position.y = 1.2;
+  g.add(beam);
+  g.add(blobShadow(1.2, 1.2));
+  g.userData.spin = (t) => {
+    box.rotation.y = t * 1.8;
+    box.rotation.z = Math.sin(t * 2.2) * 0.12;
+    box.position.y = 1.05 + Math.sin(t * 3.1) * 0.13;
+    beam.material.opacity = 0.16 + Math.sin(t * 5) * 0.06;
+  };
+  return g;
+}
+
+/** A golden letter token for the daily word hunt. */
+export function makeLetterToken(char) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(64, 54, 8, 64, 64, 62);
+  grd.addColorStop(0, '#fff6c8');
+  grd.addColorStop(0.65, '#ffc83d');
+  grd.addColorStop(1, '#c47a00');
+  g.fillStyle = grd;
+  g.beginPath();
+  g.arc(64, 64, 60, 0, Math.PI * 2);
+  g.fill();
+  g.lineWidth = 6;
+  g.strokeStyle = '#7a4a00';
+  g.stroke();
+  g.font = '900 78px "Luckiest Guy", "Arial Black", sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillStyle = '#5a2d00';
+  g.fillText(char, 64, 70);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const grp = new Group();
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(0.62, 28), basic(0xffffff, { map: tex, transparent: true, side: THREE.DoubleSide }));
+  disc.position.y = 1.35;
+  grp.add(disc);
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.65, 2.6, 12, 1, true), basic(0xffe58a, { transparent: true, opacity: 0.18, additive: true, side: THREE.DoubleSide }));
+  beam.position.y = 1.2;
+  grp.add(beam);
+  grp.add(blobShadow(1.1, 1.1));
+  grp.userData.spin = (t) => {
+    disc.rotation.y = Math.sin(t * 2.4) * 0.9;
+    disc.position.y = 1.35 + Math.sin(t * 3) * 0.12;
+  };
+  return grp;
 }
 
 export { quad, spots };

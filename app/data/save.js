@@ -26,6 +26,7 @@ const defaults = () => ({
   quality: 'auto', // graphics: auto | high | low
   lastDaily: '',
   streak: 0,
+  hunt: { day: '', got: 0 }, // daily word hunt progress
 });
 
 function read() {
