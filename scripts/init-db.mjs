@@ -21,7 +21,9 @@ if (url.startsWith('file:')) {
   mkdirSync(dirname(resolve(filePath)), { recursive: true });
 }
 
-const sql = readFileSync(new URL('../migrations/001_scores.sql', import.meta.url), 'utf8');
+const sql = ['001_scores.sql', '002_players.sql']
+  .map((file) => readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8'))
+  .join('\n');
 const client = createClient({ url, authToken });
 await client.executeMultiple(sql);
 console.log('Leaderboard schema is ready.');

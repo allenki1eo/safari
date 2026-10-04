@@ -3,6 +3,7 @@
  * middleware. Do not import this module from app/ — it reads TURSO_AUTH_TOKEN.
  */
 import { createClient } from '@libsql/client';
+import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { RUNNERS } from '../app/data/content.js';
@@ -11,10 +12,11 @@ import { loadLocalEnv } from './env.js';
 
 loadLocalEnv();
 
-const SCHEMA_SQL = readFileSync(
-  new URL('../migrations/001_scores.sql', import.meta.url),
-  'utf8',
-);
+// Applied in order on first use; every statement is idempotent.
+const SCHEMA_SQL = ['001_scores.sql', '002_players.sql']
+  .map((file) => readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8'))
+  .join('\n');
+const TOKEN_RE = /^[a-f0-9]{64}$/;
 
 export const TOP_LIMIT = 20;
 export const NAME_MAX = 16;
@@ -71,10 +73,19 @@ export function getClient() {
 
 function cleanName(raw) {
   if (typeof raw !== 'string') return null;
-  const name = raw.replace(/[\u0000-\u001F\u007F]/g, '').trim().replace(/\s+/g, ' ');
+  const name = raw.normalize('NFKC').replace(/[\u0000-\u001F\u007F]/g, '').trim().replace(/\s+/g, ' ');
   const length = [...name].length;
   if (length < 1 || length > NAME_MAX) return null;
   return name;
+}
+
+/** Case- and spacing-insensitive identity of a name: "Zuri", "zuri" and " ZURI " are the same runner. */
+export function nameKey(name) {
+  return name.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function hashToken(token) {
+  return createHash('sha256').update(token).digest('hex');
 }
 
 function strictInt(value, max) {
@@ -86,10 +97,16 @@ function strictInt(value, max) {
   return n;
 }
 
-/** Accepts a score payload. Client-supplied rank, id, and other fields are dropped. */
+/**
+ * Accepts a run. `token` is the player's device secret (64 hex chars); `name` claims
+ * or renames their runner. Client-supplied rank, id, and other fields are dropped.
+ */
 export function validateSubmission(body) {
   if (body == null || typeof body !== 'object' || Array.isArray(body)) {
     return { ok: false, error: 'Score must be a JSON object.' };
+  }
+  if (typeof body.token !== 'string' || !TOKEN_RE.test(body.token)) {
+    return { ok: false, error: 'Player token is missing or invalid.' };
   }
   const name = cleanName(body.name);
   if (!name) return { ok: false, error: `Name must be 1–${NAME_MAX} characters.` };
@@ -110,7 +127,7 @@ export function validateSubmission(body) {
     }
     runner = body.runner;
   }
-  return { ok: true, value: { name, score, distance, seeds, allies, chapter, runner } };
+  return { ok: true, value: { token: body.token, name, score, distance, seeds, allies, chapter, runner } };
 }
 
 function mapRow(row, rank) {
@@ -118,7 +135,7 @@ function mapRow(row, rank) {
     id: Number(row.id),
     rank,
     name: String(row.name),
-    score: Number(row.score),
+    score: Number(row.best_score),
     distance: Number(row.distance),
     seeds: Number(row.seeds),
     allies: Number(row.allies),
@@ -127,10 +144,12 @@ function mapRow(row, rank) {
   };
 }
 
+const COLS = 'id, name, best_score, distance, seeds, allies, chapter, runner';
 const TOP_SQL = `
-  SELECT id, name, score, distance, seeds, allies, chapter, runner
-  FROM scores
-  ORDER BY score DESC, id ASC
+  SELECT ${COLS}
+  FROM players
+  WHERE best_score > 0
+  ORDER BY best_score DESC, id ASC
   LIMIT ?
 `;
 
@@ -141,7 +160,7 @@ async function queryTop(db) {
 
 async function rankOf(db, score, id) {
   const result = await db.execute({
-    sql: 'SELECT COUNT(*) AS n FROM scores WHERE score > ? OR (score = ? AND id < ?)',
+    sql: 'SELECT COUNT(*) AS n FROM players WHERE best_score > ? OR (best_score = ? AND id < ?)',
     args: [score, score, id],
   });
   return Number(result.rows[0].n) + 1;
@@ -155,25 +174,75 @@ function fail(err) {
   return { status: 500, body: { error: 'The leaderboard is unavailable.' } };
 }
 
+const taken = () => ({ status: 409, body: { error: 'That name is taken. Try another one.', code: 'NAME_TAKEN' } });
+const isUnique = (err) => /UNIQUE|constraint/i.test(String(err?.message || err));
+
 export async function listTop() {
   const db = await getClient();
   return queryTop(db);
 }
 
+/**
+ * Finds (or creates) the player behind `token`, makes sure they own `name`,
+ * then keeps the run only if it beats their best.
+ */
 export async function submitScore(body) {
   const parsed = validateSubmission(body);
   if (!parsed.ok) return { status: 400, body: { error: parsed.error } };
-  const value = parsed.value;
+  const v = parsed.value;
   const db = await getClient();
-  const inserted = await db.execute({
-    sql: `INSERT INTO scores (name, score, distance, seeds, allies, chapter, runner)
-          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    args: [value.name, value.score, value.distance, value.seeds, value.allies, value.chapter, value.runner],
-  });
-  const id = Number(inserted.lastInsertRowid);
-  const rank = await rankOf(db, value.score, id);
+  const th = hashToken(v.token);
+  const key = nameKey(v.name);
+
+  let player = (await db.execute({ sql: `SELECT ${COLS}, name_key FROM players WHERE token_hash = ?`, args: [th] })).rows[0];
+  const owner = (await db.execute({ sql: 'SELECT id, token_hash FROM players WHERE name_key = ?', args: [key] })).rows[0];
+
+  try {
+    if (!player) {
+      if (owner && owner.token_hash == null) {
+        // first device to post under a name from the old board claims it
+        await db.execute({ sql: 'UPDATE players SET token_hash = ?, name = ? WHERE id = ? AND token_hash IS NULL', args: [th, v.name, owner.id] });
+      } else if (owner) {
+        return taken();
+      } else {
+        await db.execute({ sql: 'INSERT INTO players (name, name_key, token_hash) VALUES (?, ?, ?)', args: [v.name, key, th] });
+      }
+    } else if (player.name_key !== key) {
+      if (owner) return taken();
+      await db.execute({ sql: 'UPDATE players SET name = ?, name_key = ? WHERE id = ?', args: [v.name, key, player.id] });
+    } else if (player.name !== v.name) {
+      await db.execute({ sql: 'UPDATE players SET name = ? WHERE id = ?', args: [v.name, player.id] });
+    }
+  } catch (err) {
+    if (isUnique(err)) return taken();
+    throw err;
+  }
+
+  player = (await db.execute({ sql: `SELECT ${COLS} FROM players WHERE token_hash = ?`, args: [th] })).rows[0];
+  if (!player) return taken(); // lost a race for the name
+  const id = Number(player.id);
+
+  let improved = false;
+  if (v.score > 0) {
+    const upd = await db.execute({
+      sql: `UPDATE players
+            SET best_score = ?, distance = ?, seeds = ?, allies = ?, chapter = ?, runner = ?,
+                best_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            WHERE id = ? AND best_score < ?`,
+      args: [v.score, v.distance, v.seeds, v.allies, v.chapter, v.runner, id, v.score],
+    });
+    improved = upd.rowsAffected > 0;
+    await db.execute({
+      sql: 'INSERT INTO scores (name, score, distance, seeds, allies, chapter, runner) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      args: [v.name, v.score, v.distance, v.seeds, v.allies, v.chapter, v.runner],
+    });
+    if (improved) player = (await db.execute({ sql: `SELECT ${COLS} FROM players WHERE id = ?`, args: [id] })).rows[0];
+  }
+
+  const best = Number(player.best_score);
+  const rank = best > 0 ? await rankOf(db, best, id) : null;
   const top = await queryTop(db);
-  return { status: 201, body: { entry: { id, rank, ...value }, top } };
+  return { status: 200, body: { entry: { ...mapRow(player, rank), improved, run: v.score }, top } };
 }
 
 export async function handleScoreRequest(method, body) {

@@ -76,9 +76,9 @@ export class UI {
     this.challenge = this.params.get('c') ? { score: parseInt(this.params.get('c'), 10) || 0, name: (this.params.get('n') || 'A friend').slice(0, 16) } : null;
     this.missionTick = 0;
     this.selIdx = Math.max(0, RUNNERS.findIndex((r) => r.id === save.runner));
-    this.boardYouId = null;
     this.postedRunId = null;
     this.postedEntry = null;
+    this.lastTop = [];
 
     game.on('hud', (g) => this.updateHud(g));
     game.on('seed', () => this.bumpSeeds());
@@ -630,7 +630,10 @@ export class UI {
     if (ms.every((m) => m.done)) setTimeout(() => this.missionSetComplete(), 900);
   }
 
+  /** Game over: post automatically for named players; ask new players for a name once. */
   async loadBoard(root, run) {
+    if (this.postedRunId === this.game.runId) return this.paintBoard(root, this.lastTop, this.postedEntry, '', run);
+    if (save.name && run.score > 0) return this.submitRun(root, run, save.name);
     let top = [];
     let error = '';
     try {
@@ -639,50 +642,17 @@ export class UI {
       error = err.message || 'The board is quiet right now.';
     }
     if (!root.isConnected) return;
-    const entry = this.postedRunId === this.game.runId ? this.postedEntry : null;
-    this.paintBoard(root, top, entry, error, run);
+    this.paintBoard(root, top, null, error, run, !save.name);
   }
 
-  paintBoard(root, top, entry, error, run) {
-    const slot = root.querySelector('.lb-slot');
-    if (!slot) return;
-    const youName = (entry?.name || save.name || '').trim();
-    const preview = (top || []).slice(0, 5);
-    const placed = entry
-      ? `<div class="lb-placed">You're <b>#${fmt(entry.rank)}</b> on the savanna board</div>`
-      : `<div class="lb-form">
-          <input class="name-input" maxlength="16" data-lb-name placeholder="Your name" value="${esc(save.name)}" autocomplete="nickname" />
-          <button class="btn teal" data-act="post" data-click>Post</button>
-        </div>
-        <p class="lb-msg">${esc(error)}</p>`;
-    const list = error
-      ? ''
-      : (preview.length
-        ? renderRows(preview, { youId: entry?.id ?? this.boardYouId, youName })
-        : '<p class="muted lb-empty">No scores yet. Be the first name on the board.</p>');
-    slot.innerHTML = `
-      ${placed}
-      ${list}
-      <button class="lb-more" data-act="board" data-click>Full board ›</button>`;
-    slot.querySelector('[data-lb-name]')?.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter') return;
-      e.preventDefault();
-      this.postRun(root, run);
-    });
-  }
-
-  async postRun(root, run) {
-    if (this.posting || this.postedRunId === this.game.runId) return;
-    const input = root.querySelector('[data-lb-name]');
-    const button = root.querySelector('[data-act=post]');
-    const msg = root.querySelector('.lb-msg');
-    if (!input || !button) return;
+  async submitRun(root, run, name) {
+    if (this.posting) return;
     this.posting = true;
-    button.disabled = true;
-    button.textContent = '…';
+    const slot = root.querySelector('.lb-slot');
+    if (slot && !slot.querySelector('.lb-list')) slot.innerHTML = '<p class="muted">Updating the savanna board…</p>';
     try {
       const data = await postScore({
-        name: input.value,
+        name,
         score: run.score,
         distance: run.distance,
         seeds: run.seeds,
@@ -691,19 +661,69 @@ export class UI {
         runner: save.runner,
       });
       save.name = data.entry.name;
+      save.playerId = data.entry.id;
       persist();
       this.postedRunId = this.game.runId;
       this.postedEntry = data.entry;
-      this.boardYouId = data.entry.id;
-      this.paintBoard(root, data.top, data.entry, '', run);
-      audio.buy();
+      this.lastTop = data.top;
+      if (root.isConnected) this.paintBoard(root, data.top, data.entry, '', run);
+      if (data.entry.improved && data.entry.rank) audio.buy();
     } catch (err) {
-      button.disabled = false;
-      button.textContent = 'Post';
-      if (msg) msg.textContent = err.message || 'Could not post your score';
+      if (!root.isConnected) return;
+      if (err.code === 'NAME_TAKEN') {
+        let top = [];
+        try { top = (await fetchBoard()).top || []; } catch { /* keep the form usable */ }
+        this.paintBoard(root, top, null, `“${name}” is taken. Pick another name.`, run, true);
+      } else {
+        let top = [];
+        try { top = (await fetchBoard()).top || []; } catch { /* offline */ }
+        this.paintBoard(root, top, null, err.status === 503 ? '' : 'Couldn\'t reach the board. Your next run will try again.', run, false);
+      }
     } finally {
       this.posting = false;
     }
+  }
+
+  paintBoard(root, top, entry, error, run, needName = false) {
+    const slot = root.querySelector('.lb-slot');
+    if (!slot) return;
+    const preview = (top || []).slice(0, 5);
+    let head = '';
+    if (entry) {
+      const rank = entry.rank ? `You're <b>#${fmt(entry.rank)}</b> on the savanna board` : 'Finish a run with points to make the board';
+      const note = entry.improved ? '🎉 New personal best!' : `Your best: <b>${fmt(entry.score)}</b>`;
+      head = `<div class="lb-placed">${rank}<span class="lb-note">${note}</span></div>`;
+    } else if (needName) {
+      head = `
+        <p class="lb-ask">Pick your runner name. It's yours for good, and your best run will post by itself after every game.</p>
+        <div class="lb-form">
+          <input class="name-input" maxlength="16" data-lb-name placeholder="Your name" value="${esc(save.name)}" autocomplete="nickname" />
+          <button class="btn teal" data-act="post" data-click>Save</button>
+        </div>`;
+    }
+    const msg = `<p class="lb-msg">${esc(error)}</p>`;
+    const youId = save.playerId ?? null;
+    const list = preview.length
+      ? renderRows(preview, { youId, youName: '' })
+      : (error ? '' : '<p class="muted lb-empty">No scores yet. Be the first name on the board.</p>');
+    slot.innerHTML = `${head}${msg}${list}<button class="lb-more" data-act="board" data-click>Full board ›</button>`;
+    slot.querySelector('[data-lb-name]')?.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      this.postRun(root, run);
+    });
+  }
+
+  /** Name picked on the game-over card: claim it and post this run in one go. */
+  postRun(root, run) {
+    const input = root.querySelector('[data-lb-name]');
+    const name = input?.value.trim() ?? '';
+    if (!name) {
+      const msg = root.querySelector('.lb-msg');
+      if (msg) msg.textContent = 'Type a name first.';
+      return;
+    }
+    this.submitRun(root, run, name);
   }
 
   showBoard() {
@@ -735,9 +755,9 @@ export class UI {
     try {
       const { top } = await fetchBoard();
       if (!body.isConnected) return;
-      const youName = (this.postedEntry?.name || save.name || '').trim();
+      const youId = save.playerId ?? null;
       body.innerHTML = top?.length
-        ? `<p class="muted" style="margin:0 4px">Fastest runners on the Serengeti, ranked by score.</p>${renderRows(top, { youId: this.boardYouId, youName })}`
+        ? `<p class="muted" style="margin:0 4px">One best run per runner, ranked by score.</p>${renderRows(top, { youId, youName: '' })}`
         : '<div class="panel lb-empty-card"><div class="e">🌱</div><p>No scores yet. Finish a run and put your name on the board.</p></div>';
     } catch (err) {
       if (!body.isConnected) return;
@@ -996,12 +1016,32 @@ export class UI {
         audio.click();
       }
       if (e.target.closest('[data-act=close]') || e.target === el) {
-        save.name = el.querySelector('.name-input').value.trim().slice(0, 16);
-        persist();
+        const name = el.querySelector('.name-input').value.trim().slice(0, 16);
         el.remove();
+        if (name && name !== save.name) this.claimName(name);
       }
     });
     this.overlay(el);
+  }
+
+  /** Claims (or renames to) a unique runner name without posting a run. */
+  async claimName(name) {
+    const previous = save.name;
+    try {
+      const data = await postScore({ name, score: 0, distance: 0, seeds: 0, allies: 0, chapter: 0, runner: save.runner });
+      save.name = data.entry.name;
+      save.playerId = data.entry.id;
+      persist();
+      this.toast('✅', `You're now <b>${esc(save.name)}</b> on the leaderboard.`);
+    } catch (err) {
+      if (err.code === 'NAME_TAKEN') this.toast('🙅', `<b>${esc(name)}</b> is already taken. Try another name.`, 3200);
+      else if (err.status === 503) {
+        // no leaderboard configured (e.g. local dev): keep the name locally
+        save.name = name;
+        persist();
+      } else this.toast('📡', 'Couldn\'t reach the leaderboard. Your name wasn\'t changed.');
+      if (save.name !== name) save.name = previous;
+    }
   }
 
   daily() {

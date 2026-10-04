@@ -1,4 +1,5 @@
 import { RUNNERS } from '../data/content.js';
+import { save, persist } from '../data/save.js';
 
 const EMOJI = Object.fromEntries(RUNNERS.map((runner) => [runner.id, runner.emoji]));
 
@@ -23,12 +24,31 @@ export async function fetchBoard() {
   return data;
 }
 
-/** Posts a finished run. Rank is assigned by the server; it is not sent. */
+/**
+ * This device's secret player key. The server only keeps a hash of it; holding it is
+ * what makes a runner name yours, so nobody else can post under it.
+ */
+export function playerToken() {
+  if (!/^[a-f0-9]{64}$/.test(save.playerToken || '')) {
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    save.playerToken = [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+    persist();
+  }
+  return save.playerToken;
+}
+
+/**
+ * Posts a run (or just claims a name when score is 0). The server keeps one row per
+ * player and only replaces it when the run beats their best. Rank is computed server-side.
+ * A 409 with code NAME_TAKEN means another player owns that name.
+ */
 export async function postScore(entry) {
   const res = await fetch('/api/scores', {
     method: 'POST',
     headers: { 'content-type': 'application/json', accept: 'application/json' },
     body: JSON.stringify({
+      token: playerToken(),
       name: entry.name,
       score: entry.score,
       distance: entry.distance,
@@ -39,7 +59,7 @@ export async function postScore(entry) {
     }),
   });
   const data = await readJson(res);
-  if (!res.ok) throw Object.assign(new Error(data.error || 'Could not post your score'), { status: res.status });
+  if (!res.ok) throw Object.assign(new Error(data.error || 'Could not post your score'), { status: res.status, code: data.code });
   return data;
 }
 
@@ -51,7 +71,8 @@ function medal(rank) {
 }
 
 function rowHtml(row, { youId, youName }) {
-  const yours = (youId != null && row.id === youId) || (!!youName && row.name === youName);
+  // prefer the server id; fall back to the (unique) name before this device has posted
+  const yours = youId != null ? row.id === youId : !!youName && row.name.toLowerCase() === youName.toLowerCase();
   const emoji = EMOJI[row.runner] || '🏃';
   return `
     <div class="lb-row${yours ? ' you' : ''}">
