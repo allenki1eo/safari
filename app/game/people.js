@@ -214,22 +214,32 @@ function headTone(v, skin, lip) {
 function buildFace(b, skin, skinD, lip, hair, look) {
   const head = 'head';
   b.add(sculptHead(), { color: (v) => headTone(v, skin, lip), bone: head });
+  // A same-colour sculpt on a dark face disappears. Eyes, nose and lips sit in
+  // front of the skull (its front is near local z = -1) and use a different colour.
+  // Big enough, and a different colour from the skin, so a phone can read them
+  // on a full-body figure as well as in a close-up.
+  const lipC = mix(skin, 0xe07868, 0.82);
+  const noseC = mix(skin, 0xffe0c4, 0.58);
+  const brow = darker(hair, 0.9);
   for (const sx of [-1, 1]) {
-    const ex = sx * 0.3;
-    // an almond eye set in the socket: a flat sclera, a large iris, lids above and below
-    b.add(ellipsoid(hp(ex, 0.04, -0.78), hr(0.13, 0.055, 0.035), [12, 8]), { color: 0xe8e0d6, bone: head });
-    b.add(ellipsoid(hp(ex, 0.035, -0.81), hr(0.062, 0.05, 0.02), [10, 8]), { color: 0x3b2414, bone: head });
-    b.add(ellipsoid(hp(ex, 0.032, -0.825), hr(0.026, 0.026, 0.012), [8, 6]), { color: 0x0c0806, bone: head });
-    b.add(ellipsoid(hp(ex - sx * 0.018, 0.05, -0.834), hr(0.01, 0.01, 0.006), [5, 4]), { color: 0xffffff, bone: head, glow: 0.25 });
-    b.add(ellipsoid(hp(ex, 0.055, -0.82), hr(0.145, 0.045, 0.045), [10, 6]), { color: skin, bone: head });
-    b.add(ellipsoid(hp(ex, -0.005, -0.8), hr(0.11, 0.03, 0.03), [8, 5]), { color: skin, bone: head });
-    b.add(limb(hp(sx * 0.1, 0.22, -0.9), hp(sx * 0.42, 0.16, -0.78), 0.007, 0.004, 6), { color: hair, bone: head });
-    b.add(ellipsoid(hp(sx * 0.065, -0.38, -0.84), hr(0.03, 0.016, 0.02), [6, 4]), { color: 0x140c09, bone: head });
+    const ex = sx * 0.38;
+    b.add(ellipsoid(hp(ex, 0.1, -1.22), hr(0.3, 0.16, 0.1), [12, 8]), { color: 0xf7f4ef, bone: head, glow: 0.22 });
+    b.add(ellipsoid(hp(ex, 0.09, -1.3), hr(0.14, 0.13, 0.055), [10, 8]), { color: 0x5a3418, bone: head });
+    b.add(ellipsoid(hp(ex, 0.088, -1.34), hr(0.062, 0.062, 0.03), [8, 6]), { color: 0x0c0806, bone: head });
+    b.add(ellipsoid(hp(ex - sx * 0.05, 0.13, -1.36), hr(0.028, 0.028, 0.012), [5, 4]), { color: 0xffffff, bone: head, glow: 0.55 });
+    b.add(limb(hp(sx * 0.12, 0.32, -1.12), hp(sx * 0.58, 0.2, -1.08), 0.02, 0.01, 6), { color: brow, bone: head });
     if (!['wrap', 'hat', 'puffs'].includes(look.hair)) {
       b.add(ellipsoid(hp(sx * 1.0, -0.08, 0.08), hr(0.1, 0.28, 0.16), [10, 8], { rot: [0.15, sx * 0.45, sx * 0.1] }), { color: skin, bone: head });
       b.add(ellipsoid(hp(sx * 1.02, -0.06, 0.02), hr(0.05, 0.16, 0.08), [8, 6], { rot: [0.15, sx * 0.45, sx * 0.1] }), { color: skinD, bone: head });
     }
   }
+  b.add(limb(hp(0, 0.12, -1.08), hp(0, -0.2, -1.42), 0.022, 0.038, 8), { color: noseC, bone: head });
+  b.add(ellipsoid(hp(0, -0.28, -1.4), hr(0.2, 0.14, 0.16), [10, 8]), { color: noseC, bone: head });
+  for (const sx of [-1, 1]) {
+    b.add(ellipsoid(hp(sx * 0.07, -0.36, -1.5), hr(0.05, 0.035, 0.04), [6, 4]), { color: 0x140c09, bone: head });
+  }
+  b.add(ellipsoid(hp(0, -0.56, -1.28), hr(0.34, 0.07, 0.1), [10, 6]), { color: darker(lipC, 0.72), bone: head });
+  b.add(ellipsoid(hp(0, -0.68, -1.26), hr(0.38, 0.1, 0.11), [10, 6]), { color: lipC, bone: head });
 }
 
 /** Palm, four fingers with a knuckle, and a thumb. Palms face in toward the body. */

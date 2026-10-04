@@ -159,7 +159,7 @@ function buildQuad(d) {
   }
 
   d.dress?.(b, k, d);
-  const m = b.build({ material: rigMaterial({ smooth: true, standard: true, roughness: 0.9 }) });
+  const m = b.build({ material: rigMaterial({ smooth: true, standard: true, roughness: 0.72 }) });
   return { mesh: m, builder: b, k };
 }
 
@@ -185,9 +185,11 @@ function head(b, k, d, { len, w, h, pitch, color, muzzle, muzzleLen = 0.4, nose,
   mouth.y -= h * 0.08;
   b.add(ellipsoid(mouth.toArray(), [w * 0.22, h * 0.035, w * 0.08], [8, 4]), { color: 0x2a1812, bone: 'head' });
   for (const sx of [-1, 1]) {
-    const e = centre.clone().addScaledVector(dir, len * 0.05);
-    e.x += sx * w * 0.36;
-    e.y += h * 0.14;
+    // proud of the skull, or the white sits inside the head and never draws
+    const e = centre.clone().addScaledVector(dir, len * 0.4);
+    e.x += sx * w * 0.3;
+    e.y += h * 0.18;
+    e.addScaledVector(dir, w * 0.12);
     const p = e.toArray();
     b.add(ellipsoid(p, [w * 0.09, w * 0.075, w * 0.055], [10, 8]), { color: 0xf4efe6, bone: 'head' });
     const iris = e.clone().addScaledVector(dir, w * 0.05);
@@ -238,12 +240,12 @@ const SPECIES = {
   wildebeest: {
     len: 1.7, h: 1.45, w: 0.64, girth: 0.86, legR: 0.07, slope: 0.18, hump: 0.08,
     neckLen: 0.55, neckAngle: 0.55, neckSegs: 2, neckR0: 0.26, neckR1: 0.16, headW: 0.26, headH: 0.28,
-    tailLen: 0.7, tailR: 0.04, tuft: 0.28, tuftColor: 0x141210, color: 0x5d5852, legColor: 0x4a4540, hoof: 0x1a1816,
-    coat: { type: PAT.stripesZ, color: 0x45403b, scale: 9 },
+    tailLen: 0.7, tailR: 0.04, tuft: 0.28, tuftColor: 0x141210, color: 0xa09888, legColor: 0x7a7268, hoof: 0x2a2622,
+    coat: { type: PAT.stripesZ, color: 0x4a453e, scale: 9 },
     gait: 'gallop', walkAmp: 0.38, runAmp: 0.78, graze: true,
     dress(b, k, d) {
-      const hd = head(b, k, d, { len: 0.62, w: 0.26, h: 0.3, pitch: 1.25, color: 0x4f4a45, muzzle: 0x1f1c1a, muzzleLen: 0.48 });
-      ears(b, k, d, { w: 0.08, h: 0.16, color: 0x4f4a45, tilt: 0.9 });
+      const hd = head(b, k, d, { len: 0.62, w: 0.26, h: 0.3, pitch: 1.25, color: 0x8a8278, muzzle: 0x2a2420, muzzleLen: 0.48 });
+      ears(b, k, d, { w: 0.08, h: 0.16, color: 0x8a8278, tilt: 0.9 });
       // cow-like horns curving out and up
       for (const sx of [-1, 1]) {
         const base = k.headP.clone();
@@ -251,7 +253,7 @@ const SPECIES = {
         base.y += 0.08;
         b.add(tube([
           { p: base.toArray(), rx: 0.04 }, { p: [sx * 0.24, base.y + 0.02, base.z + 0.02], rx: 0.032 }, { p: [sx * 0.3, base.y + 0.16, base.z - 0.02], rx: 0.016 },
-        ].map((r) => ({ ...r, c: 0x2b2723, w: 'head' })), 6), {});
+        ].map((r) => ({ ...r, c: 0xc8bba6, w: 'head' })), 6), {});
       }
       // beard and mane
       for (let i = 0; i < 3; i++) {
@@ -266,22 +268,23 @@ const SPECIES = {
   buffalo: {
     len: 2.0, h: 1.55, w: 0.95, girth: 1.08, legR: 0.09, slope: 0.08, hump: 0.08,
     neckLen: 0.35, neckAngle: 0.25, neckSegs: 1, neckR0: 0.4, neckR1: 0.3, headW: 0.4, headH: 0.38,
-    tailLen: 0.7, tailR: 0.045, tuft: 0.22, color: 0x2f2926, legColor: 0x2a2522, hoof: 0x141110,
-    coat: { type: PAT.hide, color: 0x1a1614, scale: 3.2 },
+    tailLen: 0.7, tailR: 0.045, tuft: 0.22, color: 0x8a6850, legColor: 0x6e5344, hoof: 0x3a2e26,
+    coat: { type: PAT.hide, color: 0xc4a07a, scale: 3.2 },
     gait: 'gallop', walkAmp: 0.32, runAmp: 0.62, graze: true,
     dress(b, k, d) {
-      head(b, k, d, { len: 0.6, w: 0.4, h: 0.42, pitch: 1.2, color: 0x2a2522, muzzle: 0x1a1614, muzzleLen: 0.42, glowEyes: false });
-      ears(b, k, d, { w: 0.14, h: 0.2, color: 0x2a2522, round: true, tilt: 1.4 });
+      head(b, k, d, { len: 0.6, w: 0.4, h: 0.42, pitch: 1.2, color: 0x7a5a48, muzzle: 0x8a6a54, muzzleLen: 0.42, nose: 0x2a1c16, glowEyes: false });
+      ears(b, k, d, { w: 0.14, h: 0.2, color: 0x7a5a48, round: true, tilt: 1.4 });
       // the boss: a heavy horn base, horns sweeping down then up
       const hp = k.headP;
-      b.add(ellipsoid([0, hp.y + 0.14, hp.z - 0.02], [0.24, 0.07, 0.14], [8, 5]), { color: 0x544c44, bone: 'head' });
+      const horn = 0xd4c4a4;
+      b.add(ellipsoid([0, hp.y + 0.14, hp.z - 0.02], [0.24, 0.07, 0.14], [8, 5]), { color: horn, bone: 'head' });
       for (const sx of [-1, 1]) {
         b.add(tube([
           { p: [sx * 0.15, hp.y + 0.14, hp.z - 0.02], rx: 0.075 },
           { p: [sx * 0.38, hp.y + 0.02, hp.z + 0.02], rx: 0.055 },
           { p: [sx * 0.5, hp.y + 0.1, hp.z - 0.02], rx: 0.04 },
           { p: [sx * 0.5, hp.y + 0.3, hp.z - 0.08], rx: 0.012 },
-        ].map((r) => ({ ...r, c: 0x544c44, w: 'head' })), 6), {});
+        ].map((r) => ({ ...r, c: horn, w: 'head' })), 6), {});
       }
     },
   },
