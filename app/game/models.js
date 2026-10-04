@@ -156,39 +156,52 @@ export const Animals = {
   rhino: () => makeWildAnimal('rhino', () => makeAnimal('rhino')),
   wildebeest: () => makeWildAnimal('wildebeest', () => makeAnimal('wildebeest')),
   buffalo: () => makeAnimal('buffalo'),
+  hippo: () => makeAnimal('hippo'),
 };
 
 /* ==========================================================================
  * BIRDS
  * ========================================================================== */
+const feather = (c) => mat(c, { flat: false });
+
 export function makeEagle() {
   const g = new Group();
-  const brown = mat(0x5a3a1f);
-  g.add(mesh(G.ico1, brown, 0.35, 0.32, 0.75));
-  g.add(mesh(G.ico1, mat(0xf8f4ea), 0.27, 0.27, 0.3, 0, 0.12, -0.72));
-  const beak = mesh(G.cone, mat(0xffc21a), 0.08, 0.26, 0.1, 0, 0.06, -1.02);
-  beak.rotation.x = -1.8;
+  const brown = feather(0x5a3a1f);
+  const cream = feather(0xf8f4ea);
+  g.add(mesh(G.ball, brown, 0.28, 0.24, 0.55));
+  g.add(mesh(G.ball, cream, 0.2, 0.18, 0.22, 0, 0.06, -0.62));
+  const beak = mesh(taper(0.25, 12), feather(0xffc21a), 0.06, 0.28, 0.07, 0, 0.02, -0.92);
+  beak.rotation.x = Math.PI / 2 + 0.25;
   g.add(beak);
-  g.add(mesh(G.sphere, mat(0x111111), 0.04, 0.04, 0.04, -0.15, 0.2, -0.86));
-  g.add(mesh(G.sphere, mat(0x111111), 0.04, 0.04, 0.04, 0.15, 0.2, -0.86));
-  const tail = mesh(G.box, mat(0xf8f4ea), 0.42, 0.06, 0.45, 0, 0, 0.85);
-  g.add(tail);
+  const hook = mesh(taper(0.4, 10), feather(0xe0a010), 0.035, 0.1, 0.04, 0, -0.04, -1.12);
+  hook.rotation.x = Math.PI / 2 + 1.1;
+  g.add(hook);
+  for (const x of [-1, 1]) {
+    g.add(mesh(G.ball, cream, 0.035, 0.028, 0.02, x * 0.1, 0.1, -0.72));
+    g.add(mesh(G.ball, feather(0x120c08), 0.016, 0.016, 0.01, x * 0.1, 0.1, -0.735));
+  }
+  g.add(mesh(G.ball, cream, 0.22, 0.04, 0.32, 0, 0.02, 0.72));
   const wings = [];
   for (const x of [-1, 1]) {
     const w = new Group();
-    w.position.set(x * 0.25, 0.08, -0.1);
+    w.position.set(x * 0.22, 0.06, -0.08);
     g.add(w);
-    const inner = mesh(G.box, brown, 1.2, 0.07, 0.75, x * 0.6, 0, 0);
-    w.add(inner);
+    w.add(mesh(G.ball, brown, 0.55, 0.045, 0.32, x * 0.5, 0, 0.02));
     const tip = new Group();
-    tip.position.x = x * 1.2;
+    tip.position.x = x * 1.05;
     w.add(tip);
-    tip.add(mesh(G.box, mat(0x3c2512), 1.0, 0.05, 0.6, x * 0.5, 0, 0.08));
-    for (let i = 0; i < 4; i++) tip.add(mesh(G.box, mat(0x2a190b), 0.4, 0.04, 0.1, x * (1.1 + i * 0.02), 0, -0.15 + i * 0.12));
+    tip.add(mesh(G.ball, feather(0x3c2512), 0.48, 0.03, 0.22, x * 0.42, 0, 0.06));
+    for (let i = 0; i < 5; i++) {
+      const f = mesh(taper(0.15, 8), feather(0x2a190b), 0.04, 0.38, 0.025, x * (0.7 + i * 0.02), 0, -0.08 + i * 0.08);
+      f.rotation.z = x * 1.2;
+      tip.add(f);
+    }
     wings.push({ w, tip, x });
   }
-  // talons
-  for (const x of [-1, 1]) g.add(mesh(G.box, mat(0xffc21a), 0.08, 0.3, 0.08, x * 0.15, -0.35, 0.1));
+  for (const x of [-1, 1]) {
+    g.add(mesh(G.cyl16, feather(0xffc21a), 0.025, 0.22, 0.025, x * 0.1, -0.22, 0.05));
+    g.add(mesh(G.ball, feather(0x1a1408), 0.04, 0.02, 0.06, x * 0.1, -0.34, 0.02));
+  }
   bakeRigid(g);
   let t = 0;
   return {
@@ -205,25 +218,27 @@ export function makeEagle() {
 
 export function makeHornbill() {
   const g = new Group();
-  const black = mat(0x1d1b1a);
-  g.add(mesh(G.ico1, black, 0.22, 0.22, 0.4));
-  g.add(mesh(G.ico1, mat(0xf6f1e6), 0.18, 0.14, 0.3, 0, -0.08, -0.05));
-  g.add(mesh(G.ico1, black, 0.16, 0.16, 0.18, 0, 0.12, -0.42));
-  const beak = mesh(G.cone, mat(0xffb21a), 0.09, 0.5, 0.12, 0, 0.05, -0.75);
-  beak.rotation.x = -1.75;
+  const black = feather(0x1d1b1a);
+  const cream = feather(0xf6f1e6);
+  g.add(mesh(G.ball, black, 0.18, 0.16, 0.32));
+  g.add(mesh(G.ball, cream, 0.14, 0.1, 0.22, 0, -0.06, -0.02));
+  g.add(mesh(G.ball, black, 0.12, 0.11, 0.13, 0, 0.08, -0.36));
+  const beak = mesh(taper(0.45, 12), feather(0xffb21a), 0.07, 0.48, 0.08, 0, 0.02, -0.62);
+  beak.rotation.x = Math.PI / 2 + 0.2;
   g.add(beak);
-  const casque = mesh(G.ico1, mat(0xe2451f), 0.07, 0.08, 0.2, 0, 0.17, -0.62);
-  g.add(casque);
-  g.add(mesh(G.sphere, mat(0xffffff), 0.035, 0.035, 0.035, -0.11, 0.17, -0.5));
-  g.add(mesh(G.sphere, mat(0xffffff), 0.035, 0.035, 0.035, 0.11, 0.17, -0.5));
-  g.add(mesh(G.box, black, 0.2, 0.04, 0.5, 0, 0.02, 0.55));
+  g.add(mesh(G.ball, feather(0xe2451f), 0.055, 0.05, 0.16, 0, 0.1, -0.52));
+  for (const x of [-1, 1]) {
+    g.add(mesh(G.ball, cream, 0.028, 0.022, 0.016, x * 0.07, 0.12, -0.44));
+    g.add(mesh(G.ball, feather(0x120c08), 0.012, 0.012, 0.008, x * 0.07, 0.12, -0.452));
+  }
+  g.add(mesh(G.ball, black, 0.1, 0.025, 0.28, 0, 0.02, 0.48));
   const wings = [];
   for (const x of [-1, 1]) {
     const w = new Group();
-    w.position.set(x * 0.15, 0.06, -0.05);
+    w.position.set(x * 0.14, 0.04, -0.04);
     g.add(w);
-    w.add(mesh(G.box, black, 0.7, 0.04, 0.38, x * 0.35, 0, 0));
-    w.add(mesh(G.box, mat(0xf6f1e6), 0.25, 0.042, 0.36, x * 0.6, 0, 0));
+    w.add(mesh(G.ball, black, 0.32, 0.028, 0.16, x * 0.28, 0, 0));
+    w.add(mesh(G.ball, cream, 0.12, 0.03, 0.14, x * 0.48, 0, 0.02));
     wings.push({ w, x });
   }
   bakeRigid(g);

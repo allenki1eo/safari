@@ -81,13 +81,13 @@ export const REGIONS = [
     title: 'The Spice Island', speaker: 'Kima the Colobus', emoji: '🐒',
     line: 'Fisi\'s sneaking onto a dhow bound for Kenya! Through the spice market — quick!',
     blurb: 'White sand, turquoise water, carved doors and the scent of cloves on the breeze.',
-    ground: { grass: '#c8ad78', path: '#a58757', water: '#2fb4bd', waterSide: -1, beach: true },
-    hill: '#d9cfa8', fog: { tint: '#e2f0ea', amount: 0.12 }, ocean: true, blades: false,
+    ground: { grass: '#efe2bd', path: '#f6edd2', water: '#3fc1c9', waterSide: -1, beach: true },
+    hill: '#d9cfa8', fog: { tint: '#c5ebe8', amount: 0.08, near: 150, far: 440 }, ocean: true, blades: false,
     // an island: no Kilimanjaro on the horizon, just the Indian Ocean
     kili: { x: -260, y: -520, z: -720, s: 1 },
     props: [
       ['palm', 6], ['stonehouse', 1.8], ['banda', 1.4], ['parasol', 1.6], ['coralrock', 1.6], ['mangrove', 1.2],
-      ['fishrack', 0.9], ['hut', 0.8], ['flowers', 1.2], ['ngalawa', 1.4], ['seaweed', 0.8], ['lighthouse', 0.12],
+      ['fishrack', 0.9], ['hut', 0.8], ['bush', 1.2], ['flowers', 1.4], ['ngalawa', 1.4], ['seaweed', 0.8], ['lighthouse', 0.12],
     ],
     herd: [['dolphin', 'idle', 3], ['crab', 'idle', 2]],
     blocks: ['cart', 'canoe'], style: { log: 'palm', gate: 'net', rock: 'rock' },

@@ -1,17 +1,16 @@
 import * as THREE from 'three';
 import { blobShadow } from './materials.js';
+import { outfitId } from '../data/content.js';
+import { dress } from './wardrobe.js';
 import {
   Animator, PAT, SkinBuilder, TAU, box, cap, disc, ellipsoid, keyed, limb, ramp, rigMaterial, sampleClip, torus, tube,
 } from './rigkit.js';
 
 /**
  * The runners: six East African kids built and animated in code. One skeleton, one
- * set of clips, and per-runner faces, hair, clothes and kit (kitenge, kanga, shuka,
- * Maasai beadwork, a football kit, a bucket hat).
- *
- * Bodies keep lifelike proportions (a head about a seventh of their height), with
- * muscled limbs that bend smoothly at the joints, hands with fingers, broad noses
- * and full lips, coily hair, and clothes layered over the body.
+ * set of clips. Faces are sculpted from a single head so the nose, lips and brow
+ * are part of the surface. Clothes are a separate garment (`wardrobe.js`) chosen
+ * before the run.
  *
  * Model space: feet on y = 0, facing -z (down the track), the runner's left on -x.
  * Rotations, when facing -z: +x on a limb swings it forward, -x on a shin bends the knee,
@@ -41,37 +40,14 @@ const SKELETON = [
   ['footR', 'shinR', [0.092, 0.08, 0]],
 ];
 
-/** How each runner looks. Colours come from content.js; this adds the styling. */
+/** Hair and the small things that stay when the clothes change. */
 const LOOKS = {
-  zuri: {
-    hair: 'wrap', sleeves: 'short', legs: 'shorts', shoes: 'sandals', pocket: true,
-    wrapPat: { type: PAT.zigzag, color: 0xf4d35e, scale: 13 },
-    gear: ['shuka', 'backpack'], shukaPat: { type: PAT.check, color: 0x1b2a6b, scale: 18 },
-  },
-  juma: {
-    hair: 'fade', band: 0x1b998b, sleeves: 'short', legs: 'shorts', shoes: 'boots', socks: true,
-    shirtPat: { type: PAT.diagonal, color: 0x1e8f4e, scale: 11 },
-    gear: [],
-  },
-  neema: {
-    hair: 'puffs', sleeves: 'short', legs: 'skirt', shoes: 'sandals', girl: true,
-    skirtPat: { type: PAT.dots, color: 0xf4d35e, scale: 20 },
-    gear: ['collar', 'bracelets', 'headband'],
-  },
-  baraka: {
-    hair: 'hat', sleeves: 'short', legs: 'shorts', shoes: 'boots', vest: 0x5f6b3a, pocket: true,
-    gear: ['backpack', 'binoculars'],
-  },
-  amani: {
-    hair: 'braids', sleeves: 'long', legs: 'long', shoes: 'glow', girl: true,
-    shirtPat: { type: PAT.zigzag, color: 0x4de1ff, scale: 13 },
-    gear: ['necklace'],
-  },
-  kito: {
-    hair: 'hightop', sleeves: 'baggy', legs: 'shorts', shoes: 'gold', baggy: true, scale: 0.93,
-    legsPat: { type: PAT.stripesX, color: 0xd7263d, scale: 26 },
-    gear: ['chain'],
-  },
+  zuri: { hair: 'wrap', wrapPat: { type: PAT.zigzag, color: 0xf4d35e, scale: 13 } },
+  juma: { hair: 'fade', band: 0x1b998b },
+  neema: { hair: 'puffs', girl: true, gear: ['bracelets', 'headband'] },
+  baraka: { hair: 'hat' },
+  amani: { hair: 'braids', girl: true, gear: ['necklace'] },
+  kito: { hair: 'hightop', baggy: true, scale: 0.93 },
 };
 
 const hex = (c) => new THREE.Color(c);
@@ -84,206 +60,202 @@ const R = 0.105;
 const hp = (x, y, z) => [HC.x + x * R, HC.y + y * R, HC.z + z * R];
 const hr = (x, y, z) => [x * R, y * R, z * R];
 
-/** Copies rings, scaling their radii: clothes are the body's rings, a little looser. */
-const looser = (rings, k, extra = {}) => rings.map((r) => ({ ...r, rx: r.rx * k, ry: (r.ry ?? r.rx) * k, ...extra }));
-/** Sleeves: tight where they meet the shoulder seam, looser down the arm. */
-const sleeve = (rings, k, extra) => looser(rings, k, extra).map((r, i) => (i === 0 ? { ...r, rx: rings[0].rx * 1.03, ry: (rings[0].ry ?? rings[0].rx) * 1.03 } : r));
-
 /* =================================================================== body */
-function buildBody(def) {
+function buildBody(def, outfit) {
   const look = LOOKS[def.id] ?? LOOKS.zuri;
   const b = new SkinBuilder(SKELETON);
   const skin = def.skin;
   const skinD = darker(skin, 0.78);
   const lip = mix(darker(skin, 0.72), 0x7a2f2a, 0.35);
-  const shirt = def.shirt;
-  const pants = def.pants;
-  const shoes = def.shoes;
   const hair = def.hair ?? 0x120c08;
   const accent = def.accent;
-  const baggy = look.baggy ? 1.12 : 1;
+  const baggy = look.baggy ? 1.14 : 1;
   const girl = look.girl ? 1 : 0;
 
-  /* ---- torso: crotch to neck, blended over hips, spine and chest */
-  const waist = look.legs === 'skirt' ? 0.98 : 0.93;
+  /* ---- torso: shoulders, a narrower waist, hips. Skin only; clothes sit outside it. */
   const torsoW = (y) => {
     if (y < 0.95) return [['hips', 1]];
     if (y < 1.05) return [['hips', 1 - ramp(y, 0.95, 1.05)], ['spine', ramp(y, 0.95, 1.05)]];
     if (y < 1.11) return [['spine', 1]];
     return [['spine', 1 - ramp(y, 1.11, 1.2)], ['chest', ramp(y, 1.11, 1.2)]];
   };
-  // [y, half width, half depth, z offset] — shoulders, a narrower waist, hips
   const profile = [
-    [0.8, 0.07, 0.06, 0.005], [0.84, 0.125 + girl * 0.008, 0.085, 0.01], [0.9, 0.138 + girl * 0.012, 0.094, 0.012],
-    [0.96, 0.128 + girl * 0.006, 0.088, 0.008], [1.02, 0.117 - girl * 0.006, 0.08, 0.0], [1.08, 0.12, 0.082, -0.004],
-    [1.15, 0.134, 0.09, -0.008], [1.22, 0.147, 0.096, -0.006], [1.28, 0.152, 0.09, 0.0], [1.33, 0.128, 0.074, 0.008],
-    [1.37, 0.055, 0.05, 0.01],
+    [0.8, 0.072, 0.062, 0.004], [0.84, 0.12 + girl * 0.01, 0.086, 0.008], [0.9, 0.136 + girl * 0.014, 0.096, 0.01],
+    [0.96, 0.126 + girl * 0.008, 0.088, 0.006], [1.02, 0.112 - girl * 0.004, 0.078, 0], [1.08, 0.118, 0.08, -0.002],
+    [1.14, 0.132, 0.088, -0.006], [1.2, 0.146, 0.094, -0.004], [1.26, 0.15, 0.088, 0], [1.31, 0.12, 0.07, 0.006],
+    [1.36, 0.058, 0.05, 0.01],
   ];
-  const torsoRings = [];
-  for (const [y, rx, rz, z] of profile) {
-    const ring = { p: [0, y, z], rx, ry: rz, w: torsoW(y) };
-    if (Math.abs(y - waist) < 0.035 && torsoRings.length) {
-      // a crisp hem: the same ring twice, trousers below and shirt above
-      torsoRings.push({ ...ring, p: [0, waist, z], c: pants, pat: look.legsPat });
-      torsoRings.push({ ...ring, p: [0, waist + 0.001, z], c: shirt, pat: look.shirtPat, rx: rx * baggy, ry: rz * baggy });
-      continue;
-    }
-    const top = y > waist;
-    torsoRings.push({ ...ring, rx: rx * (top ? baggy : 1), ry: rz * (top ? baggy : 1), c: top ? shirt : pants, pat: top ? look.shirtPat : look.legsPat });
-  }
-  b.add(tube(torsoRings, 18, { up: [0, 0, -1] }), {});
-  // collar and belt
-  b.add(torus([0, 1.335, 0.006], 0.07, 0.012, [Math.PI / 2, 0, 0], [5, 14]), { color: darker(shirt, 0.85), bone: 'chest' });
-  if (look.legs !== 'skirt') b.add(torus([0, waist - 0.01, 0.006], 0.13, 0.012, [Math.PI / 2, 0, 0], [4, 18]), { color: darker(pants, 0.7), bone: 'hips' });
-  if (look.vest) {
-    const vestC = look.vest;
-    b.add(tube(looser(torsoRings.filter((r) => r.p[1] > 1.0 && r.p[1] < 1.34), 1.06), 18, { up: [0, 0, -1], caps: false }), {
-      color: (v) => (v.z < -0.07 && Math.abs(v.x) < 0.035 ? shirt : vestC),
-    });
-  }
-  if (look.pocket) {
-    for (const x of [-0.065, 0.065]) b.add(box([x, 1.19, -0.098], [0.05, 0.05, 0.01]), { color: darker(look.vest ?? shirt, 0.82), bone: 'chest' });
-  }
-
-  /* ---- skirt (Neema's kanga) */
-  if (look.legs === 'skirt') {
-    b.add(tube([[0.99, 0.135], [0.9, 0.165], [0.78, 0.2], [0.66, 0.225]].map(([y, r]) => ({ p: [0, y, 0.01], rx: r, ry: r * 0.82 })), 18, { up: [0, 0, -1], caps: false }), {
-      color: def.dress ?? pants, bone: 'hips', pat: look.skirtPat,
-    });
-  }
+  b.add(tube(profile.map(([y, rx, rz, z]) => ({ p: [0, y, z], rx, ry: rz, w: torsoW(y), c: skin })), 22, { up: [0, 0, -1] }), {});
 
   /* ---- neck and head */
   b.add(tube([
-    { p: [0, 1.31, 0.01], rx: 0.05, ry: 0.048, w: 'chest' },
-    { p: [0, 1.37, 0.008], rx: 0.044, ry: 0.044, w: [['chest', 0.4], ['neck', 0.6]] },
-    { p: [0, 1.44, 0.01], rx: 0.042, ry: 0.044, w: 'neck' },
-    { p: [0, 1.5, 0.018], rx: 0.045, ry: 0.048, w: 'head' },
-  ].map((r) => ({ ...r, c: skin })), 12, { up: [0, 0, -1] }), {});
-  buildFace(b, skin, skinD, lip, hair);
+    { p: [0, 1.31, 0.01], rx: 0.052, ry: 0.048, w: 'chest' },
+    { p: [0, 1.36, 0.008], rx: 0.044, ry: 0.044, w: [['chest', 0.45], ['neck', 0.55]] },
+    { p: [0, 1.42, 0.01], rx: 0.042, ry: 0.044, w: 'neck' },
+    { p: [0, 1.48, 0.016], rx: 0.048, ry: 0.05, w: 'head' },
+  ].map((r) => ({ ...r, c: skin })), 14, { up: [0, 0, -1] }), {});
+  buildFace(b, skin, skinD, lip, hair, look);
   buildHair(b, look, def, hair, accent);
 
-  /* ---- arms: one smooth tube from shoulder to wrist, bending at the elbow */
-  for (const [s, side] of [[-1, 'L'], [1, 'R']]) {
+  /* ---- arms, with a biceps, a pinched elbow and a forearm */
+  for (const [sx, side] of [[-1, 'L'], [1, 'R']]) {
     const up = `upperArm${side}`;
     const fo = `foreArm${side}`;
     const ha = `hand${side}`;
     const arm = [
-      { p: [s * 0.13, 1.3, 0.005], rx: 0.055, ry: 0.06, w: [['chest', 0.5], [up, 0.5]] },
-      { p: [s * 0.172, 1.285, 0], rx: 0.054, ry: 0.056, w: up },
-      { p: [s * 0.18, 1.2, -0.004], rx: 0.044, ry: 0.047, w: up },
-      { p: [s * 0.185, 1.1, 0], rx: 0.036, ry: 0.037, w: up },
-      { p: [s * 0.186, 1.06, 0.002], rx: 0.034, ry: 0.034, w: [[up, 0.5], [fo, 0.5]] },
-      { p: [s * 0.19, 0.98, -0.004], rx: 0.036, ry: 0.034, w: fo },
-      { p: [s * 0.194, 0.88, 0], rx: 0.026, ry: 0.024, w: fo },
-      { p: [s * 0.195, 0.84, 0], rx: 0.025, ry: 0.022, w: [[fo, 0.5], [ha, 0.5]] },
+      { p: [sx * 0.13, 1.3, 0.004], rx: 0.058, ry: 0.062, w: [['chest', 0.45], [up, 0.55]] },
+      { p: [sx * 0.172, 1.27, 0], rx: 0.05, ry: 0.052, w: up },
+      { p: [sx * 0.18, 1.18, -0.002], rx: 0.046, ry: 0.048, w: up },
+      { p: [sx * 0.184, 1.1, 0], rx: 0.036, ry: 0.036, w: up },
+      { p: [sx * 0.186, 1.05, 0.006], rx: 0.03, ry: 0.03, w: [[up, 0.5], [fo, 0.5]] },
+      { p: [sx * 0.19, 0.96, -0.004], rx: 0.036, ry: 0.034, w: fo },
+      { p: [sx * 0.194, 0.88, 0], rx: 0.026, ry: 0.024, w: fo },
+      { p: [sx * 0.196, 0.83, 0], rx: 0.024, ry: 0.022, w: [[fo, 0.4], [ha, 0.6]] },
     ];
-    b.add(tube(arm.map((r) => ({ ...r, c: skin })), 10, { up: [0, 0, -1] }), {});
-    // sleeves are the same rings, looser
-    if (look.sleeves === 'long') b.add(tube(sleeve(arm.slice(0, 7), 1.12, { c: shirt, pat: look.shirtPat }), 10, { up: [0, 0, -1], caps: false }), {});
-    else if (look.sleeves === 'baggy') b.add(tube(sleeve(arm.slice(0, 4), 1.35, { c: shirt, pat: look.shirtPat }), 10, { up: [0, 0, -1], caps: false }), {});
-    else b.add(tube(sleeve(arm.slice(0, 3), 1.18, { c: shirt, pat: look.shirtPat }), 10, { up: [0, 0, -1], caps: false }), {});
-    if (look.sleeves === 'long') b.add(torus([s * 0.194, 0.885, 0], 0.03, 0.008, [Math.PI / 2, 0, 0], [4, 10]), { color: darker(shirt, 0.8), bone: fo });
-    // hand: palm, four fingers and a thumb, relaxed and slightly curled
-    const hx = s * 0.197;
-    b.add(ellipsoid([hx, 0.785, -0.004], [0.017, 0.04, 0.034], [8, 6]), { color: skin, bone: ha });
-    for (let i = 0; i < 4; i++) {
-      const z = -0.024 + i * 0.016;
-      const len = [0.042, 0.048, 0.045, 0.036][i];
-      b.add(limb([hx, 0.752, z], [hx - s * 0.004, 0.752 - len, z + 0.006], 0.0072, 0.0058, 5), { color: skin, bone: ha });
-    }
-    b.add(limb([hx - s * 0.006, 0.79, -0.03], [hx - s * 0.012, 0.758, -0.048], 0.008, 0.0065, 5), { color: skin, bone: ha });
-    if (def.wristband) b.add(torus([s * 0.194, 0.86, 0], 0.028, 0.009, [Math.PI / 2, 0, 0], [4, 10]), { color: def.wristband, bone: fo });
+    b.add(tube(arm.map((r) => ({ ...r, c: skin })), 12, { up: [0, 0, -1] }), {});
+    // elbow point, on the back of the arm
+    b.add(ellipsoid([sx * 0.188, 1.05, 0.03], [0.02, 0.016, 0.016], [8, 6]), { color: skinD, bone: fo });
+    addHand(b, sx, skin, ha);
+    if (def.wristband) b.add(torus([sx * 0.194, 0.86, 0], 0.028, 0.008, [Math.PI / 2, 0, 0], [4, 12]), { color: def.wristband, bone: fo });
   }
 
-  /* ---- legs: hip to ankle, with a calf, bending at the knee */
-  for (const [s, side] of [[-1, 'L'], [1, 'R']]) {
+  /* ---- legs: thigh, kneecap, calf, and a bare foot the shoe sits over */
+  for (const [sx, side] of [[-1, 'L'], [1, 'R']]) {
     const th = `thigh${side}`;
     const sh = `shin${side}`;
     const ft = `foot${side}`;
     const leg = [
-      { p: [s * 0.062, 0.9, 0.006], rx: 0.095, ry: 0.092, w: [['hips', 0.6], [th, 0.4]] },
-      { p: [s * 0.086, 0.82, 0.004], rx: 0.08 + girl * 0.004, ry: 0.082, w: th },
-      { p: [s * 0.09, 0.68, -0.004], rx: 0.068, ry: 0.07, w: th },
-      { p: [s * 0.09, 0.53, 0], rx: 0.052, ry: 0.054, w: th },
-      { p: [s * 0.09, 0.48, -0.002], rx: 0.049, ry: 0.05, w: [[th, 0.5], [sh, 0.5]] },
-      { p: [s * 0.09, 0.37, 0.012], rx: 0.048, ry: 0.054, w: sh },
-      { p: [s * 0.091, 0.22, 0.006], rx: 0.034, ry: 0.035, w: sh },
-      { p: [s * 0.092, 0.11, 0.002], rx: 0.029, ry: 0.03, w: [[sh, 0.6], [ft, 0.4]] },
+      { p: [sx * 0.062, 0.9, 0.006], rx: 0.092, ry: 0.09, w: [['hips', 0.55], [th, 0.45]] },
+      { p: [sx * 0.086, 0.8, 0.004], rx: 0.078 + girl * 0.004, ry: 0.08, w: th },
+      { p: [sx * 0.09, 0.66, -0.002], rx: 0.064, ry: 0.066, w: th },
+      { p: [sx * 0.09, 0.52, 0], rx: 0.05, ry: 0.052, w: th },
+      { p: [sx * 0.09, 0.47, -0.004], rx: 0.044, ry: 0.046, w: [[th, 0.5], [sh, 0.5]] },
+      { p: [sx * 0.09, 0.36, 0.012], rx: 0.048, ry: 0.052, w: sh },
+      { p: [sx * 0.091, 0.22, 0.004], rx: 0.034, ry: 0.034, w: sh },
+      { p: [sx * 0.092, 0.1, 0.002], rx: 0.028, ry: 0.028, w: [[sh, 0.5], [ft, 0.5]] },
     ];
-    const bare = look.legs !== 'long';
-    b.add(tube(leg.map((r) => ({ ...r, c: bare ? skin : pants, pat: bare ? undefined : look.legsPat })), 12, { up: [0, 0, -1] }), {});
-    if (look.legs === 'shorts') b.add(tube(looser(leg.slice(0, 3), 1.16 * baggy, { c: pants, pat: look.legsPat }), 12, { up: [0, 0, -1], caps: false }), {});
-    if (look.socks) b.add(tube(looser(leg.slice(5), 1.08, { c: 0xffffff, pat: { type: PAT.stripesY, color: look.band ?? accent, scale: 14 } }), 12, { up: [0, 0, -1], caps: false }), {});
-    if (look.shoes === 'boots' && !look.socks) b.add(tube(looser(leg.slice(6), 1.22, { c: darker(shoes, 0.9) }), 12, { up: [0, 0, -1], caps: false }), {});
-
-    // shoe (or bare foot in sandals) along the foot, toe down the track
-    const x = s * 0.092;
-    const sandal = look.shoes === 'sandals';
-    const upper = sandal ? skin : look.shoes === 'glow' ? 0x101828 : shoes;
+    b.add(tube(leg.map((r) => ({ ...r, c: skin })), 14, { up: [0, 0, -1] }), {});
+    b.add(ellipsoid([sx * 0.09, 0.5, -0.05], [0.026, 0.02, 0.018], [8, 6]), { color: skin, bone: sh });
+    const x = sx * 0.092;
     b.add(tube([
-      { p: [x, 0.062, 0.045], rx: 0.036, ry: 0.04 },
-      { p: [x, 0.068, 0.0], rx: 0.044, ry: 0.048 },
-      { p: [x, 0.055, -0.06], rx: 0.047, ry: 0.038 },
-      { p: [x, 0.04, -0.12], rx: 0.04, ry: 0.028 },
-      { p: [x, 0.03, -0.152], rx: 0.022, ry: 0.016 },
-    ].map((r) => ({ ...r, c: upper, w: ft })), 10, { up: [0, 1, 0] }), {});
-    const sole = sandal ? shoes : look.shoes === 'gold' ? 0xffffff : 0xf2ece0;
-    b.add(tube([
-      { p: [x, 0.012, 0.05], rx: 0.038, ry: 0.012 },
-      { p: [x, 0.012, -0.04], rx: 0.05, ry: 0.013 },
-      { p: [x, 0.012, -0.14], rx: 0.036, ry: 0.012 },
-    ].map((r) => ({ ...r, c: sole, w: ft })), 10, { up: [0, 1, 0] }), {});
-    if (sandal) {
-      b.add(torus([x, 0.05, -0.07], 0.045, 0.007, [0, 0, 0], [4, 10]), { color: shoes, bone: ft });
-      b.add(torus([x, 0.06, 0.02], 0.042, 0.007, [0, 0, 0], [4, 10]), { color: shoes, bone: ft });
-    } else {
-      // laces
-      for (let i = 0; i < 3; i++) b.add(box([x, 0.088 - i * 0.01, -0.015 - i * 0.03], [0.04, 0.006, 0.01]), { color: look.shoes === 'glow' ? accent : 0xffffff, bone: ft, glow: look.shoes === 'glow' ? 1.3 : 0 });
-    }
-    if (look.shoes === 'glow') b.add(tube([[0.05], [-0.04], [-0.14]].map(([z], i) => ({ p: [x, 0.026, z], rx: [0.039, 0.051, 0.037][i], ry: 0.006, c: accent, glow: 1.4, w: ft })), 10, { up: [0, 1, 0] }), {});
+      { p: [x, 0.048, 0.03], rx: 0.034, ry: 0.03 },
+      { p: [x, 0.044, -0.02], rx: 0.038, ry: 0.028 },
+      { p: [x, 0.034, -0.09], rx: 0.032, ry: 0.02 },
+      { p: [x, 0.026, -0.135], rx: 0.018, ry: 0.012 },
+    ].map((r) => ({ ...r, c: skin, w: ft })), 12, { up: [0, 1, 0] }), {});
   }
 
-  /* ---- kit */
-  for (const g of look.gear) buildGear(b, g, def, look);
+  dress(b, def, { girl, baggy }, outfit);
+  for (const g of look.gear ?? []) buildGear(b, g, def, look);
 
-  const mesh = b.build({ material: rigMaterial({ smooth: true, standard: true }) });
+  const mesh = b.build({ material: rigMaterial({ smooth: true, standard: true, roughness: 0.68 }) });
   mesh.castShadow = true;
   mesh.frustumCulled = false;
   return { mesh, builder: b, scale: look.scale ?? 1 };
 }
 
-/** A face with deep brown eyes under a soft brow, a broad nose and full lips. */
-function buildFace(b, skin, skinD, lip, hair) {
+/** One continuous head: brow, cheeks, nose and lips are pushed out of the same surface. */
+function sculptHead() {
+  const geo = new THREE.SphereGeometry(1, 40, 32);
+  const pos = geo.attributes.position;
+  const v = new THREE.Vector3();
+  const gau = (x, y, z, cx, cy, cz, ax, ay, az) => {
+    const dx = (x - cx) / ax;
+    const dy = (y - cy) / ay;
+    const dz = (z - cz) / az;
+    return Math.exp(-(dx * dx + dy * dy + dz * dz));
+  };
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    let x = v.x * 0.94;
+    let y = v.y * 1.06 - 0.015;
+    let z = v.z;
+    const front = -z;
+    if (y < 0.06) {
+      const t = ramp(0.06 - y, 0, 0.95);
+      x *= 1 - 0.3 * t;
+      z -= 0.045 * t * Math.max(0, front + 0.2);
+    }
+    for (const sx of [-1, 1]) {
+      const cheek = gau(x, y, front, sx * 0.36, -0.02, 0.42, 0.2, 0.16, 0.26);
+      z -= 0.05 * cheek;
+      x += sx * 0.02 * cheek;
+      const socket = gau(x, y, front, sx * 0.3, 0.06, 0.55, 0.15, 0.09, 0.16);
+      z += 0.1 * socket;
+    }
+    z -= 0.08 * gau(x, y, front, 0, 0.32, 0.55, 0.42, 0.08, 0.18);
+    z -= 0.2 * gau(x, y, front, 0, 0.02, 0.62, 0.07, 0.22, 0.16);
+    z -= 0.2 * gau(x, y, front, 0, -0.28, 0.78, 0.09, 0.1, 0.1);
+    for (const sx of [-1, 1]) {
+      const wing = gau(x, y, front, sx * 0.1, -0.34, 0.7, 0.07, 0.05, 0.08);
+      z -= 0.07 * wing;
+      x += sx * 0.03 * wing;
+    }
+    z -= 0.09 * gau(x, y, front, 0, -0.52, 0.62, 0.16, 0.045, 0.1);
+    z -= 0.1 * gau(x, y, front, 0, -0.64, 0.58, 0.15, 0.05, 0.1);
+    z += 0.045 * gau(x, y, front, 0, -0.58, 0.62, 0.1, 0.025, 0.08);
+    z -= 0.05 * gau(x, y, front, 0, -0.86, 0.4, 0.12, 0.08, 0.16);
+    pos.setXYZ(i, HC.x + x * R, HC.y + y * R, HC.z + z * R);
+  }
+  geo.deleteAttribute('normal');
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function headTone(v, skin, lip) {
+  const x = (v.x - HC.x) / R;
+  const y = (v.y - HC.y) / R;
+  const front = -(v.z - HC.z) / R;
+  const band = Math.exp(-(x * x) / 0.028 - ((y + 0.58) ** 2) / 0.006);
+  if (front > 0.42 && band > 0.42) return lip;
+  return skin;
+}
+
+function buildFace(b, skin, skinD, lip, hair, look) {
   const head = 'head';
-  // skull, jaw and cheekbones
-  b.add(ellipsoid(hp(0, 0.05, 0.02), hr(1, 1.12, 1.06), [18, 14]), { color: skin, bone: head });
-  b.add(ellipsoid(hp(0, -0.48, -0.22), hr(0.74, 0.62, 0.78), [14, 10]), { color: skin, bone: head });
-  b.add(ellipsoid(hp(0, -0.86, -0.62), hr(0.34, 0.26, 0.34), [10, 7]), { color: skin, bone: head });
-  // brow ridge
-  b.add(ellipsoid(hp(0, 0.22, -0.84), hr(0.66, 0.16, 0.2), [12, 6]), { color: skin, bone: head });
-  for (const s of [-1, 1]) {
-    // eye: almond white, iris, pupil highlight, upper lid, then a fine brow
-    const ex = s * 0.34;
-    b.add(ellipsoid(hp(ex, 0.06, -0.94), hr(0.2, 0.115, 0.08), [10, 6]), { color: 0xf3ece2, bone: head });
-    b.add(ellipsoid(hp(ex, 0.055, -1.0), hr(0.085, 0.085, 0.035), [10, 6]), { color: 0x2a140a, bone: head });
-    b.add(ellipsoid(hp(ex - s * 0.02, 0.085, -1.03), hr(0.022, 0.022, 0.012), [5, 4]), { color: 0xffffff, bone: head, glow: 0.4 });
-    b.add(cap(hp(ex, 0.1, -0.925), hr(0.21, 0.1, 0.1), 0.85, { rot: [-1.25, 0, 0], seg: 10 }), { color: skinD, bone: head });
-    b.add(box(hp(ex + s * 0.02, 0.31, -1.0), hr(0.34, 0.05, 0.06), [0.1, 0, s * 0.06]), { color: hair, bone: head });
-    // ears
-    b.add(ellipsoid(hp(s * 0.98, -0.05, 0.05), hr(0.13, 0.27, 0.2), [8, 6], { rot: [0, s * 0.3, 0] }), { color: skin, bone: head });
-    b.add(ellipsoid(hp(s * 0.99, -0.05, 0.02), hr(0.07, 0.17, 0.11), [6, 5], { rot: [0, s * 0.3, 0] }), { color: skinD, bone: head });
+  b.add(sculptHead(), { color: (v) => headTone(v, skin, lip), bone: head });
+  // A same-colour sculpt on a dark face disappears. Eyes, nose and lips sit in
+  // front of the skull (its front is near local z = -1) and use a different colour.
+  // Big enough, and a different colour from the skin, so a phone can read them
+  // on a full-body figure as well as in a close-up.
+  const lipC = mix(skin, 0xe07868, 0.82);
+  const noseC = mix(skin, 0xffe0c4, 0.58);
+  const brow = darker(hair, 0.9);
+  for (const sx of [-1, 1]) {
+    const ex = sx * 0.38;
+    b.add(ellipsoid(hp(ex, 0.1, -1.22), hr(0.3, 0.16, 0.1), [12, 8]), { color: 0xf7f4ef, bone: head, glow: 0.22 });
+    b.add(ellipsoid(hp(ex, 0.09, -1.3), hr(0.14, 0.13, 0.055), [10, 8]), { color: 0x5a3418, bone: head });
+    b.add(ellipsoid(hp(ex, 0.088, -1.34), hr(0.062, 0.062, 0.03), [8, 6]), { color: 0x0c0806, bone: head });
+    b.add(ellipsoid(hp(ex - sx * 0.05, 0.13, -1.36), hr(0.028, 0.028, 0.012), [5, 4]), { color: 0xffffff, bone: head, glow: 0.55 });
+    b.add(limb(hp(sx * 0.12, 0.32, -1.12), hp(sx * 0.58, 0.2, -1.08), 0.02, 0.01, 6), { color: brow, bone: head });
+    if (!['wrap', 'hat', 'puffs'].includes(look.hair)) {
+      b.add(ellipsoid(hp(sx * 1.0, -0.08, 0.08), hr(0.1, 0.28, 0.16), [10, 8], { rot: [0.15, sx * 0.45, sx * 0.1] }), { color: skin, bone: head });
+      b.add(ellipsoid(hp(sx * 1.02, -0.06, 0.02), hr(0.05, 0.16, 0.08), [8, 6], { rot: [0.15, sx * 0.45, sx * 0.1] }), { color: skinD, bone: head });
+    }
   }
-  // nose: a bridge, a broad rounded tip and nostril wings
-  b.add(ellipsoid(hp(0, -0.12, -0.96), hr(0.11, 0.24, 0.12), [8, 6]), { color: skin, bone: head });
-  b.add(ellipsoid(hp(0, -0.33, -1.03), hr(0.17, 0.13, 0.14), [10, 7]), { color: skin, bone: head });
-  for (const s of [-1, 1]) {
-    b.add(ellipsoid(hp(s * 0.17, -0.37, -0.97), hr(0.1, 0.09, 0.1), [7, 5]), { color: skin, bone: head });
-    b.add(ellipsoid(hp(s * 0.085, -0.42, -1.0), hr(0.04, 0.025, 0.03), [5, 4]), { color: 0x1a0e08, bone: head });
+  b.add(limb(hp(0, 0.12, -1.08), hp(0, -0.2, -1.42), 0.022, 0.038, 8), { color: noseC, bone: head });
+  b.add(ellipsoid(hp(0, -0.28, -1.4), hr(0.2, 0.14, 0.16), [10, 8]), { color: noseC, bone: head });
+  for (const sx of [-1, 1]) {
+    b.add(ellipsoid(hp(sx * 0.07, -0.36, -1.5), hr(0.05, 0.035, 0.04), [6, 4]), { color: 0x140c09, bone: head });
   }
-  // lips
-  b.add(ellipsoid(hp(0, -0.58, -0.92), hr(0.27, 0.075, 0.11), [10, 6]), { color: lip, bone: head });
-  b.add(ellipsoid(hp(0, -0.69, -0.9), hr(0.24, 0.085, 0.11), [10, 6]), { color: mix(lip, skin, 0.25), bone: head });
-  b.add(box(hp(0, -0.635, -0.98), hr(0.3, 0.018, 0.04)), { color: 0x2a0f0b, bone: head });
+  b.add(ellipsoid(hp(0, -0.56, -1.28), hr(0.34, 0.07, 0.1), [10, 6]), { color: darker(lipC, 0.72), bone: head });
+  b.add(ellipsoid(hp(0, -0.68, -1.26), hr(0.38, 0.1, 0.11), [10, 6]), { color: lipC, bone: head });
+}
+
+/** Palm, four fingers with a knuckle, and a thumb. Palms face in toward the body. */
+function addHand(b, sx, skin, ha) {
+  const hx = sx * 0.2;
+  b.add(ellipsoid([hx, 0.79, -0.01], [0.02, 0.028, 0.012], [10, 8]), { color: skin, bone: ha });
+  for (let i = 0; i < 4; i++) {
+    const z = -0.028 + i * 0.016;
+    const len = [0.026, 0.03, 0.028, 0.022][i];
+    const x1 = hx - sx * 0.004;
+    const y1 = 0.762;
+    b.add(limb([hx, y1, z], [x1, y1 - len * 0.55, z - 0.012], 0.007, 0.006, 6), { color: skin, bone: ha });
+    b.add(limb([x1, y1 - len * 0.55, z - 0.012], [x1, y1 - len, z - 0.006], 0.006, 0.0045, 6), { color: skin, bone: ha });
+  }
+  b.add(limb([hx - sx * 0.012, 0.8, -0.03], [hx - sx * 0.028, 0.778, -0.05], 0.008, 0.0065, 6), { color: skin, bone: ha });
+  b.add(limb([hx - sx * 0.028, 0.778, -0.05], [hx - sx * 0.02, 0.758, -0.062], 0.0065, 0.005, 6), { color: skin, bone: ha });
 }
 
 /* Hair is coily: a fine pattern of tighter and looser coils breaks up the dark mass. */
@@ -580,9 +552,9 @@ function buildClips(b) {
  * A runner with the game's character API: `root`, `shadow`, `update(dt, speed, state)` for
  * states run / jump / slide / ride / fly / idle / dead, and `hit()` for a stumble.
  */
-export function makeRunner(def) {
+export function makeRunner(def, outfit = 'kit') {
   const root = new THREE.Group();
-  const { mesh, builder, scale } = buildBody(def);
+  const { mesh, builder, scale } = buildBody(def, outfitId(outfit));
   mesh.scale.setScalar(scale);
   root.add(mesh);
   const shadow = blobShadow(0.9, 0.9);

@@ -83,6 +83,32 @@ const LOOKS = {
   },
 };
 
+// Kit that belongs to the runner whatever they wear; clothes and shoes come with the outfit.
+const OWN = new Set(['wrap', 'sweatband', 'collar', 'headband', 'bracelets', 'hat', 'binoculars', 'braids', 'necklace', 'hightop', 'chain']);
+const SIGNATURE_SHOES = new Set(['glowshoes', 'goldshoes']);
+
+/** The runner's look in the outfit chosen for the device (OUTFITS in content.js). */
+function wear(def, outfit) {
+  const own = LOOKS[def.id] ?? LOOKS.zuri;
+  const cuts = {
+    kit: { sleeve: 0, hem: 0.12, gear: own.gear.filter((k) => SIGNATURE_SHOES.has(k)) },
+    jersey: {
+      sleeve: 0.4, hem: 0.45, socks: 0xffffff, gear: ['boots'],
+      shirtPat: { type: PAT.diagonal, color: def.accent, scale: 9 }, sockPat: { type: PAT.stripesY, color: def.accent, scale: 12 },
+    },
+    kanga: {
+      sleeve: 0.35, hem: 2, gear: ['skirt', 'sandals'],
+      shirtPat: { type: PAT.zigzag, color: def.accent, scale: 12 }, skirtPat: { type: PAT.dots, color: def.accent, scale: 18 },
+    },
+    vest: { sleeve: 0.42, hem: 0.62, shirt: 0xe4d2ae, vest: 0x5f6b3a, gear: ['backpack', 'boots'] },
+    journey: { sleeve: 1, hem: 2, shukaPat: { type: PAT.check, color: def.accent, scale: 16 }, gear: ['shuka', 'backpack', 'sandals'] },
+  };
+  const cut = cuts[outfit];
+  if (!cut) return own;
+  const plain = { shirtPat: null, pantsPat: null, sockPat: null, socks: null, vest: null, shirt: null };
+  return { ...own, ...plain, ...cut, gear: [...own.gear.filter((k) => OWN.has(k)), ...cut.gear] };
+}
+
 /* ---------------------------------------------------------- outfit shader */
 /** Paints an outfit onto the body in rest-pose space and tints the skin. */
 function dress(material, def, look, body) {
@@ -130,14 +156,14 @@ function dress(material, def, look, body) {
   const hemY = look.hem >= 2 ? 0.12 : body.waist - (body.waist - body.knee - 0.04) * look.hem - 0.04;
   const uniforms = {
     uSkin: { value: new THREE.Color(def.skin).multiplyScalar(1.15) },
-    uShirt: { value: new THREE.Color(def.shirt) },
+    uShirt: { value: new THREE.Color(look.shirt ?? def.shirt) },
     uPants: { value: new THREE.Color(def.dress ?? def.pants) },
     uShoe: { value: new THREE.Color(look.gear.includes('sandals') ? def.skin : def.shoes) },
     uSock: { value: new THREE.Color(look.socks ?? def.skin) },
-    uShirtPC: { value: new THREE.Color(look.shirtPat?.color ?? def.shirt) },
+    uShirtPC: { value: new THREE.Color(look.shirtPat?.color ?? look.shirt ?? def.shirt) },
     uPantsPC: { value: new THREE.Color(look.pantsPat?.color ?? def.pants) },
     uSockPC: { value: new THREE.Color(look.sockPat?.color ?? 0xffffff) },
-    uVest: { value: new THREE.Color(look.vest ?? def.shirt) },
+    uVest: { value: new THREE.Color(look.vest ?? look.shirt ?? def.shirt) },
     // x: pattern, y: scale, z: vest on, w: trouser pattern
     uShirtPT: { value: new THREE.Vector4(sp.x, sp.y, look.vest ? 1 : 0, pp.x) },
     uCut: { value: new THREE.Vector4(body.shoulder, look.sleeve > 0 ? sleeveX : 0, body.waist, hemY) },
@@ -266,10 +292,17 @@ function buildGear(kind, def, look, f) {
       return ['spine_03', g];
     }
     case 'shuka': {
-      const sm = patterned(def.scarf, look.shukaPat);
-      const sash = mesh(G.box, sm, 0.12, 0.62, 0.3, C.x, C.y - 0.06, C.z);
-      sash.rotation.z = 0.75;
-      g.add(sash);
+      // a cloth band wrapped over one shoulder and under the other arm
+      const base = def.scarf ?? def.accent;
+      const pat = look.shukaPat && { ...look.shukaPat, color: def.scarfPattern ?? dark(base, 0.45) };
+      const band = new THREE.Mesh(new THREE.TorusGeometry(1, 0.1, 6, 32), patterned(base, pat));
+      band.rotation.x = Math.PI / 2;
+      band.scale.set(0.2, 0.135, 0.5);
+      const tilt = new THREE.Group();
+      tilt.position.set(C.x, C.y - 0.02, C.z - 0.005);
+      tilt.rotation.z = -0.78;
+      tilt.add(band);
+      g.add(tilt);
       return ['spine_03', g];
     }
     case 'backpack': {
@@ -371,8 +404,7 @@ const CLIP = {
   slide: 'Slide_Start', slideLoop: 'Slide_Loop', ride: 'Driving_Loop', fly: 'Swim_Idle_Loop', dead: 'Death01', hit: 'Hit_Chest',
 };
 
-function buildKid(def, gltf, clipsGltf) {
-  const look = LOOKS[def.id] ?? LOOKS.zuri;
+function buildKid(def, look, gltf, clipsGltf) {
   const body = BODY[look.body];
   const space = new THREE.Group();
   const model = cloneSkinned(gltf.scene);
@@ -428,9 +460,9 @@ function buildKid(def, gltf, clipsGltf) {
 
 /**
  * Wraps the hand-built runner (`fallback`, from people.js) and swaps the modelled character in
- * once loaded. Same API: `root`, `shadow`, `update(dt, speed, state)`, `hit()`.
+ * once loaded, dressed in `outfit`. Same API: `root`, `shadow`, `update(dt, speed, state)`, `hit()`.
  */
-export function makeKidRunner(def, fallback) {
+export function makeKidRunner(def, fallback, outfit = 'kit') {
   const root = fallback.root;
   const holder = new THREE.Group();
   holder.rotation.y = Math.PI; // the models face +z; runners look down the track (-z)
@@ -521,12 +553,12 @@ export function makeKidRunner(def, fallback) {
     },
   };
 
-  const look = LOOKS[def.id] ?? LOOKS.zuri;
+  const look = wear(def, outfit);
   const body = load(`kid-${look.body}`);
   const clips = load('kid-clips');
   Promise.all([body.promise, clips.promise]).then(([g, c]) => {
     if (!g || !c?.animations?.length) return;
-    kid = buildKid(def, g, c);
+    kid = buildKid(def, look, g, c);
     kid.pelvisRest = kid.pelvis.position.clone();
     holder.add(kid.space);
     for (const ch of [...root.children]) if (ch !== holder && ch !== fallback.shadow) ch.visible = false;

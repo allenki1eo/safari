@@ -1,4 +1,4 @@
-import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO, HUNT_WORD } from '../data/content.js';
+import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO, OUTFITS, outfitId, HUNT_WORD } from '../data/content.js';
 import { REGIONS, COUNTRIES } from '../data/regions.js';
 import { save, persist, ensureMissions, checkMissions, claimMissionSet, multiplier, claimDaily } from '../data/save.js';
 import { audio } from '../game/audio.js';
@@ -1103,6 +1103,7 @@ export class UI {
       this.game.setRunner(r.id);
       const owned = save.owned.includes(r.id);
       const selected = save.runner === r.id;
+      const outfit = OUTFITS.find((o) => o.id === outfitId(save.outfit));
       const el = $(`
         <div class="screen select scrim-bottom">
           <div class="sheet-head">
@@ -1115,6 +1116,10 @@ export class UI {
             <div class="role">${esc(r.title)}</div>
             <h2>${esc(r.name)}</h2>
             <p>${esc(r.bio)}</p>
+            <div class="outfit-line">${esc(outfit.line)}</div>
+            <div class="outfits" role="listbox" aria-label="Outfit">
+              ${OUTFITS.map((o) => `<button type="button" class="${o.id === outfit.id ? 'on' : ''}" data-outfit="${o.id}" aria-label="${esc(o.line)}">${esc(o.name)}</button>`).join('')}
+            </div>
             <div class="select-nav">
               <button class="arrow" data-act="prev" aria-label="Previous">‹</button>
               ${owned
@@ -1147,6 +1152,13 @@ export class UI {
         if (act === 'pick') {
           save.runner = r.id;
           persist();
+          render();
+        }
+        const outfitBtn = e.target.closest('[data-outfit]');
+        if (outfitBtn) {
+          save.outfit = outfitId(outfitBtn.dataset.outfit);
+          persist();
+          audio.click();
           render();
         }
       });

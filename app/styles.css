@@ -327,10 +327,15 @@ input { font: inherit; }
 
 /* ---------------------------------------------------------- runner pick */
 .select { justify-content: space-between; }
-.select-card { padding: 20px 18px 18px; text-align: center; animation: rise 0.4s ease both; }
-.select-card h2 { font-family: var(--display); font-weight: 400; font-size: 36px; margin: 0; color: #fff; }
-.select-card .role { color: var(--sun-2); font-size: 14px; letter-spacing: 2px; text-transform: uppercase; }
-.select-card p { margin: 10px auto 16px; font-size: 14px; line-height: 1.4; max-width: 340px; color: rgba(255,244,222,0.85); font-weight: 700; }
+.select.scrim-bottom { background: linear-gradient(to top, rgba(30, 14, 4, 0.9) 0%, rgba(30, 14, 4, 0.4) 26%, transparent 46%); }
+.select-card { padding: 12px 14px 12px; text-align: center; animation: rise 0.4s ease both; }
+.select-card h2 { font-family: var(--display); font-weight: 400; font-size: 28px; margin: 0; color: #fff; }
+.select-card .role { color: var(--sun-2); font-size: 12px; letter-spacing: 2px; text-transform: uppercase; }
+.select-card p {
+  margin: 4px auto 8px; font-size: 13px; line-height: 1.35; max-width: 340px;
+  color: rgba(255,244,222,0.85); font-weight: 700;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
 .select-nav { display: flex; align-items: center; gap: 12px; }
 .select-nav .btn { flex: 1; min-width: 0; padding: 0 12px; font-size: 20px; }
 .arrow { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: var(--glass); border: 1px solid var(--line); font-size: 26px; flex: none; }
@@ -338,6 +343,16 @@ input { font: inherit; }
 .dots { display: flex; justify-content: center; gap: 6px; margin-bottom: 12px; }
 .dots i { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.25); }
 .dots i.on { background: var(--sun); width: 22px; border-radius: 4px; }
+.outfit-line { margin: 0 auto 8px; max-width: 340px; font-size: 12px; line-height: 1.3; color: rgba(255,244,222,0.8); font-weight: 800; }
+.outfits { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 0 0 8px; }
+.outfits button {
+  min-height: 36px; padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--line); background: rgba(255,255,255,0.08);
+  color: var(--cream); font-weight: 800; font-size: 12px;
+}
+.select .arrow { width: 44px; height: 44px; font-size: 22px; }
+.select-nav .btn { min-height: 44px; font-size: 18px; }
+.outfits button.on { background: var(--sun); color: var(--earth); border-color: #fff; }
 
 /* --------------------------------------------------------------- intro */
 .intro { padding: 0; background: #120a06; }

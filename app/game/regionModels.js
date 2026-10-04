@@ -292,6 +292,8 @@ export function makeFlowers(scale = 1) {
 }
 
 /* ============================================================= fauna */
+const soft = (c) => mat(c, { flat: false });
+
 export const RegionAnimals = {
   buffalo: () => Animals.buffalo(),
 
@@ -368,33 +370,38 @@ export const RegionAnimals = {
       },
     };
   },
-
-
   flamingo() {
     const g = new Group();
-    const pink = mat(pick([0xf28fa8, 0xf5a3b8, 0xee7f9c]));
+    const pink = soft(pick([0xf28fa8, 0xf5a3b8, 0xee7f9c]));
     const body = new Group();
     body.position.y = 1.15;
     g.add(body);
-    body.add(mesh(G.ico1, pink, 0.24, 0.2, 0.36));
-    body.add(mesh(G.box, mat(0x1a1a1a), 0.3, 0.05, 0.15, 0, 0, 0.3));
+    body.add(mesh(G.ball, pink, 0.2, 0.16, 0.32));
+    body.add(mesh(G.ball, pink, 0.16, 0.13, 0.18, 0, 0.04, -0.22));
+    // folded wing, darker at the flight feathers
+    body.add(mesh(G.ball, soft(0xd46a88), 0.08, 0.12, 0.28, 0.14, 0.02, 0.04));
+    body.add(mesh(G.ball, soft(0x1a1a1a), 0.05, 0.08, 0.16, 0.12, 0, 0.28));
     const neck = new Group();
-    neck.position.set(0, 0.12, -0.25);
+    neck.position.set(0, 0.1, -0.28);
     body.add(neck);
-    const n1 = mesh(G.cyl6, pink, 0.035, 0.55, 0.035, 0, 0.27, -0.05);
-    n1.rotation.x = -0.25;
+    const n1 = mesh(G.cyl16, pink, 0.028, 0.55, 0.028, 0, 0.27, -0.04);
+    n1.rotation.x = -0.22;
     neck.add(n1);
     const head = new Group();
-    head.position.set(0, 0.55, -0.12);
+    head.position.set(0, 0.54, -0.1);
     neck.add(head);
-    head.add(mesh(G.sphere, pink, 0.07, 0.07, 0.08));
-    const beak = mesh(G.cone, mat(0x1a1a1a), 0.035, 0.16, 0.04, 0, -0.04, -0.1);
-    beak.rotation.x = -2.2;
+    head.add(mesh(G.ball, pink, 0.055, 0.05, 0.06));
+    const beak = mesh(taper(0.35, 12), soft(0x1a1a1a), 0.028, 0.18, 0.022, 0, -0.02, -0.12);
+    beak.rotation.x = Math.PI / 2 + 0.35;
     head.add(beak);
-    const leg = mat(0xe8708c);
-    g.add(mesh(G.cyl6, leg, 0.02, 1.1, 0.02, 0.05, 0.55, 0));
-    const tuck = mesh(G.cyl6, leg, 0.02, 0.5, 0.02, -0.06, 0.9, 0.05);
-    tuck.rotation.x = 1.2;
+    head.add(mesh(G.ball, soft(0xf4efe6), 0.012, 0.012, 0.01, 0.03, 0.02, -0.04));
+    head.add(mesh(G.ball, soft(0x120c08), 0.006, 0.006, 0.006, 0.03, 0.02, -0.048));
+    const leg = soft(0xe8708c);
+    const stand = mesh(G.cyl16, leg, 0.012, 1.1, 0.012, 0.05, 0.55, 0);
+    g.add(stand);
+    g.add(mesh(G.ball, leg, 0.02, 0.012, 0.045, 0.05, 0.02, -0.02));
+    const tuck = mesh(G.cyl16, leg, 0.012, 0.48, 0.012, -0.05, 0.95, 0.02);
+    tuck.rotation.x = 1.15;
     g.add(tuck);
     bakeRigid(g);
     let t = Math.random() * 10;
@@ -408,61 +415,54 @@ export const RegionAnimals = {
     };
   },
 
-  hippo() {
-    const g = new Group();
-    const skin = mat(0x7d6a72);
-    const body = mesh(G.ico1, skin, 0.95, 0.75, 1.5, 0, 0.55, 0);
-    g.add(body);
-    const head = new Group();
-    head.position.set(0, 0.75, -1.45);
-    g.add(head);
-    head.add(mesh(G.ico1, skin, 0.62, 0.45, 0.65));
-    head.add(mesh(G.ico1, mat(0x9a7f86), 0.66, 0.4, 0.45, 0, -0.08, -0.45));
-    for (const x of [-1, 1]) {
-      head.add(mesh(G.sphere, skin, 0.1, 0.12, 0.08, x * 0.3, 0.42, 0.25));
-      head.add(mesh(G.sphere, mat(0x111111), 0.06, 0.06, 0.06, x * 0.28, 0.3, -0.1));
-      head.add(mesh(G.sphere, mat(0x4a3a40), 0.06, 0.04, 0.04, x * 0.2, 0.1, -0.85));
-    }
-    bakeRigid(g);
-    let t = Math.random() * 10;
-    return {
-      root: g,
-      update(dt) {
-        t += dt;
-        head.rotation.x = -0.2 + Math.max(0, Math.sin(t * 0.8)) * -0.5; // the occasional yawn
-      },
-    };
-  },
+  hippo: () => Animals.hippo(),
 
   gorilla(asObstacle = false) {
     const g = new Group();
-    const fur = mat(0x2b2826);
-    const silver = mat(0x8a8780);
-    const face = mat(0x3a3330);
+    const fur = soft(0x2b2826);
+    const silver = soft(0x8a8780);
+    const face = soft(0x4a3e38);
+    const dark = soft(0x1a1614);
     const body = new Group();
     body.position.y = 0.7;
     g.add(body);
-    body.add(mesh(G.ico1, fur, 0.75, 0.8, 0.6, 0, 0.35, 0));
-    body.add(mesh(G.ico1, silver, 0.6, 0.35, 0.5, 0, 0.6, 0.15));
-    body.add(mesh(G.ico1, mat(0x45403c), 0.5, 0.45, 0.2, 0, 0.3, -0.45));
+    body.add(mesh(G.ball, fur, 0.62, 0.55, 0.48, 0, 0.32, 0.02));
+    body.add(mesh(G.ball, silver, 0.48, 0.28, 0.36, 0, 0.48, 0.22));
+    body.add(mesh(G.ball, soft(0x3a332e), 0.38, 0.32, 0.22, 0, 0.22, -0.32));
     const head = new Group();
-    head.position.set(0, 1.25, -0.15);
+    head.position.set(0, 1.05, -0.12);
     body.add(head);
-    head.add(mesh(G.ico1, fur, 0.36, 0.42, 0.36, 0, 0.05, 0));
-    head.add(mesh(G.cone, fur, 0.28, 0.3, 0.28, 0, 0.4, 0.05));
-    head.add(mesh(G.ico1, face, 0.27, 0.25, 0.15, 0, -0.04, -0.28));
-    head.add(mesh(G.sphere, mat(0x111111), 0.04, 0.04, 0.03, -0.1, 0.08, -0.38));
-    head.add(mesh(G.sphere, mat(0x111111), 0.04, 0.04, 0.03, 0.1, 0.08, -0.38));
+    head.add(mesh(G.ball, fur, 0.32, 0.34, 0.3, 0, 0.08, 0.02));
+    head.add(mesh(G.ball, fur, 0.26, 0.16, 0.24, 0, 0.32, 0.04));
+    head.add(mesh(G.ball, face, 0.2, 0.16, 0.14, 0, -0.02, -0.2));
+    head.add(mesh(G.ball, face, 0.1, 0.06, 0.1, 0, -0.06, -0.32));
+    head.add(mesh(G.ball, dark, 0.16, 0.02, 0.04, 0, -0.12, -0.34));
+    for (const x of [-1, 1]) {
+      head.add(mesh(G.ball, soft(0xf4efe6), 0.045, 0.032, 0.02, x * 0.1, 0.06, -0.26));
+      head.add(mesh(G.ball, soft(0x3b2414), 0.022, 0.022, 0.012, x * 0.1, 0.055, -0.275));
+      head.add(mesh(G.ball, dark, 0.01, 0.01, 0.008, x * 0.1, 0.052, -0.284));
+      head.add(mesh(G.ball, dark, 0.025, 0.018, 0.02, x * 0.045, -0.02, -0.38));
+      head.add(mesh(G.ball, face, 0.08, 0.12, 0.05, x * 0.28, 0.02, 0.02));
+    }
     const arms = [];
     for (const x of [-1, 1]) {
       const sh = new Group();
-      sh.position.set(x * 0.7, 0.9, -0.05);
+      sh.position.set(x * 0.48, 0.72, -0.02);
       body.add(sh);
-      sh.add(mesh(G.cyl6, fur, 0.22, 1.1, 0.22, 0, -0.5, 0));
-      sh.add(mesh(G.ico1, face, 0.2, 0.15, 0.24, 0, -1.08, -0.05));
+      sh.add(mesh(G.ball, fur, 0.18, 0.16, 0.16, 0, 0.02, 0));
+      sh.add(mesh(G.cyl16, fur, 0.14, 0.48, 0.15, 0, -0.26, 0.02));
+      const elbow = new Group();
+      elbow.position.set(0, -0.5, 0.04);
+      elbow.rotation.x = 0.45;
+      sh.add(elbow);
+      elbow.add(mesh(G.cyl16, fur, 0.11, 0.46, 0.12, 0, -0.22, 0));
+      elbow.add(mesh(G.ball, face, 0.14, 0.08, 0.18, 0, -0.46, -0.04));
       arms.push({ sh, x });
     }
-    for (const x of [-1, 1]) g.add(mesh(G.ico1, fur, 0.3, 0.35, 0.45, x * 0.45, 0.3, -0.25));
+    for (const x of [-1, 1]) {
+      g.add(mesh(G.ball, fur, 0.22, 0.28, 0.26, x * 0.28, 0.42, -0.08));
+      g.add(mesh(G.ball, face, 0.12, 0.08, 0.16, x * 0.3, 0.08, -0.18));
+    }
     g.add(blobShadow(2.2, 2));
     bakeRigid(g);
     let t = Math.random() * 10;
@@ -484,31 +484,42 @@ export const RegionAnimals = {
 
   croc() {
     const g = new Group();
-    const skin = mat(0x4f5a2e);
-    const belly = mat(0x8a8a52);
+    const skin = soft(0x4f5a2e);
+    const belly = soft(0xc4b56a);
+    const scale = soft(0x3a4422);
     const body = new Group();
     g.add(body);
-    body.add(mesh(G.ico1, skin, 0.55, 0.3, 1.0, 0, 0.3, 0));
-    body.add(mesh(G.ico1, belly, 0.45, 0.15, 0.9, 0, 0.18, 0));
-    for (let i = 0; i < 6; i++) body.add(mesh(G.cone4, mat(0x3f4a24), 0.08, 0.14, 0.08, i % 2 ? 0.18 : -0.18, 0.6, -0.6 + i * 0.25));
+    body.add(mesh(G.ball, skin, 0.42, 0.26, 0.85, 0, 0.32, 0.05));
+    body.add(mesh(G.ball, belly, 0.32, 0.12, 0.7, 0, 0.16, 0.05));
+    for (let i = 0; i < 7; i++) {
+      body.add(mesh(G.cone12, scale, 0.05, 0.1, 0.07, 0, 0.56, -0.55 + i * 0.18));
+    }
     const tail = new Group();
-    tail.position.set(0, 0.3, 0.95);
+    tail.position.set(0, 0.28, 0.85);
     body.add(tail);
-    const t1 = mesh(taper(0.3), skin, 0.25, 1.4, 0.18, 0, 0, 0.65);
+    const t1 = mesh(taper(0.22, 16), skin, 0.22, 1.35, 0.14, 0, 0.04, 0.62);
     t1.rotation.x = Math.PI / 2;
     tail.add(t1);
     const jaw = new Group();
-    jaw.position.set(0, 0.32, -0.9);
+    jaw.position.set(0, 0.3, -0.72);
     body.add(jaw);
     const upper = new Group();
     jaw.add(upper);
-    upper.add(mesh(G.box, skin, 0.42, 0.16, 0.85, 0, 0.06, -0.4));
-    upper.add(mesh(G.sphere, mat(0xd9c84a), 0.06, 0.06, 0.06, -0.15, 0.18, -0.05));
-    upper.add(mesh(G.sphere, mat(0xd9c84a), 0.06, 0.06, 0.06, 0.15, 0.18, -0.05));
-    for (let i = 0; i < 5; i++) upper.add(mesh(G.cone4, mat(0xf4f0e0), 0.03, 0.07, 0.03, i % 2 ? 0.19 : -0.19, -0.04, -0.2 - i * 0.14)).rotation.x = Math.PI;
-    const lower = mesh(G.box, belly, 0.38, 0.1, 0.8, 0, -0.08, -0.38);
+    upper.add(mesh(G.ball, skin, 0.2, 0.1, 0.42, 0, 0.04, -0.38));
+    for (const x of [-1, 1]) {
+      upper.add(mesh(G.ball, soft(0xf4efe6), 0.045, 0.032, 0.03, x * 0.12, 0.12, -0.08));
+      upper.add(mesh(G.ball, soft(0x1a1408), 0.02, 0.02, 0.015, x * 0.12, 0.12, -0.1));
+    }
+    for (let i = 0; i < 6; i++) {
+      const tooth = mesh(G.cone12, soft(0xf4f0e0), 0.018, 0.05, 0.016, i % 2 ? 0.1 : -0.1, -0.02, -0.18 - i * 0.1);
+      tooth.rotation.x = Math.PI;
+      upper.add(tooth);
+    }
+    const lower = mesh(G.ball, belly, 0.18, 0.07, 0.38, 0, -0.04, -0.36);
     jaw.add(lower);
-    for (const [x, z] of [[-0.45, -0.5], [0.45, -0.5], [-0.45, 0.5], [0.45, 0.5]]) body.add(mesh(G.box, skin, 0.18, 0.18, 0.3, x, 0.12, z));
+    for (const [x, z] of [[-0.32, -0.35], [0.32, -0.35], [-0.34, 0.35], [0.34, 0.35]]) {
+      body.add(mesh(G.ball, skin, 0.1, 0.08, 0.16, x, 0.14, z));
+    }
     g.add(blobShadow(1.6, 3.2));
     bakeRigid(g);
     let t = Math.random() * 10;

@@ -47,7 +47,7 @@ After Bwindi the run loops into a *legend lap*. Regions you reach unlock on the 
 
 ### What keeps players coming back
 
-- **A story told across eight regions.** Each one has its own animal narrator, and the sun moves with you: morning on the Serengeti, sunset on Kilimanjaro, night on the Rufiji, dawn over Zanzibar.
+- **A story told across eight regions.** Each one has its own animal narrator, and the sun moves with you: morning on the Serengeti, sunset on Kilimanjaro, night on the Rufiji, a bright day on the Zanzibar coast.
 - **Missions** in sets of three that raise a permanent score multiplier.
 - **Six unlockable runners** (Zuri, Juma, Neema, Baraka, Amani, Kito) and ally upgrades.
 - **Daily rewards** with a 7-day streak.
@@ -60,7 +60,7 @@ After Bwindi the run loops into a *legend lap*. Regions you reach unlock on the 
 ## Tech
 
 - [three.js](https://threejs.org) and vanilla ES modules, bundled with [Vite](https://vitejs.dev). About 175 KB gzipped in total.
-- **Runners:** fully modelled characters from Quaternius's CC0 [Universal Base Characters](https://quaternius.itch.io/universal-base-characters), animated with the CC0 [Universal Animation Library](https://quaternius.itch.io/universal-animation-library) (sprint, jump, slide, roll, sit, stumble, fall). Each runner is dressed in code (`app/game/kids.js`): a skin tone, an outfit painted onto the body with kitenge, kanga, shuka and jersey patterns, hair, and their kit (headwrap, sweatband, bucket hat, beaded collar, braids, shoes). `scripts/build-kids.mjs` compresses everything to about 1.3 MB for a run. The hand-built runner in `people.js` stands in until the files arrive.
+- **Runners:** fully modelled characters from Quaternius's CC0 [Universal Base Characters](https://quaternius.itch.io/universal-base-characters), animated with the CC0 [Universal Animation Library](https://quaternius.itch.io/universal-animation-library) (sprint, jump, slide, roll, sit, stumble, fall). Each runner is dressed in code (`app/game/kids.js`): a skin tone, an outfit painted onto the body with kitenge, kanga, shuka and jersey patterns, hair, and their kit (headwrap, sweatband, bucket hat, beaded collar, braids). Before a run you pick one outfit for the device (a racing kit, a football jersey, a kanga wrap, a ranger vest or a road cloak); it is saved locally and worn on the select screen and the track. `scripts/build-kids.mjs` compresses everything to about 1.3 MB for a run. The hand-built runner in `people.js` stands in until the files arrive.
 - **Animals:** lion, lioness, African elephant, giraffe, zebra, wildebeest and rhino are textured, animated models from [0 A.D.](https://play0ad.com) by Wildfire Games, licensed [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) (`static/models/animals/`, licence text alongside; credited in Settings). Those model files, and any changes to them, stay under that licence; the game's code is unaffected. The cheetah, Fisi's hyena pack and the buffalo are rigged in code with generated gaits (`app/game/rigkit.js`, `fauna.js`), and they also stand in for the 0 A.D. animals while those load (`app/game/wildlife.js`).
 - **No model, texture or audio files.** Trees, trucks and the remaining animals are built from low-poly primitives in `app/game/models.js`. Music (kalimba, djembe, shaker) and sound effects are synthesized with WebAudio in `app/game/audio.js`.
 - A curved-world vertex shader gives the rolling horizon (`app/game/materials.js`).
@@ -75,6 +75,7 @@ app/
   game/rigkit.js     toolkit for skinned characters: shapes, bones, patterns, keyframed clips
   game/kids.js       the runners: loading the modelled characters, dressing them, their clips
   game/people.js     hand-built stand-in runners (used while the models load)
+  game/wardrobe.js   outfits for the hand-built runners
   game/fauna.js      code-rigged animals (cheetah, hyenas, buffalo) and stand-ins
   game/wildlife.js   0 A.D. animals: loading, sizing, clips, Tembo's blanket
   game/materials.js  curved-world shader, material cache, mesh baking
