@@ -4,6 +4,7 @@ import { Look, detectQuality } from './look.js';
 import { Animals, makeEagle, makeHornbill, makeTruck, makeRamp, makeTotem, makePrizeBox, makeLetterToken } from './models.js';
 import { makeRunner } from './people.js';
 import { makeKidRunner, preloadKids } from './kids.js';
+import { preloadWildlife } from './wildlife.js';
 import {
   RegionAnimals, makeLogStyled, makeGateStyled, makeBoulderStyled, makeMoundStyled, makeCart, makeRockfall, makeBeachedCanoe,
 } from './regionModels.js';
@@ -71,6 +72,7 @@ export class Game {
     this.coins = [];
     this.totems = [];
     preloadKids(save.runner);
+    preloadWildlife();
     this.buildCoins();
     this.buildAllies();
     this.buildChasers();
@@ -143,7 +145,7 @@ export class Game {
       duma: Animals.cheetah(),
       twiga: Animals.giraffe(),
       hondo: makeHornbill(),
-      simba: Animals.lion(),
+      simba: Animals.lion({ king: true }),
     };
     this.allyModels.tembo.root.scale.setScalar(0.62);
     this.allyModels.tai.root.scale.setScalar(0.9);

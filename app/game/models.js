@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { G, mat, basic, bend, mesh, taper, blobShadow, emojiTexture, bakeRigid } from './materials.js';
 
 import { makeAnimal } from './fauna.js';
+import { makeWildAnimal } from './wildlife.js';
 
 const { Group } = THREE;
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -135,20 +136,25 @@ function spots(p, color, count, size, target = p.body, spread) {
   }
 }
 
-/** The savanna's animals are rigged and animated in fauna.js. */
+/**
+ * The savanna's animals. Lion, lioness, elephant, giraffe, zebra, wildebeest and rhino are
+ * textured 0 A.D. models (wildlife.js, CC-BY-SA); the code-built rigs in fauna.js stand in
+ * while they load and play the species 0 A.D. doesn't have.
+ */
 export const Animals = {
-  elephant: (opts) => makeAnimal('elephant', opts),
-  giraffe: () => makeAnimal('giraffe'),
-  zebra: () => makeAnimal('zebra'),
+  elephant: (opts = {}) => makeWildAnimal('elephant', () => makeAnimal('elephant', opts), opts),
+  giraffe: () => makeWildAnimal('giraffe', () => makeAnimal('giraffe')),
+  zebra: () => makeWildAnimal('zebra', () => makeAnimal('zebra')),
   cheetah: () => makeAnimal('cheetah'),
-  lion: () => makeAnimal('lion'),
+  // prides are mostly lionesses; Mfalme the ally is always the maned king
+  lion: ({ king = false } = {}) => makeWildAnimal(king || Math.random() < 0.4 ? 'lion' : 'lioness', () => makeAnimal('lion')),
   hyena(boss = false) {
     const a = makeAnimal('hyena', { boss });
     if (boss) a.root.scale.setScalar(1.12);
     return a;
   },
-  rhino: () => makeAnimal('rhino'),
-  wildebeest: () => makeAnimal('wildebeest'),
+  rhino: () => makeWildAnimal('rhino', () => makeAnimal('rhino')),
+  wildebeest: () => makeWildAnimal('wildebeest', () => makeAnimal('wildebeest')),
   buffalo: () => makeAnimal('buffalo'),
 };
 
