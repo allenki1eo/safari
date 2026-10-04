@@ -30,15 +30,34 @@ const NOON = { top: '#3f8ad6', hor: '#ffe7b8', fog: '#f7deaf', sun: '#fff4dc', s
 const GOLD = { top: '#4b5aa8', hor: '#ffb070', fog: '#f4b47a', sun: '#ffb46a', sunI: 2.2, hemiS: '#ffd0a8', hemiG: '#a0663a', hemiI: 1.1, sunH: 0.16, night: 0, cloud: '#ffd2b0' };
 const DUSK = { top: '#2a2a6e', hor: '#ff7a45', fog: '#e8805a', sun: '#ff8040', sunI: 1.6, hemiS: '#ff9a7a', hemiG: '#6a3a2a', hemiI: 0.95, sunH: 0.04, night: 0.15, cloud: '#ff9a7a' };
 const NIGHT = { top: '#070b26', hor: '#26306e', fog: '#1d2558', sun: '#a9bcff', sunI: 0.9, hemiS: '#6a7ad0', hemiG: '#1e1a30', hemiI: 0.75, sunH: 0.5, night: 1, cloud: '#3a4278' };
-const DAWN = { top: '#5a58a8', hor: '#ffad8a', fog: '#e9a68e', sun: '#ffc09a', sunI: 1.7, hemiS: '#ffc8c0', hemiG: '#7a5a52', hemiI: 1.0, sunH: 0.08, night: 0.1, cloud: '#ffd0c8' };
 const BRIGHT = { top: '#3a95e6', hor: '#e8f4ff', fog: '#f2efe2', sun: '#fff6e0', sunI: 2.6, hemiS: '#f2f6ff', hemiG: '#c9b48a', hemiI: 1.35, sunH: 0.8, night: 0, cloud: '#ffffff' };
-// Serengeti morning → crater noon → Kili sunset → Rufiji night → Zanzibar dawn and blazing day
+// Serengeti morning → crater noon → Kili sunset → Rufiji night → Zanzibar in full daylight
 // → Mara day → golden Amboseli → soft misty Bwindi → morning again.
+// The coast starts bright on purpose: a night-to-dawn fade here turned the beach into fog.
 const PALETTES = [
   { at: 0, ...DAY }, { at: 900, ...NOON }, { at: 1750, ...GOLD }, { at: 2200, ...DUSK }, { at: 2550, ...NIGHT },
-  { at: 3000, ...NIGHT }, { at: 3250, ...DAWN }, { at: 3600, ...BRIGHT }, { at: 4300, ...NOON }, { at: 4900, ...DAY },
+  { at: 3000, ...NIGHT }, { at: 3100, ...BRIGHT }, { at: 4300, ...NOON }, { at: 4900, ...DAY },
   { at: 5250, ...GOLD }, { at: 5650, ...DAY }, { at: CYCLE, ...DAY },
 ].map((p) => ({ ...p, top: C(p.top), hor: C(p.hor), fog: C(p.fog), sun: C(p.sun), hemiS: C(p.hemiS), hemiG: C(p.hemiG), cloud: C(p.cloud) }));
+
+/** Sun height and night amount at a journey distance. Used to keep regions in their own light. */
+export function daylightAt(J) {
+  const { a, b, t } = sampleDay(J);
+  return {
+    night: a.night + (b.night - a.night) * t,
+    sunH: a.sunH + (b.sunH - a.sunH) * t,
+  };
+}
+
+function sampleDay(J) {
+  const d = ((J % CYCLE) + CYCLE) % CYCLE;
+  let i = 0;
+  while (i < PALETTES.length - 2 && PALETTES[i + 1].at <= d) i++;
+  const a = PALETTES[i];
+  const b = PALETTES[i + 1];
+  const t = smooth(clamp01((d - a.at) / ((b.at - a.at) || 1)));
+  return { a, b, t };
+}
 
 /* Pre-parsed region colours */
 const RC = REGIONS.map((r) => ({
@@ -555,12 +574,7 @@ export class World {
 
   /* ---------------------------------------------------------------- time */
   setTime(J, dt = 0.016) {
-    const d = ((J % CYCLE) + CYCLE) % CYCLE;
-    let i = 0;
-    while (i < PALETTES.length - 2 && PALETTES[i + 1].at <= d) i++;
-    const a = PALETTES[i];
-    const b = PALETTES[i + 1];
-    const t = smooth(clamp01((d - a.at) / (b.at - a.at)));
+    const { a, b, t } = sampleDay(J);
     const P = this.palette;
     for (const k of ['top', 'hor', 'fog', 'sun', 'hemiS', 'hemiG', 'cloud']) P[k].copy(a[k]).lerp(b[k], t);
     for (const k of ['sunI', 'hemiI', 'sunH', 'night']) P[k] = a[k] + (b[k] - a[k]) * t;

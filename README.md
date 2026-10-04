@@ -47,7 +47,7 @@ After Bwindi the run loops into a *legend lap*. Regions you reach unlock on the 
 
 ### What keeps players coming back
 
-- **A story told across eight regions.** Each one has its own animal narrator, and the sun moves with you: morning on the Serengeti, sunset on Kilimanjaro, night on the Rufiji, dawn over Zanzibar.
+- **A story told across eight regions.** Each one has its own animal narrator, and the sun moves with you: morning on the Serengeti, sunset on Kilimanjaro, night on the Rufiji, a bright day on the Zanzibar coast.
 - **Missions** in sets of three that raise a permanent score multiplier.
 - **Six unlockable runners** (Zuri, Juma, Neema, Baraka, Amani, Kito) and ally upgrades.
 - **Daily rewards** with a 7-day streak.
@@ -60,7 +60,7 @@ After Bwindi the run loops into a *legend lap*. Regions you reach unlock on the 
 ## Tech
 
 - [three.js](https://threejs.org) and vanilla ES modules, bundled with [Vite](https://vitejs.dev). About 175 KB gzipped in total.
-- **Rigged characters, built in code.** The six runners are East African kids with lifelike proportions, smooth-shaded skin and detailed faces (almond eyes, broad noses, full lips, coily hair), each with their own hair (afro puffs, box braids, a high-top, a kitambaa headwrap) and clothes (kitenge, kanga, a Maasai shuka and beaded collar, a football kit). The savanna animals are rigged too: lion, cheetah, Fisi's hyena pack, zebra, wildebeest, buffalo, giraffe, elephant and rhino. Each one is a single skinned mesh with keyframed animation clips: running, jumping, a baseball slide, riding, flying, waving, stumbling and falling for the runners, and walks, gallops, bounding sprints, grazing and tail swishes for the animals. Coat and fabric patterns (stripes, spots, giraffe patches, kitenge zigzags, shuka checks) are painted by a shader. No model files are downloaded (`app/game/rigkit.js`, `people.js`, `fauna.js`).
+- **Rigged characters, built in code.** The six runners are East African kids with lifelike proportions, smooth-shaded skin and sculpted faces (brow, nose, lips and eyes in one surface), each with their own hair (afro puffs, box braids, a high-top, a kitambaa headwrap). Before a run you pick one outfit for the device — a racing kit, a football jersey, a kanga wrap, a ranger vest, or a road cloak — and it is saved locally and worn in the select screen and on the track. The savanna animals are rigged too: lion, cheetah, Fisi's hyena pack, zebra, wildebeest, buffalo, giraffe, elephant, rhino and hippo. Each one is a single skinned mesh with keyframed animation clips: running, jumping, a baseball slide, riding, flying, waving, stumbling and falling for the runners, and walks, gallops, bounding sprints, grazing and tail swishes for the animals. Coat and fabric patterns (stripes, spots, giraffe patches, hide grain, kitenge zigzags, shuka checks) are painted by a shader. No model files are downloaded (`app/game/rigkit.js`, `people.js`, `wardrobe.js`, `fauna.js`).
 - **No model, texture or audio files.** Trees, trucks and the remaining animals are built from low-poly primitives in `app/game/models.js`. Music (kalimba, djembe, shaker) and sound effects are synthesized with WebAudio in `app/game/audio.js`.
 - A curved-world vertex shader gives the rolling horizon (`app/game/materials.js`).
 - Static meshes are merged into vertex-coloured batches at build time, keeping each frame around 150–250 draw calls on phones. Pixel ratio adapts automatically if the frame rate drops.
@@ -72,7 +72,8 @@ app/
   game/world.js      sky, day/night cycle, ground, scenery, herds, particles
   game/models.js     procedural low-poly characters, animals, props
   game/rigkit.js     toolkit for skinned characters: shapes, bones, patterns, keyframed clips
-  game/people.js     the six runners: bodies, faces, hair, clothes and their animations
+  game/people.js     the six runners: bodies, faces, hair and their animations
+  game/wardrobe.js   wearable outfits laid over the runners
   game/fauna.js      rigged savanna animals and their gaits
   game/materials.js  curved-world shader, material cache, mesh baking
   game/audio.js      procedural soundtrack + SFX

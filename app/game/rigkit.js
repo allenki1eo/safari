@@ -31,6 +31,7 @@ export const PAT = {
   diagonal: 8, // football jersey
   rings: 9, // beaded collar, around the y axis
   stripesX: 10, // vertical pinstripes
+  hide: 11, // fine grain and a soft mottle: skin, hide, short fur
 };
 
 const PATTERN_GLSL = /* glsl */ `
@@ -72,7 +73,10 @@ const PATTERN_GLSL = /* glsl */ `
     }
     if (type < 8.5) return step(0.6, fract((p.x + p.y) * 0.7));
     if (type < 9.5) return step(0.5, fract(length(p.xz)));
-    return step(0.6, fract(p.x + p.z * 0.3));
+    if (type < 10.5) return step(0.6, fract(p.x + p.z * 0.3));
+    float grain = hash3(floor(p * 14.0));
+    float mottle = hash3(floor(p * 2.4));
+    return smoothstep(0.4, 0.95, mottle) * 0.6 + step(0.8, grain) * 0.4;
   }
 `;
 
@@ -89,11 +93,11 @@ const materials = new Map();
  * Materials shared by every rigged character. `smooth` shades with vertex normals (rounded,
  * lifelike forms); `standard` adds a soft physically based sheen for skin, hair and fabric.
  */
-export function rigMaterial({ smooth = true, standard = false } = {}) {
-  const key = `${smooth}|${standard}`;
+export function rigMaterial({ smooth = true, standard = false, roughness = 0.74 } = {}) {
+  const key = `${smooth}|${standard}|${roughness}`;
   if (materials.has(key)) return materials.get(key);
   const opts = { vertexColors: true, flatShading: !smooth };
-  const m = bend(standard ? new THREE.MeshStandardMaterial({ ...opts, roughness: 0.72, metalness: 0 }) : new THREE.MeshLambertMaterial(opts), { ...RIG_EXT, key: `rigkit${key}` });
+  const m = bend(standard ? new THREE.MeshStandardMaterial({ ...opts, roughness, metalness: 0 }) : new THREE.MeshLambertMaterial(opts), { ...RIG_EXT, key: `rigkit${key}` });
   const compile = m.onBeforeCompile;
   m.onBeforeCompile = (shader, renderer) => {
     compile(shader, renderer);
@@ -161,12 +165,18 @@ export function torus(c, r, tube, rot = [0, 0, 0], seg = [5, 12]) {
  * a neck, a tail, a trunk or a leg. Per-ring colour and bone weights are interpolated
  * onto the ring's vertices; the ends are capped.
  */
-export function tube(rings, seg = 8, { up = [0, 1, 0], caps = true } = {}) {
+export function tube(rings, seg = 8, { up = [0, 1, 0], caps = true, arc = null } = {}) {
   const pos = [];
   const meta = [];
   const index = [];
   const upV = new V(...up);
   const pts = rings.map((r) => new V(...r.p));
+  // A partial arc (vest fronts, cloth edges) does not wrap. Angles follow the same
+  // frame as a full tube: 0 is one side, half pi is "up" rotated onto the path.
+  const partial = !!arc;
+  const a0 = partial ? arc[0] : 0;
+  const a1 = partial ? arc[1] : TAU;
+  const verts = partial ? seg + 1 : seg;
   for (let i = 0; i < rings.length; i++) {
     const t = (i === 0 ? pts[1].clone().sub(pts[0]) : i === rings.length - 1 ? pts[i].clone().sub(pts[i - 1]) : pts[i + 1].clone().sub(pts[i - 1])).normalize();
     let side = new V().crossVectors(t, upV);
@@ -174,23 +184,23 @@ export function tube(rings, seg = 8, { up = [0, 1, 0], caps = true } = {}) {
     side.normalize();
     const n = new V().crossVectors(side, t).normalize();
     const r = rings[i];
-    for (let j = 0; j < seg; j++) {
-      const a = (j / seg) * TAU;
+    for (let j = 0; j < verts; j++) {
+      const a = partial ? a0 + (j / seg) * (a1 - a0) : (j / seg) * TAU;
       const v = pts[i].clone().addScaledVector(side, Math.cos(a) * r.rx).addScaledVector(n, Math.sin(a) * (r.ry ?? r.rx));
       pos.push(v.x, v.y, v.z);
       meta.push(i);
     }
   }
   for (let i = 0; i < rings.length - 1; i++) {
-    for (let j = 0; j < seg; j++) {
-      const a = i * seg + j;
-      const b = i * seg + ((j + 1) % seg);
-      const c = a + seg;
-      const d = b + seg;
+    for (let j = 0; j < (partial ? seg : seg); j++) {
+      const a = i * verts + j;
+      const b = partial ? a + 1 : i * verts + ((j + 1) % seg);
+      const c = a + verts;
+      const d = b + verts;
       index.push(a, c, b, b, c, d);
     }
   }
-  if (caps) {
+  if (caps && !partial) {
     for (const [i, flip] of [[0, true], [rings.length - 1, false]]) {
       const centre = pos.length / 3;
       pos.push(pts[i].x, pts[i].y, pts[i].z);

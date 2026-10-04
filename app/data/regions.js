@@ -81,7 +81,7 @@ export const REGIONS = [
     line: 'Fisi\'s sneaking onto a dhow bound for Kenya! Through the spice market — quick!',
     blurb: 'White sand, turquoise water, carved doors and the scent of cloves on the breeze.',
     ground: { grass: '#efe2bd', path: '#f6edd2', water: '#3fc1c9', waterSide: -1, beach: true },
-    hill: '#d9cfa8', fog: { tint: '#d6f1f2', amount: 0.25 }, ocean: true, blades: false,
+    hill: '#d9cfa8', fog: { tint: '#c5ebe8', amount: 0.08, near: 150, far: 440 }, ocean: true, blades: false,
     kili: { x: -260, y: -200, z: -720, s: 1 },
     props: [['palm', 6], ['hut', 1.6], ['stonehouse', 1.6], ['bush', 1.5], ['flowers', 2]],
     herd: [],

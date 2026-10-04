@@ -39,6 +39,17 @@ export const RUNNERS = [
   },
 ];
 
+/** Wearable clothes. One choice for the device, worn by whichever runner is selected. */
+export const OUTFITS = [
+  { id: 'kit', name: 'Kit', line: 'A running singlet, split shorts and racing flats.' },
+  { id: 'jersey', name: 'Jersey', line: 'A striped football shirt, socks and boots.' },
+  { id: 'kanga', name: 'Kanga', line: 'A kitenge wrap and a bordered kanga at the waist.' },
+  { id: 'vest', name: 'Vest', line: 'A collared shirt under a pocketed ranger vest.' },
+  { id: 'journey', name: 'Cloak', line: 'A tunic and a shuka for the long road.' },
+];
+
+export const outfitId = (id) => (OUTFITS.some((o) => o.id === id) ? id : OUTFITS[0].id);
+
 export const ALLIES = {
   tembo: {
     id: 'tembo', name: 'Tembo', species: 'Elephant', emoji: '🐘', ring: '#ffb347', color: '#ffb347',

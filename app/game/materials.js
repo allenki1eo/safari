@@ -294,9 +294,12 @@ export const G = {
   ico: new THREE.IcosahedronGeometry(1, 0),
   ico1: new THREE.IcosahedronGeometry(1, 1),
   sphere: new THREE.SphereGeometry(1, 10, 8),
+  ball: new THREE.SphereGeometry(1, 28, 20),
   cyl: new THREE.CylinderGeometry(1, 1, 1, 8),
   cyl6: new THREE.CylinderGeometry(1, 1, 1, 6),
+  cyl16: new THREE.CylinderGeometry(1, 1, 1, 16),
   cone: new THREE.ConeGeometry(1, 1, 7),
+  cone12: new THREE.ConeGeometry(1, 1, 12),
   cone4: new THREE.ConeGeometry(1, 1, 4),
   dodec: new THREE.DodecahedronGeometry(1, 0),
 };

@@ -1,4 +1,4 @@
-import { MISSION_POOL, ALLY_IDS } from './content.js';
+import { MISSION_POOL, ALLY_IDS, outfitId } from './content.js';
 import { regionIndexAt } from './regions.js';
 
 const KEY = 'kimbia.save.v1';
@@ -10,6 +10,7 @@ const defaults = () => ({
   runs: 0,
   name: '',
   runner: 'zuri',
+  outfit: 'kit',
   owned: ['zuri'],
   upgrades: Object.fromEntries(ALLY_IDS.map((id) => [id, 0])),
   missionLevel: 0, // completed sets → multiplier = 1 + missionLevel
@@ -33,6 +34,7 @@ function read() {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const data = { ...defaults(), ...JSON.parse(raw) };
+      data.outfit = outfitId(data.outfit);
       // v1 saves tracked distance-based chapters; translate to journey regions once
       if (data.chapterSeen && !data.regionMax) {
         const OLD = [0, 700, 1700, 3000, 4500, 6500];
