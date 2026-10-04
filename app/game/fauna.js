@@ -62,8 +62,13 @@ function quadSkeleton(d) {
     for (const front of [true, false]) {
       const id = `${front ? 'f' : 'h'}${side}`;
       const top = new THREE.Vector3(sx * d.w * 0.3, (front ? yC : yP) - d.girth * 0.12, front ? zC - 0.02 : zP + 0.02);
-      const knee = new THREE.Vector3(top.x, top.y * 0.52, top.z + (front ? 0.02 : -0.05));
-      const fet = new THREE.Vector3(top.x, Math.max(0.12, d.legR * 1.4), top.z + (front ? 0 : 0.02));
+      // real joint angles: the front leg's elbow and knee, the hind leg's stifle forward and hock back
+      const knee = front
+        ? new THREE.Vector3(top.x, top.y * 0.6, top.z + 0.03)
+        : new THREE.Vector3(top.x, top.y * 0.64, top.z - L * 0.07);
+      const fet = front
+        ? new THREE.Vector3(top.x, Math.max(0.12, top.y * 0.27), top.z - 0.01)
+        : new THREE.Vector3(top.x, Math.max(0.14, top.y * 0.33), top.z + L * 0.06);
       spec.push([`${id}0`, front ? 'chest' : 'pelvis', top.toArray()]);
       spec.push([`${id}1`, `${id}0`, knee.toArray()]);
       spec.push([`${id}2`, `${id}1`, fet.toArray()]);
@@ -145,7 +150,10 @@ function buildQuad(d) {
   b.add(tube(tRings, 6, { up: [0, 0, 1] }), {});
   if (d.tuft) {
     const end = k.t0.clone().addScaledVector(k.tdir, d.tailLen);
-    b.add(ellipsoid(end.toArray(), [d.tailR * 1.8, d.tuft, d.tailR * 1.8], [6, 5]), { color: d.tuftColor ?? 0x1a1410, bone: 'tail2' });
+    const tip = end.clone().addScaledVector(k.tdir, d.tuft * 0.5);
+    b.add(tube([
+      { p: end.toArray(), rx: d.tailR * 0.9 }, { p: end.clone().addScaledVector(k.tdir, d.tuft * 0.2).toArray(), rx: d.tailR * 1.35 }, { p: tip.toArray(), rx: d.tailR * 0.5 },
+    ].map((r) => ({ ...r, c: d.tuftColor ?? 0x1a1410, w: 'tail2' })), 6, { up: [0, 0, 1] }), {});
   }
 
   d.dress?.(b, k, d);

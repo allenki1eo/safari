@@ -10,7 +10,7 @@ import { bend } from './materials.js';
  *   const mesh = b.build();              // one SkinnedMesh, one material, one draw call
  *   const clip = sampleClip('run', 0.7, (t) => ({ thighL: [Math.sin(t * TAU), 0, 0] }), b.boneNames);
  *
- * Everything is vertex-coloured and flat-shaded through one shared curved-world material.
+ * Everything is vertex-coloured and shaded through one shared curved-world material.
  * Fabric and coat patterns (kitenge zigzags, shuka checks, zebra stripes, giraffe patches,
  * spots) are painted per pixel in bind-pose space, so they ride along with the skin.
  */
@@ -84,13 +84,18 @@ const RIG_EXT = {
   fragmentColor: 'diffuseColor.rgb = mix(diffuseColor.rgb, vPatC, patternMask(vBind * vPatT.y, vPatT.x));\n',
 };
 
-let sharedMat;
-/** The one material every rigged character shares. */
-export function rigMaterial() {
-  if (sharedMat) return sharedMat;
-  sharedMat = bend(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), RIG_EXT);
-  const compile = sharedMat.onBeforeCompile;
-  sharedMat.onBeforeCompile = (shader, renderer) => {
+const materials = new Map();
+/**
+ * Materials shared by every rigged character. `smooth` shades with vertex normals (rounded,
+ * lifelike forms); `standard` adds a soft physically based sheen for skin, hair and fabric.
+ */
+export function rigMaterial({ smooth = true, standard = false } = {}) {
+  const key = `${smooth}|${standard}`;
+  if (materials.has(key)) return materials.get(key);
+  const opts = { vertexColors: true, flatShading: !smooth };
+  const m = bend(standard ? new THREE.MeshStandardMaterial({ ...opts, roughness: 0.72, metalness: 0 }) : new THREE.MeshLambertMaterial(opts), { ...RIG_EXT, key: `rigkit${key}` });
+  const compile = m.onBeforeCompile;
+  m.onBeforeCompile = (shader, renderer) => {
     compile(shader, renderer);
     // glowing beads and trims light themselves
     shader.fragmentShader = shader.fragmentShader.replace(
@@ -98,7 +103,8 @@ export function rigMaterial() {
       '#include <emissivemap_fragment>\n totalEmissiveRadiance += diffuseColor.rgb * vGlow;',
     );
   };
-  return sharedMat;
+  materials.set(key, m);
+  return m;
 }
 
 /* ----------------------------------------------------------- primitives */
@@ -246,8 +252,9 @@ export class SkinBuilder {
     return this;
   }
 
-  build() {
+  build({ material = rigMaterial() } = {}) {
     const P = [];
+    const N = [];
     const C = [];
     const SI = [];
     const SW = [];
@@ -258,13 +265,16 @@ export class SkinBuilder {
     const v = new V();
     for (const { geo, color, bone, pat, glow } of this.parts) {
       const g = geo.index ? geo : geo.toNonIndexed();
+      if (!g.attributes.normal) g.computeVertexNormals();
       const pos = g.attributes.position;
+      const nor = g.attributes.normal;
       const base = P.length / 3;
       const rings = geo.userData.rings;
       const ringOf = geo.userData.ringOf;
       for (let i = 0; i < pos.count; i++) {
         v.fromBufferAttribute(pos, i);
         P.push(v.x, v.y, v.z);
+        N.push(nor.getX(i), nor.getY(i), nor.getZ(i));
         const ring = rings?.[ringOf[i]];
         const ringPat = ring?.pat ?? pat;
         const c = ring?.c ?? color;
@@ -295,6 +305,7 @@ export class SkinBuilder {
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
     geo.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
     geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(SI, 4));
     geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(SW, 4));
@@ -304,7 +315,7 @@ export class SkinBuilder {
     geo.setIndex(I);
     geo.computeBoundingSphere();
 
-    const mesh = new THREE.SkinnedMesh(geo, rigMaterial());
+    const mesh = new THREE.SkinnedMesh(geo, material);
     mesh.add(this.list[0]);
     mesh.updateMatrixWorld(true);
     mesh.bind(new THREE.Skeleton(this.list));
