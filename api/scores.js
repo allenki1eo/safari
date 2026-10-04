@@ -23,6 +23,14 @@ export default async function handler(req, res) {
       return send(res, 400, { error: 'Invalid JSON.' });
     }
   }
-  const result = await handleScoreRequest(req.method, req.body);
+  const result = await handleScoreRequest(req.method, req.body, queryOf(req));
   send(res, result.status, result.body);
+}
+
+function queryOf(req) {
+  const query = { ...(req.query || {}) };
+  const raw = req.url || '';
+  const q = raw.includes('?') ? raw.slice(raw.indexOf('?') + 1) : '';
+  for (const [key, value] of new URLSearchParams(q)) query[key] = value;
+  return query;
 }

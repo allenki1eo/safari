@@ -21,7 +21,7 @@ if (url.startsWith('file:')) {
   mkdirSync(dirname(resolve(filePath)), { recursive: true });
 }
 
-const sql = ['001_scores.sql', '002_players.sql']
+const sql = ['001_scores.sql', '002_players.sql', '003_daily.sql']
   .map((file) => readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8'))
   .join('\n');
 const client = createClient({ url, authToken });

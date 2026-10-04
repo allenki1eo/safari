@@ -1,5 +1,8 @@
 import { REGIONS, COUNTRIES } from '../data/regions.js';
 import { save } from '../data/save.js';
+import { challengeUrl as liveChallengeUrl, whatsAppHref, shareText } from '../data/daily.js';
+
+export { whatsAppHref, shareText };
 
 /** Draws a 1080×1350 social card for the run — the viral loop's centrepiece. */
 export async function makeCard(run) {
@@ -98,11 +101,11 @@ export async function makeCard(run) {
   g.fillText(`${run.distance.toLocaleString()}m`, W / 2, 610);
   g.font = '800 44px Nunito, sans-serif';
   g.fillStyle = '#ffc940';
-  g.fillText(`★ ${run.score.toLocaleString()} points  ·  ${run.seeds} seeds`, W / 2, 690);
-  const reg = REGIONS[Math.max(0, run.chapter)];
+  g.fillText(run.rank ? `Today #${run.rank}` : `★ ${run.score.toLocaleString()} points`, W / 2, 690);
+  const miss = run.nearMiss?.line ? `${run.nearMiss.line} · ${run.nearMiss.shout}` : 'Clean run';
   g.font = '800 32px Nunito, sans-serif';
   g.fillStyle = 'rgba(255,244,222,0.8)';
-  g.fillText(`Reached ${reg.name}, ${COUNTRIES[reg.country].name}`, W / 2, 740);
+  g.fillText(miss, W / 2, 740);
 
   // call to action
   g.font = '72px "Lilita One", sans-serif';
@@ -110,7 +113,7 @@ export async function makeCard(run) {
   g.fillText('Can you beat me?', W / 2, H - 140);
   g.font = '800 34px Nunito, sans-serif';
   g.fillStyle = 'rgba(255,244,222,0.85)';
-  g.fillText(`Play free ▸ ${location.host || 'kimbia.game'}`, W / 2, H - 70);
+  g.fillText('Play free ▸ safari-blush.vercel.app', W / 2, H - 70);
 
   return new Promise((r) => c.toBlob(r, 'image/png'));
 }
@@ -152,10 +155,11 @@ function giraffe(g, x, y, s) {
 }
 
 export function challengeUrl(run) {
-  const u = new URL(location.origin + '/');
-  u.searchParams.set('c', run.score);
-  if (save.name) u.searchParams.set('n', save.name.slice(0, 16));
-  return u.toString();
+  return liveChallengeUrl({
+    ...run,
+    name: run.name || save.name,
+    runner: run.runner || save.runner,
+  });
 }
 
 /** Web Share with image when supported; falls back to text share, then download+copy. */

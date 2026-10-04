@@ -10,6 +10,7 @@ import {
   handleScoreRequest,
   nameKey,
   resetLeaderboardClient,
+  setLeaderboardClock,
   validateSubmission,
 } from './leaderboard.js';
 import { leaveDecision, runnerName, scoreSavePlan } from '../app/ui/leaderboard.js';
@@ -42,6 +43,7 @@ async function withDb(fn, seed) {
     if (prevToken == null) delete process.env.TURSO_AUTH_TOKEN;
     else process.env.TURSO_AUTH_TOKEN = prevToken;
     resetLeaderboardClient();
+    setLeaderboardClock();
     rmSync(dir, { recursive: true, force: true });
   }
 }
@@ -223,4 +225,41 @@ test('old per-run rows fold into one player each, claimable by the first device'
   await c.execute("INSERT INTO scores (name, score, distance, seeds) VALUES ('Hanki', 200, 46, 4)");
   await c.execute("INSERT INTO scores (name, score, distance, seeds) VALUES ('Hanki', 3426, 432, 132)");
   await c.execute("INSERT INTO scores (name, score, distance, seeds) VALUES ('probe', 1, 1, 0)");
+}));
+
+test('today\'s board resets at midnight in Dar and yesterday\'s best is the only ghost', () => withDb(async () => {
+  // 23:30 in Dar es Salaam on 4 Oct 2026
+  setLeaderboardClock(() => new Date('2026-10-04T20:30:00Z'));
+  const juma = await post({ token: T.juma, name: 'Juma', score: 800, distance: 200, duration: 40, runner: 'juma' });
+  assert.equal(juma.status, 200);
+  assert.equal(juma.body.daily.day, '2026-10-04');
+  assert.equal(juma.body.daily.rank, 1);
+  assert.equal(juma.body.entry.rank, 1, 'all-time rank is unchanged');
+
+  const worse = await post({ token: T.juma, name: 'Juma', score: 100, distance: 20, duration: 5 });
+  assert.equal(worse.body.entry.score, 800);
+  const kept = await handleScoreRequest('GET', undefined, { board: 'daily' });
+  assert.equal(kept.body.top[0].score, 800);
+  assert.equal(kept.body.top[0].distance, 200, 'today\'s ghost keeps the better run');
+
+  await post({ token: T.neema, name: 'Neema', score: 500, distance: 90, duration: 20 });
+  const today = await handleScoreRequest('GET', undefined, { board: 'daily' });
+  assert.equal(today.body.day, '2026-10-04');
+  assert.deepEqual(today.body.top.map((row) => row.name), ['Juma', 'Neema']);
+  assert.equal(today.body.yesterday, null, 'no ghost until a previous day has a real run');
+
+  // 00:30 in Dar on 5 Oct — the daily board is empty and Juma is yesterday's ghost
+  setLeaderboardClock(() => new Date('2026-10-04T21:30:00Z'));
+  const rolled = await handleScoreRequest('GET', undefined, { board: 'daily' });
+  assert.equal(rolled.body.day, '2026-10-05');
+  assert.deepEqual(rolled.body.top, []);
+  assert.deepEqual(rolled.body.yesterday, {
+    name: 'Juma', score: 800, distance: 200, duration: 40, runner: 'juma',
+  });
+
+  const quiet = await post({ token: T.amani, name: 'Amani', score: 0 });
+  assert.equal(quiet.body.daily, null, 'claiming a name does not enter today\'s board');
+
+  const all = await handleScoreRequest('GET');
+  assert.deepEqual(all.body.top.map((row) => row.name), ['Juma', 'Neema']);
 }));

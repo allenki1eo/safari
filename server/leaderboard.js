@@ -7,13 +7,14 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { RUNNERS } from '../app/data/content.js';
+import { darDay, shiftDarDay } from '../app/data/daily.js';
 import { REGIONS } from '../app/data/regions.js';
 import { loadLocalEnv } from './env.js';
 
 loadLocalEnv();
 
 // Applied in order on first use; every statement is idempotent.
-const SCHEMA_SQL = ['001_scores.sql', '002_players.sql']
+const SCHEMA_SQL = ['001_scores.sql', '002_players.sql', '003_daily.sql']
   .map((file) => readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8'))
   .join('\n');
 const TOKEN_RE = /^[a-f0-9]{64}$/;
@@ -25,6 +26,14 @@ const SCORE_MAX = 99_999_999;
 const DISTANCE_MAX = 9_999_999;
 const SEEDS_MAX = 999_999;
 const ALLIES_MAX = 999;
+const DURATION_MAX = 100_000;
+
+let clock = () => new Date();
+
+/** Tests pin the Dar day. Production uses the real clock. */
+export function setLeaderboardClock(fn) {
+  clock = typeof fn === 'function' ? fn : () => new Date();
+}
 // `chapter` is the furthest journey region reached (0 = Serengeti … 7 = Bwindi)
 const CHAPTER_MAX = REGIONS.length - 1;
 const RUNNER_IDS = new Set(RUNNERS.map((runner) => runner.id));
@@ -120,6 +129,8 @@ export function validateSubmission(body) {
   if (allies == null) return { ok: false, error: 'Allies must be a non-negative integer.' };
   const chapter = body.chapter == null ? 0 : strictInt(body.chapter, CHAPTER_MAX);
   if (chapter == null) return { ok: false, error: 'Chapter is not valid.' };
+  const duration = body.duration == null ? 0 : strictInt(body.duration, DURATION_MAX);
+  if (duration == null) return { ok: false, error: 'Duration must be a non-negative integer.' };
   let runner = 'zuri';
   if (body.runner != null && body.runner !== '') {
     if (typeof body.runner !== 'string' || !RUNNER_IDS.has(body.runner)) {
@@ -127,7 +138,7 @@ export function validateSubmission(body) {
     }
     runner = body.runner;
   }
-  return { ok: true, value: { token: body.token, name, score, distance, seeds, allies, chapter, runner } };
+  return { ok: true, value: { token: body.token, name, score, distance, seeds, allies, chapter, runner, duration } };
 }
 
 function mapRow(row, rank) {
@@ -242,12 +253,111 @@ export async function submitScore(body) {
   const best = Number(player.best_score);
   const rank = best > 0 ? await rankOf(db, best, id) : null;
   const top = await queryTop(db);
-  return { status: 200, body: { entry: { ...mapRow(player, rank), improved, run: v.score }, top } };
+  // The all-time row above is unchanged. Today's rank is only here so the
+  // share card can show where this run sits on the daily board.
+  const daily = v.score > 0 ? await recordDaily(db, id, v) : null;
+  return { status: 200, body: { entry: { ...mapRow(player, rank), improved, run: v.score }, top, daily } };
 }
 
-export async function handleScoreRequest(method, body) {
+const DAILY_UPSERT = `
+  INSERT INTO daily_scores (day, player_id, name, score, distance, duration, seeds, allies, chapter, runner)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT(day, player_id) DO UPDATE SET
+    name = excluded.name,
+    runner = CASE WHEN excluded.score > daily_scores.score THEN excluded.runner ELSE daily_scores.runner END,
+    score = CASE WHEN excluded.score > daily_scores.score THEN excluded.score ELSE daily_scores.score END,
+    distance = CASE WHEN excluded.score > daily_scores.score THEN excluded.distance ELSE daily_scores.distance END,
+    duration = CASE WHEN excluded.score > daily_scores.score THEN excluded.duration ELSE daily_scores.duration END,
+    seeds = CASE WHEN excluded.score > daily_scores.score THEN excluded.seeds ELSE daily_scores.seeds END,
+    allies = CASE WHEN excluded.score > daily_scores.score THEN excluded.allies ELSE daily_scores.allies END,
+    chapter = CASE WHEN excluded.score > daily_scores.score THEN excluded.chapter ELSE daily_scores.chapter END
+`;
+
+async function recordDaily(db, playerId, v) {
+  const day = darDay(clock());
+  await db.execute({
+    sql: DAILY_UPSERT,
+    args: [day, playerId, v.name, v.score, v.distance, v.duration, v.seeds, v.allies, v.chapter, v.runner],
+  });
+  const stored = (await db.execute({
+    sql: 'SELECT id, score FROM daily_scores WHERE day = ? AND player_id = ?',
+    args: [day, playerId],
+  })).rows[0];
+  const storedScore = Number(stored.score);
+  const rankId = storedScore === v.score ? Number(stored.id) : 0;
+  const rank = await dailyRank(db, day, v.score, rankId);
+  return { day, rank, score: v.score, distance: v.distance };
+}
+
+async function dailyRank(db, day, score, id) {
+  const result = await db.execute({
+    sql: `SELECT COUNT(*) AS n FROM daily_scores
+          WHERE day = ? AND (score > ? OR (score = ? AND id < ?))`,
+    args: [day, score, score, id],
+  });
+  return Number(result.rows[0].n) + 1;
+}
+
+function mapDaily(row, rank) {
+  return {
+    id: Number(row.id),
+    rank,
+    name: String(row.name),
+    score: Number(row.score),
+    distance: Number(row.distance),
+    seeds: Number(row.seeds),
+    allies: Number(row.allies),
+    chapter: Number(row.chapter),
+    runner: String(row.runner),
+  };
+}
+
+const DAILY_TOP_SQL = `
+  SELECT id, name, score, distance, duration, seeds, allies, chapter, runner
+  FROM daily_scores
+  WHERE day = ? AND score > 0
+  ORDER BY score DESC, id ASC
+  LIMIT ?
+`;
+
+async function queryDaily(db, day) {
+  const result = await db.execute({ sql: DAILY_TOP_SQL, args: [day, TOP_LIMIT] });
+  return result.rows.map((row, index) => mapDaily(row, index + 1));
+}
+
+/** Yesterday's best real run, or null when that day has no ghost to draw. */
+async function yesterdayBest(db, today) {
+  const result = await db.execute({
+    sql: `SELECT name, score, distance, duration, runner
+          FROM daily_scores
+          WHERE day = ? AND score > 0 AND distance > 0 AND duration > 0
+          ORDER BY score DESC, id ASC
+          LIMIT 1`,
+    args: [shiftDarDay(today, -1)],
+  });
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    name: String(row.name),
+    score: Number(row.score),
+    distance: Number(row.distance),
+    duration: Number(row.duration),
+    runner: String(row.runner),
+  };
+}
+
+async function dailyBoard() {
+  const db = await getClient();
+  const day = darDay(clock());
+  return { day, top: await queryDaily(db, day), yesterday: await yesterdayBest(db, day) };
+}
+
+export async function handleScoreRequest(method, body, query) {
   try {
-    if (method === 'GET') return { status: 200, body: { top: await listTop() } };
+    if (method === 'GET') {
+      if (query?.board === 'daily') return { status: 200, body: await dailyBoard() };
+      return { status: 200, body: { top: await listTop() } };
+    }
     if (method === 'POST') return await submitScore(body);
     return { status: 405, body: { error: 'Method not allowed.' } };
   } catch (err) {

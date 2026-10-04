@@ -7,6 +7,8 @@ import {
   RegionAnimals, makeFeverTree, makeGroundsel, makeLobelia, makeMontane, makeSnowRock, makePalm, makeDoum,
   makePapyrus, makeHut, makeStoneHouse, makeBanana, makeJungleTree, makeFern, makeTreeFern, makeFlowers, makeDhow,
 } from './regionModels.js';
+import { darDay } from '../data/daily.js';
+import { HERD_STEP, herdCursor, planHerd } from './layout.js';
 import { REGIONS, regionIndexAt, PROP_TYPES, JOURNEY_LEN } from '../data/regions.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -151,7 +153,13 @@ export class World {
     this.pools = new Map();
     this.props = [];
     this.herd = [];
+    this.day = darDay();
     this.reset(0);
+  }
+
+  /** Locks herd layout to one Dar day for the whole run. */
+  setDay(day) {
+    if (day) this.day = day;
   }
 
   /* --------------------------------------------------------------- region */
@@ -496,23 +504,18 @@ export class World {
 
   spawnHerd(wz) {
     const region = REGIONS[regionIndexAt(wz).index];
-    if (!region.herd.length) return;
-    const [kind, mode] = weighted(region.herd);
+    const plan = planHerd(region, this.day, wz);
+    if (!plan) return;
+    const { kind, mode, xr } = plan;
     const a = this.take(kind, () => {
       const m = HERD[kind]();
       m.root.userData.anim = m;
       return m.root;
     });
     const anim = a.userData.anim;
-    const water = region.ground.water ? region.ground.waterSide ?? -1 : 0;
-    const wet = kind === 'hippo' || kind === 'flamingo';
-    let side = Math.random() < 0.5 ? -1 : 1;
-    if (wet && water) side = water;
-    const big = kind === 'elephant' || kind === 'giraffe';
-    const xr = wet && water ? [17, 40] : kind === 'gorilla' ? [6, 16] : big ? [16, 40] : [11, 32];
-    a.position.set(side * rand(xr[0], xr[1]), wet && water && kind === 'hippo' ? -0.55 : 0, 0);
-    Object.assign(a.userData, { wz, xr, mode, walkV: rand(0.6, 1.4), dir: side });
-    a.rotation.y = mode === 'walk' ? (side > 0 ? -Math.PI / 2 : Math.PI / 2) : rand(0, Math.PI * 2);
+    a.position.set(plan.x, plan.y, 0);
+    Object.assign(a.userData, { wz, xr, mode, walkV: plan.walkV, dir: plan.dir });
+    a.rotation.y = plan.rot;
     a.visible = true;
     if (!a.parent) this.scene.add(a);
     this.herd.push({ root: a, anim });
@@ -525,7 +528,7 @@ export class World {
     this.props = [];
     this.herd = [];
     this.propCursor = J - 20;
-    this.herdCursor = J + rand(10, 30);
+    this.herdCursor = herdCursor(J);
     this.bladeTiles?.forEach((t, i) => (t.userData.wz = Math.floor(J / this.bladeLen) * this.bladeLen + (i - 0.25) * this.bladeLen));
     const base = Math.floor((J - 16) / SEG_LEN) * SEG_LEN;
     this.segments.forEach((s, i) => {
@@ -546,7 +549,7 @@ export class World {
     }
     while (this.herdCursor < J + AHEAD + 20) {
       this.spawnHerd(this.herdCursor);
-      this.herdCursor += rand(16, 30);
+      this.herdCursor += HERD_STEP;
     }
   }
 
