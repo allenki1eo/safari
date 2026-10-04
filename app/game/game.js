@@ -11,11 +11,11 @@ import {
 import { World, Particles, LANE_W } from './world.js';
 import { audio } from './audio.js';
 import { makeChunk, KINDS, TRUCK_LEN, JUMP_V, GRAVITY } from './patterns.js';
-import { RUNNERS, ALLIES, ALLY_IDS, TUTORIAL, SHOUTS, outfitId, HUNT_WORD, HUNT_PRIZE } from '../data/content.js';
+import { RUNNERS, ALLIES, ALLY_IDS, TUTORIAL, SHOUTS, outfitId, HUNT_WORDS, HUNT_PER_LETTER } from '../data/content.js';
 import { REGIONS, regionIndexAt, regionAt } from '../data/regions.js';
 import { save, persist, multiplier } from '../data/save.js';
 import {
-  chunkPlan, darDay, ghostDistance, lionClip, nearMissSpec, rngAt, waterClear, wildebeestFill,
+  chunkPlan, darDay, ghostDistance, huntWord, lionClip, nearMissSpec, rngAt, waterClear, wildebeestFill,
 } from '../data/daily.js';
 
 const LANES = [-LANE_W, 0, LANE_W];
@@ -223,7 +223,7 @@ export class Game {
     this.seeds = 0;
     this.combo = 0;
     this.comboT = 0;
-    this.stats = { seeds: 0, distance: 0, jumps: 0, slides: 0, allies: 0, score: 0, roofs: 0, smash: 0, nearMiss: 0, regions: 0, bestCombo: 0, boxes: 0 };
+    this.stats = { seeds: 0, distance: 0, jumps: 0, slides: 0, allies: 0, score: 0, roofs: 0, smash: 0, nearMiss: 0, regions: 0, bestCombo: 0, boxes: 0, words: 0 };
     this.shield = 0;
     this.lap = 0;
     this.runTime = 0;
@@ -245,8 +245,9 @@ export class Game {
     this.ghostPassed = false;
     this.nextTotemAt = 260 + rngAt(this.day, 3, 0)() * 140;
     this.nextBoxAt = 160 + rngAt(this.day, 6, 0)() * 120;
-    this.nextLetterAt = 220 + Math.random() * 200;
-    if (save.hunt?.day !== this.day) save.hunt = { day: this.day, got: 0 };
+    this.nextLetterAt = 200 + Math.random() * 160;
+    if (save.hunt?.day !== this.day) save.hunt = { day: this.day, done: 0, got: 0 };
+    save.hunt.done ??= 0;
     this.revives = 0;
     this.deathT = 0;
     for (const a of Object.values(this.allyModels)) a.root.visible = false;
@@ -594,8 +595,9 @@ export class Game {
     if (anim) m = anim.root;
     else if (kind !== 'rockfall' && kind !== 'water') finishProp(bakeRigid(m, true));
     castShadows(m);
-    // animals in the lane face the runner
-    if (kind === 'croc' || kind === 'gorilla') m.rotation.y = Math.PI;
+    // animals in the lane face the runner (the models face down the track, -z), so chargers
+    // run head first rather than backwards
+    if (anim && kind !== 'crossing') m.rotation.y = Math.PI;
     if (kind === 'crossing') {
       m.scale.setScalar(0.72);
       m.rotation.y = opts.cross.dir > 0 ? -Math.PI / 2 : Math.PI / 2;
@@ -951,7 +953,8 @@ export class Game {
         rng: plan.rng,
         region: regionAt(this.startJ + plan.z),
         wantTotem: plan.z + 150 > this.nextTotemAt,
-        wantBox: plan.z > this.nextBoxAt,
+        // a slot for the next prize box, or for the next hunt letter when one is due
+        wantBox: plan.z > this.nextBoxAt || (plan.z > this.nextLetterAt && !this.letterOut && save.hunt.got < this.huntWord().word.length),
       });
       this.applyChunk(chunk.ops);
       this.nextChunk += chunk.len + plan.gap;
@@ -1002,16 +1005,18 @@ export class Game {
 
   addBox(lane, wz, y = 0) {
     // some of the open-ground slots carry the next letter of the day's word instead
-    if (y === 0 && wz > this.nextLetterAt && save.hunt.got < HUNT_WORD.length && !this.letterOut) {
-      const char = HUNT_WORD[save.hunt.got];
+    const { word } = this.huntWord();
+    if (y === 0 && wz > this.nextLetterAt && save.hunt.got < word.length && !this.letterOut) {
+      const char = word[save.hunt.got];
       const m = makeLetterToken(char);
       m.position.set(LANES[lane], 0, 0);
       this.scene.add(m);
       this.boxes.push({ lane, wz, y, mesh: m, letter: char });
       this.letterOut = true;
-      this.nextLetterAt = wz + 350 + Math.random() * 300;
+      this.nextLetterAt = wz + 200 + Math.random() * 180;
       return;
     }
+    if (wz <= this.nextBoxAt) return; // the slot was asked for a letter that can't sit here
     const m = makePrizeBox();
     m.position.set(LANES[lane], y, 0);
     this.scene.add(m);
@@ -1066,26 +1071,40 @@ export class Game {
     this.emit('prize', out);
   }
 
+  /** The word being hunted: today's chain, after the words already spelled. */
+  huntWord() {
+    return huntWord(HUNT_WORDS, save.hunt.day || this.day, save.hunt.done);
+  }
+
   collectLetter(b) {
     this.letterOut = false;
+    const { word, line } = this.huntWord();
     save.hunt.got++;
     persist();
     const z = this.D - b.wz;
     this.fx.sparkle(LANES[b.lane], 1.3, z, 0xffe58a, 16);
     audio.chime();
     this.haptic(20);
-    const done = save.hunt.got >= HUNT_WORD.length;
-    this.emit('letter', { got: save.hunt.got, word: HUNT_WORD, done });
-    if (done) {
-      this.seeds += HUNT_PRIZE;
-      this.stats.seeds = this.seeds;
-      save.charms = (save.charms ?? 0) + 1;
-      persist();
-      this.emit('seed', this.seeds);
-      this.emit('shield', { on: this.shield > 0 });
-      audio.powerup();
-      this.emit('prize', { emoji: '🏆', title: `${HUNT_WORD}!`, sub: `Word hunt complete · +${HUNT_PRIZE} seeds & a shield`, big: true });
-    } else this.emit('shout', { text: b.letter, sub: `${HUNT_WORD.slice(0, save.hunt.got)}… word hunt` });
+    const done = save.hunt.got >= word.length;
+    this.emit('letter', { got: save.hunt.got, word, done });
+    if (!done) {
+      this.emit('shout', { text: b.letter, sub: `${word.slice(0, save.hunt.got)}… word hunt` });
+      return;
+    }
+    const prize = word.length * HUNT_PER_LETTER;
+    this.seeds += prize;
+    this.stats.seeds = this.seeds;
+    this.stats.words++;
+    save.charms = (save.charms ?? 0) + 1;
+    // on to the next word in today's chain
+    save.hunt.done++;
+    save.hunt.got = 0;
+    persist();
+    this.emit('seed', this.seeds);
+    this.emit('shield', { on: this.shield > 0 });
+    audio.powerup();
+    this.emit('prize', { emoji: '🏆', title: `${word}!`, sub: `${line} · +${prize} seeds & a shield`, big: true });
+    this.emit('hunt', { word: this.huntWord().word, got: 0, delay: 3000 });
   }
 
   /* ------------------------------------------------------------- pickups */

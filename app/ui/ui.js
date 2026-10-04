@@ -1,10 +1,10 @@
-import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO, OUTFITS, outfitId, HUNT_WORD } from '../data/content.js';
+import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO, OUTFITS, outfitId, HUNT_WORDS } from '../data/content.js';
 import { REGIONS, COUNTRIES } from '../data/regions.js';
 import { save, persist, ensureMissions, checkMissions, claimMissionSet, multiplier, claimDaily } from '../data/save.js';
 import { audio } from '../game/audio.js';
 import { whatsAppHref } from './share.js';
 import { fetchBoard, leaveDecision, postScore, renderRows, runnerName, scoreSavePlan } from './leaderboard.js';
-import { darDay, ghostFrom, parseShareLink, routeForLink } from '../data/daily.js';
+import { darDay, ghostFrom, huntWord, parseShareLink, routeForLink } from '../data/daily.js';
 
 const $ = (html) => {
   const t = document.createElement('template');
@@ -100,7 +100,9 @@ export class UI {
     game.on('shield', (e) => this.onShield(e));
     game.on('lap', (e) => this.onLap(e));
     game.on('prize', (e) => this.onPrize(e));
-    game.on('letter', (e) => this.paintHunt(e.got));
+    game.on('letter', (e) => this.paintHunt(e.word, e.got));
+    // the next word in today's chain takes over once the prize card has had its moment
+    game.on('hunt', (e) => setTimeout(() => this.paintHunt(e.word, e.got, true), e.delay));
     game.on('quality', () => this.toast('✨', 'Switched to Low graphics to keep things smooth — change it in Settings.'));
   }
 
@@ -295,7 +297,7 @@ export class UI {
             <div class="dist">0m</div>
           </div>
         </div>
-        <div class="hunt" aria-label="Daily word hunt">${[...HUNT_WORD].map((c) => `<i>${c}</i>`).join('')}</div>
+        <div class="hunt" aria-label="Word hunt"></div>
         <div class="combo"></div>
         <div class="powers"></div>
         <div class="warns"></div>
@@ -325,7 +327,8 @@ export class UI {
     this.powerEls = {};
     this.last = {};
     this.overlay(el);
-    this.paintHunt(save.hunt?.day === darDay() ? save.hunt.got : 0);
+    const today = save.hunt?.day === darDay();
+    this.paintHunt(huntWord(HUNT_WORDS, darDay(), today ? save.hunt.done ?? 0 : 0).word, today ? save.hunt.got : 0);
   }
 
   removeHud() {
@@ -480,15 +483,21 @@ export class UI {
     setTimeout(() => el.remove(), 3300);
   }
 
-  /** Lights up the letters of the day's word found so far. */
-  paintHunt(got) {
+  /** Shows the word being hunted, its found letters lit; a new word slides in fresh. */
+  paintHunt(word, got, fresh = false) {
     const row = this.hud?.querySelector('.hunt');
     if (!row) return;
+    if (row.dataset.word !== word) {
+      row.dataset.word = word;
+      row.innerHTML = [...word].map((c) => `<i>${c}</i>`).join('');
+      row.classList.toggle('long', word.length > 8);
+      row.setAttribute('aria-label', `Word hunt: ${word}`);
+    }
     row.querySelectorAll('i').forEach((el, i) => el.classList.toggle('on', i < got));
-    row.classList.toggle('done', got >= HUNT_WORD.length);
-    row.classList.remove('pop');
+    row.classList.toggle('done', got >= word.length);
+    row.classList.remove('pop', 'fresh');
     void row.offsetWidth;
-    row.classList.add('pop');
+    row.classList.add(fresh ? 'fresh' : 'pop');
   }
 
   /** A Zawadi box bursts open: the prize pops up over the trail. */

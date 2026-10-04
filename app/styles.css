@@ -201,19 +201,23 @@ input { font: inherit; }
 .hunt { position: absolute; left: 50%; top: calc(66px + var(--safe-t)); transform: translateX(-50%); display: flex; gap: 3px; pointer-events: none; }
 .hunt i { width: 20px; height: 22px; display: grid; place-items: center; border-radius: 6px; font-style: normal; font-family: var(--display); font-size: 14px; color: rgba(255,255,255,0.45); background: rgba(40,22,8,0.35); border: 1px solid rgba(255,255,255,0.12); }
 .hunt i.on { color: #5a2d00; background: linear-gradient(180deg, #fff3b0, #ffb703); border-color: #ffe58a; box-shadow: 0 0 10px rgba(255,190,40,0.6); }
+.hunt.long { gap: 2px; }
+.hunt.long i { width: 17px; height: 20px; font-size: 12px; border-radius: 5px; }
 .hunt.pop { animation: huntPop 0.5s ease; }
+.hunt.fresh { animation: huntIn 0.6s cubic-bezier(.2,.9,.3,1.2); }
 .hunt.done i { animation: huntGlow 1.2s ease-in-out infinite; }
+@keyframes huntIn { from { opacity: 0; transform: translateX(-50%) translateY(-10px) scale(0.85); } to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); } }
 @keyframes huntPop { 40% { transform: translateX(-50%) scale(1.15); } }
 @keyframes huntGlow { 50% { box-shadow: 0 0 18px rgba(255,220,90,0.95); } }
 
 /* Zawadi prize reveal: the box shakes, bursts, and the prize springs out */
 .prize { position: absolute; left: 50%; top: 30%; transform: translateX(-50%); display: grid; justify-items: center; gap: 2px; pointer-events: none; text-align: center; white-space: nowrap; animation: prizeOut 1.8s ease both; }
-.prize.big { animation-duration: 2.4s; }
+.prize.big { animation-duration: 3s; }
 .prize .gift { font-size: 46px; grid-area: 1 / 1; animation: giftBurst 0.55s ease both; filter: drop-shadow(0 6px 10px rgba(0,0,0,0.35)); }
 .prize .e { font-size: 58px; grid-area: 1 / 1; animation: prizePop 0.7s cubic-bezier(.2,1.6,.4,1) 0.4s both; filter: drop-shadow(0 6px 14px rgba(255,190,40,0.7)); }
 .prize b { font-family: var(--display); font-weight: 400; font-size: clamp(26px, 7.5vw, 38px); color: var(--sun-2); text-shadow: 0 4px 0 var(--earth), 0 0 22px rgba(255,170,0,0.65); animation: prizePop 0.5s ease 0.5s both; }
 .prize.big b { font-size: clamp(36px, 11vw, 54px); color: #fff3b0; }
-.prize span { font-size: 15px; color: #fff; text-shadow: 0 2px 6px rgba(0,0,0,0.7); animation: prizePop 0.5s ease 0.6s both; }
+.prize span { font-size: 15px; color: #fff; white-space: normal; max-width: min(320px, 84vw); line-height: 1.35; text-shadow: 0 2px 6px rgba(0,0,0,0.7); animation: prizePop 0.5s ease 0.6s both; }
 @keyframes giftBurst { 0% { transform: scale(0.4) rotate(0); } 30% { transform: scale(1.1) rotate(-12deg); } 50% { transform: scale(1.1) rotate(12deg); } 70% { transform: scale(1.25) rotate(-6deg); opacity: 1; } 100% { transform: scale(2.2); opacity: 0; } }
 @keyframes prizePop { 0% { transform: scale(0) translateY(20px); opacity: 0; } 100% { transform: scale(1) translateY(0); opacity: 1; } }
 @keyframes prizeOut { 0%, 82% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -24px); } }

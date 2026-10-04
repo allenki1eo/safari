@@ -9,7 +9,7 @@ import {
   makeNgalawa, makeBanda, makeParasol, makeMangrove, makeCoralRock, makeSeaweedFarm, makeFishRack, makeLighthouse,
 } from './regionModels.js';
 import { darDay } from '../data/daily.js';
-import { HERD_STEP, herdCursor, planHerd } from './layout.js';
+import { HERD_STEP, MODE_SPEED, ROAMERS, herdCursor, nextMode, planHerd } from './layout.js';
 import { REGIONS, regionIndexAt, PROP_TYPES, JOURNEY_LEN } from '../data/regions.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -547,11 +547,36 @@ export class World {
     });
     const anim = a.userData.anim;
     a.position.set(plan.x, plan.y, 0);
-    Object.assign(a.userData, { wz, xr, mode, walkV: plan.walkV, dir: plan.dir });
+    Object.assign(a.userData, { wz, xr, mode, walkV: plan.walkV, dir: plan.dir, roams: ROAMERS.has(kind), modeT: rand(2, 8) });
     a.rotation.y = plan.rot;
+    // the region's walkers keep to their sideways stroll; roamers head wherever they face
+    if (mode === 'walk' && !ROAMERS.has(kind)) a.rotation.y = plan.dir > 0 ? -Math.PI / 2 : Math.PI / 2;
     a.visible = true;
     if (!a.parent) this.scene.add(a);
     this.herd.push({ root: a, anim });
+  }
+
+  /**
+   * A plains animal living its own life: it grazes, wanders and now and then trots, always
+   * moving the way it faces (the models face -z), and turns back before reaching the trail.
+   */
+  roam(a, u, dt) {
+    if ((u.modeT -= dt) <= 0) {
+      u.mode = nextMode(u.mode, Math.random());
+      u.modeT = u.mode === 'run' ? rand(1.5, 4) : rand(3, 9);
+      if (u.mode !== 'idle') a.rotation.y += rand(-1.2, 1.2);
+    }
+    const v = MODE_SPEED[u.mode] * u.walkV;
+    if (!v) return;
+    u.t = (u.t ?? 0) + dt;
+    if (u.mode === 'walk') a.rotation.y += Math.sin(u.t * 0.7 + u.walkV * 9) * 0.25 * dt;
+    const dx = -Math.sin(a.rotation.y);
+    const dz = -Math.cos(a.rotation.y);
+    a.position.x += dx * v * dt;
+    u.wz -= dz * v * dt;
+    const ax = Math.abs(a.position.x);
+    const outward = Math.sign(a.position.x) === Math.sign(dx);
+    if ((ax < u.xr[0] && !outward) || (ax > u.xr[1] + 6 && outward)) a.rotation.y = Math.atan2(dx, -dz);
   }
 
   /** Clears and re-populates everything around journey distance J. */
@@ -706,7 +731,8 @@ export class World {
         this.herd.splice(i, 1);
         continue;
       }
-      if (u.mode === 'walk') {
+      if (u.roams) this.roam(a, u, dt);
+      else if (u.mode === 'walk') {
         a.position.x += u.dir * u.walkV * dt;
         const ax = Math.abs(a.position.x);
         const outward = Math.sign(a.position.x) === u.dir;
