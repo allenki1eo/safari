@@ -1,4 +1,6 @@
-import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, CHAPTERS, INTRO } from '../data/content.js';
+import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO } from '../data/content.js';
+import { REGIONS, COUNTRIES } from '../data/regions.js';
+import { fetchBoard, submitScore } from '../data/leaderboard.js';
 import { save, persist, ensureMissions, checkMissions, claimMissionSet, multiplier, claimDaily } from '../data/save.js';
 import { audio } from '../game/audio.js';
 import { shareRun } from './share.js';
@@ -15,6 +17,7 @@ const ICON = {
   pause: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1.5"/><rect x="14" y="4" width="4" height="16" rx="1.5"/></svg>',
   gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>',
   back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+  trophy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 21h8M9 17h6"/></svg>',
   share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg>',
 };
 
@@ -82,6 +85,10 @@ export class UI {
     game.on('shout', (s) => this.shout(s));
     game.on('over', (r) => this.onOver(r));
     game.on('pause', () => this.showPause());
+    game.on('warn', (w) => this.onWarn(w));
+    game.on('combo', (n) => this.onCombo(n));
+    game.on('shield', (e) => this.onShield(e));
+    game.on('lap', (e) => this.onLap(e));
   }
 
   /* ---------------------------------------------------------- plumbing */
@@ -114,6 +121,7 @@ export class UI {
     this.game.toMenu('menu');
     const missions = ensureMissions();
     const missionsReady = missions.every((m) => m.done);
+    const start = REGIONS[Math.min(save.startRegion ?? 0, save.regionMax ?? 0)];
     const canAfford = RUNNERS.some((r) => !save.owned.includes(r.id) && r.cost <= save.seeds) || ALLY_IDS.some((id) => (save.upgrades[id] ?? 0) < 5 && UPGRADE_COSTS[save.upgrades[id] ?? 0] <= save.seeds);
     const el = $(`
       <div class="screen title scrim-bottom">
@@ -122,7 +130,10 @@ export class UI {
             <div class="chip"><span class="seed"></span><span>${fmt(save.seeds)}</span></div>
             <div class="chip">✖️ ${multiplier()} <span class="muted" style="font-size:12px">MULTIPLIER</span></div>
           </div>
-          <button class="icon-btn" data-act="settings" data-click aria-label="Settings">${ICON.gear}</button>
+          <div class="top-actions">
+            <button class="icon-btn" data-act="board" data-click aria-label="Leaderboard">${ICON.trophy}</button>
+            <button class="icon-btn" data-act="settings" data-click aria-label="Settings">${ICON.gear}</button>
+          </div>
         </div>
         <div class="logo">
           <h1>KIMBIA!</h1>
@@ -131,12 +142,17 @@ export class UI {
         <div class="title-bottom">
           ${this.challenge ? `<div class="challenge"><span style="font-size:28px">🔥</span><div><b>${esc(this.challenge.name)}</b> challenges you to beat <b>${fmt(this.challenge.score)}</b> points!</div></div>` : ''}
           ${save.best ? `<div class="best-line">Best run <b>${fmt(save.best)}</b> pts · <b>${fmt(save.bestDistance)}m</b></div>` : ''}
+          <button class="start-chip" data-act="journey" data-click>
+            <span class="flag">${COUNTRIES[start.country].flag}</span>
+            <span><small>Starting at</small><b>${esc(start.name)}</b></span>
+            <span class="go">🗺️ Change</span>
+          </button>
           <button class="btn big play-btn" data-act="play" data-click>▶ RUN!</button>
           <div class="nav-row">
             <button class="nav-btn" data-act="runners" data-click><span class="ico">🧒🏾</span>Runners${canAfford ? '<i class="badge-dot"></i>' : ''}</button>
             <button class="nav-btn" data-act="allies" data-click><span class="ico">🐘</span>Allies</button>
             <button class="nav-btn" data-act="missions" data-click><span class="ico">🎯</span>Missions${missionsReady ? '<i class="badge-dot"></i>' : ''}</button>
-            <button class="nav-btn" data-act="story" data-click><span class="ico">📜</span>Story</button>
+            <button class="nav-btn" data-act="journey" data-click><span class="ico">🗺️</span>Journey${(save.regionMax ?? 0) > (save.mapSeen ?? 0) ? '<i class="badge-dot"></i>' : ''}</button>
           </div>
         </div>
       </div>`);
@@ -149,7 +165,8 @@ export class UI {
       else if (act === 'runners') this.runners();
       else if (act === 'allies') this.allies();
       else if (act === 'missions') this.missions();
-      else if (act === 'story') this.story();
+      else if (act === 'journey') this.journey();
+      else if (act === 'board') this.leaderboard();
     });
     this.show(el);
     if (save.introSeen) setTimeout(() => this.daily(), 600);
@@ -245,9 +262,18 @@ export class UI {
             <div class="dist">0m</div>
           </div>
         </div>
+        <div class="combo"></div>
         <div class="powers"></div>
+        <div class="warns"></div>
+        <button class="shield-btn" data-act="shield" aria-label="Use Ngao shield"><span class="i">🛡️</span><b class="n">${save.charms ?? 0}</b><i class="ring"></i></button>
       </div>`);
     el.querySelector('[data-act=pause]').addEventListener('click', () => this.game.pause());
+    const sb = el.querySelector('[data-act=shield]');
+    sb.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      if (!this.game.useShield()) this.toast('🛡️', (save.charms ?? 0) > 0 ? 'Shield already up!' : 'No Ngao charms — get more in Allies');
+    });
+    sb.classList.toggle('empty', (save.charms ?? 0) <= 0);
     this.hud = el;
     this.hudEls = {
       score: el.querySelector('.score'),
@@ -256,6 +282,9 @@ export class UI {
       seedsChip: el.querySelector('.seeds-chip'),
       dist: el.querySelector('.dist'),
       powers: el.querySelector('.powers'),
+      combo: el.querySelector('.combo'),
+      warns: el.querySelector('.warns'),
+      shield: sb,
     };
     this.powerEls = {};
     this.last = {};
@@ -265,6 +294,13 @@ export class UI {
   removeHud() {
     this.hud?.remove();
     this.hud = null;
+    (this.timers ?? []).forEach(clearTimeout);
+    this.timers = [];
+  }
+
+  /** setTimeout that dies with the HUD, so stale bubbles never leak into the next run. */
+  later(fn, ms) {
+    (this.timers ??= []).push(setTimeout(fn, ms));
   }
 
   updateHud(g) {
@@ -287,6 +323,7 @@ export class UI {
       el.style.setProperty('--p', p.toFixed(3));
       el.classList.toggle('ending', left < 1.5);
     }
+    if (g.shield > 0) E.shield.style.setProperty('--p', (g.shield / 30).toFixed(3));
     // missions — checked a few times per second
     if ((this.missionTick += 1) % 20 === 0) {
       for (const done of checkMissions(g.stats)) this.toast('🎯', `<b>Mission complete!</b><br>${esc(done.text)}`);
@@ -328,10 +365,61 @@ export class UI {
   onChapter(c) {
     if (!this.hud) return;
     this.hud.querySelector('.banner')?.remove();
-    const el = $(`<div class="banner"><div class="kicker">Chapter ${c.index + 1}</div><h2>${esc(c.title)}</h2><div class="place">📍 ${esc(c.place)}</div></div>`);
+    const country = COUNTRIES[c.country];
+    const el = $(`
+      <div class="banner">
+        <div class="kicker">${country.flag} ${esc(country.name)}${c.lap ? ` · Legend lap ${c.lap + 1}` : ''}</div>
+        <h2>${esc(c.name)}</h2>
+        <div class="place">${esc(c.title)}</div>
+        ${c.unlocked ? '<div class="unlocked">✨ New region unlocked</div>' : ''}
+      </div>`);
     this.hud.appendChild(el);
     setTimeout(() => el.remove(), 3700);
-    setTimeout(() => this.speech(c.emoji, c.speaker, c.line), c.index === 0 ? 3800 : 2600);
+    this.later(() => this.speech(c.emoji, c.speaker, c.line), c.index === 0 && !c.lap ? 3800 : 2600);
+    if (c.unlocked) this.toast(country.flag, `<b>${esc(c.name)}</b> unlocked — start your next run here from the Journey map!`, 3400);
+  }
+
+  onWarn({ lane, icon }) {
+    if (!this.hud) return;
+    const el = $(`<div class="warn" style="left:${[20, 50, 80][lane]}%"><span>${icon}</span><i>!</i></div>`);
+    this.hudEls.warns.appendChild(el);
+    setTimeout(() => el.remove(), 1600);
+    audio.tone('square', 880, 880, 0.06, 0.05);
+    audio.tone('square', 880, 880, 0.06, 0.05, 0.12);
+  }
+
+  onCombo(n) {
+    const el = this.hudEls?.combo;
+    if (!el) return;
+    if (n < 5) {
+      el.classList.remove('on');
+      return;
+    }
+    el.innerHTML = `<b>×${n}</b> combo`;
+    el.classList.add('on');
+    el.classList.remove('pulse');
+    void el.offsetWidth;
+    el.classList.add('pulse');
+  }
+
+  onShield({ on, broke }) {
+    const b = this.hudEls?.shield;
+    if (!b) return;
+    b.classList.toggle('active', on);
+    b.querySelector('.n').textContent = save.charms ?? 0;
+    b.classList.toggle('empty', !on && (save.charms ?? 0) <= 0);
+    if (broke) this.flash('rgba(127,224,255,0.55)');
+  }
+
+  onLap({ lap }) {
+    this.shout({ text: 'Journey complete!', sub: `Legend lap ${lap + 1} · +${fmt(5000 * multiplier())}` });
+    this.toast('🏆', '<b>You crossed three countries!</b> The song grows stronger — keep running.', 3600);
+  }
+
+  flash(color) {
+    const f = $(`<div class="flash" style="background:radial-gradient(circle, rgba(255,255,255,0) 40%, ${color})"></div>`);
+    document.body.appendChild(f);
+    setTimeout(() => f.remove(), 650);
   }
 
   tip(t) {
@@ -481,7 +569,9 @@ export class UI {
   results(run) {
     const { newBest } = this.bankRun(run);
     this.removeHud();
-    const ch = CHAPTERS[Math.max(0, run.chapter)];
+    const ri = Math.max(0, run.chapter);
+    const reg = REGIONS[ri];
+    const next = REGIONS[ri + 1];
     const ms = ensureMissions();
     const beatChallenge = this.challenge && run.score > this.challenge.score;
     const el = $(`
@@ -496,7 +586,8 @@ export class UI {
             <div class="stat"><b>${fmt(run.distance)}m</b><span>Distance</span></div>
             <div class="stat"><b>${run.stats.allies}</b><span>Allies</span></div>
           </div>
-          <div class="story-unlock"><span class="e">${ch.emoji}</span><div><b>Chapter ${run.chapter + 1}: ${esc(ch.title)}</b><br><span class="muted">${run.chapter < CHAPTERS.length - 1 ? `Next chapter at ${fmt(CHAPTERS[run.chapter + 1].at)}m` : 'You reached the legend!'}</span></div></div>
+          <div class="story-unlock"><span class="e">${COUNTRIES[reg.country].flag}</span><div><b>${esc(reg.name)} · ${esc(reg.title)}</b><br><span class="muted">${next ? `Next: ${COUNTRIES[next.country].flag} ${esc(next.name)}` : 'You crossed all three countries!'}</span></div></div>
+          <div class="board-slot"></div>
           <div class="mission-mini">
             ${ms.map((m) => `<div><span class="tick ${m.done ? 'done' : ''}">${m.done ? '✓' : ''}</span>${esc(m.text)}</div>`).join('')}
           </div>
@@ -524,7 +615,36 @@ export class UI {
       }
     });
     this.overlay(el);
+    this.boardSlot(el.querySelector('.board-slot'), run);
     if (ms.every((m) => m.done)) setTimeout(() => this.missionSetComplete(), 900);
+  }
+
+  /** Posts the run to the weekly leaderboard (asking for a name the first time). */
+  async boardSlot(slot, run) {
+    if (run.score < 300 || this.submittedRun === this.game.runId) return;
+    const send = async () => {
+      this.submittedRun = this.game.runId;
+      slot.innerHTML = '<div class="board-line muted">Posting to the leaderboard…</div>';
+      const r = await submitScore({ name: save.name, score: run.score, distance: run.distance, seeds: run.seeds, runner: save.runner, duration: run.duration });
+      if (r.ok && r.rank) slot.innerHTML = `<div class="board-line">🏆 You're <b>#${fmt(r.rank)}</b> this week <button class="link" data-board>See board ›</button></div>`;
+      else if (r.ok) slot.innerHTML = '<div class="board-line">🏆 Score posted!</div>';
+      else slot.innerHTML = r.status === 503 ? '' : '<div class="board-line muted">Leaderboard is offline right now.</div>';
+      slot.querySelector('[data-board]')?.addEventListener('click', () => this.leaderboard());
+    };
+    if (save.name) return send();
+    slot.innerHTML = `
+      <form class="name-form">
+        <input class="name-input" maxlength="16" placeholder="Your name for the leaderboard" />
+        <button class="btn teal" type="submit">Post</button>
+      </form>`;
+    slot.querySelector('form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const v = slot.querySelector('input').value.trim().slice(0, 16);
+      if (v.length < 2) return this.toast('✍️', 'Names need at least 2 letters');
+      save.name = v;
+      persist();
+      send();
+    });
   }
 
   missionSetComplete() {
@@ -571,8 +691,26 @@ export class UI {
             ${lvl < 5 ? `<button class="btn buy" data-up="${id}" ${save.seeds < cost ? 'disabled' : ''}><span class="seed"></span>${fmt(cost)}</button>` : '<div class="chip">MAX</div>'}
           </div>`;
       }).join('');
-      const el = this.sheet('Animal Allies', `<p class="muted" style="margin:0 4px">Grab glowing totems on the trail to call an ally. Upgrade them to make their help last longer.</p>${body}`);
+      const charm = `
+        <div class="panel list-card" style="--c:#7fe0ff">
+          <div class="art">🛡️</div>
+          <div class="info">
+            <h3>Ngao Shield <span class="muted" style="font-family:var(--body);font-size:13px">× ${save.charms ?? 0} owned</span></h3>
+            <div style="font-size:13px;color:#7fe0ff">Tap 🛡️ while running · 30s</div>
+            <p>A Maasai-style shield charm that absorbs one crash and keeps your run alive.</p>
+          </div>
+          <button class="btn buy" data-charm ${save.seeds < 300 ? 'disabled' : ''}><span class="seed"></span>300</button>
+        </div>`;
+      const el = this.sheet('Animal Allies', `<p class="muted" style="margin:0 4px">Grab glowing totems on the trail to call an ally. Upgrade them to make their help last longer.</p>${charm}${body}`);
       el.addEventListener('click', (e) => {
+        if (e.target.closest('[data-charm]') && save.seeds >= 300) {
+          save.seeds -= 300;
+          save.charms = (save.charms ?? 0) + 1;
+          persist();
+          audio.buy();
+          this.toast('🛡️', `Ngao shield ready! You have <b>${save.charms}</b>.`);
+          return render();
+        }
         const id = e.target.closest('[data-up]')?.dataset.up;
         if (!id) return;
         const lvl = save.upgrades[id] ?? 0;
@@ -606,22 +744,77 @@ export class UI {
     });
   }
 
-  story() {
-    const body = CHAPTERS.map((c, i) => {
-      const unlocked = i <= save.chapterSeen;
-      return `
-        <div class="panel chapter-card ${unlocked ? '' : 'locked'}" style="animation-delay:${i * 0.05}s">
-          <div class="e">${unlocked ? c.emoji : '🔒'}</div>
-          <div>
-            <div class="num">CHAPTER ${i + 1} · ${fmt(c.at)}m</div>
-            <h3>${unlocked ? esc(c.title) : '???'}</h3>
-            <div class="where">${unlocked ? esc(c.place) : 'Run further to unlock'}</div>
-            ${unlocked ? `<blockquote>“${esc(c.line)}” <span class="muted">— ${esc(c.speaker)}</span></blockquote>` : ''}
+  journey() {
+    save.mapSeen = save.regionMax ?? 0;
+    persist();
+    const max = save.regionMax ?? 0;
+    const sel = Math.min(save.startRegion ?? 0, max);
+    let html = `
+      <div class="journey-head panel">
+        <div><b>${max + 1}</b> / ${REGIONS.length} regions discovered</div>
+        <div class="journey-bar"><i style="width:${((max + 1) / REGIONS.length) * 100}%"></i></div>
+        <button class="btn ghost wide" data-act="intro" data-click style="min-height:46px;font-size:17px">📖 Replay the prologue</button>
+      </div>`;
+    let lastCountry = null;
+    REGIONS.forEach((r, i) => {
+      const c = COUNTRIES[r.country];
+      if (r.country !== lastCountry) {
+        lastCountry = r.country;
+        html += `<div class="country-head" style="--cc:${c.color}"><span>${c.flag}</span>${esc(c.name)}</div>`;
+      }
+      const open = i <= max;
+      html += `
+        <div class="panel region-card ${open ? '' : 'locked'} ${i === sel ? 'selected' : ''}" style="animation-delay:${i * 0.04}s">
+          <div class="node">${open ? r.emoji : '🔒'}</div>
+          <div class="info">
+            <div class="num">${i === 0 ? 'START' : `${(r.at / 1000).toFixed(1)} km`} · ${esc(r.title)}</div>
+            <h3>${open ? esc(r.name) : '???'}</h3>
+            <p>${open ? esc(r.blurb) : 'Keep running to discover this place.'}</p>
+            ${open ? `<blockquote>“${esc(r.line)}” <span class="muted">— ${esc(r.speaker)}</span></blockquote>` : ''}
+            ${open ? `<button class="btn ${i === sel ? 'ghost' : 'teal'} start-here" data-start="${i}" ${i === sel ? 'disabled' : ''}>${i === sel ? '✓ Starting here' : 'Start runs here'}</button>` : ''}
           </div>
         </div>`;
-    }).join('');
-    const el = this.sheet('The Story', `<button class="btn ghost wide" data-act="intro" data-click>📖 Replay the prologue</button>${body}`);
-    el.querySelector('[data-act=intro]').addEventListener('click', () => this.intro(() => this.title()));
+    });
+    const el = this.sheet('The Journey', html);
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('[data-act=intro]')) return this.intro(() => this.journey());
+      const st = e.target.closest('[data-start]');
+      if (st) {
+        save.startRegion = Number(st.dataset.start);
+        persist();
+        audio.buy();
+        this.title();
+      }
+    });
+  }
+
+  async leaderboard(period = 'week') {
+    const el = this.sheet('Leaderboard', `
+      <div class="tabs">
+        <button class="tab ${period === 'week' ? 'on' : ''}" data-period="week">This week</button>
+        <button class="tab ${period === 'all' ? 'on' : ''}" data-period="all">All time</button>
+      </div>
+      <div class="board"><div class="muted board-empty">Loading…</div></div>`);
+    el.addEventListener('click', (e) => {
+      const t = e.target.closest('[data-period]');
+      if (t && t.dataset.period !== period) this.leaderboard(t.dataset.period);
+    });
+    const { status, entries } = await fetchBoard(period);
+    const board = el.querySelector('.board');
+    if (!board) return;
+    if (status !== 'ok' || !entries.length) {
+      const msg = status === 'soon' ? '🏗️ The global leaderboard is coming soon!' : status === 'ok' ? '🌅 No runs yet this week — be the first!' : '📡 Can\'t reach the leaderboard right now.';
+      board.innerHTML = `<div class="board-empty">${msg}</div>`;
+      return;
+    }
+    const me = (save.name || '').toLowerCase();
+    const medal = ['🥇', '🥈', '🥉'];
+    board.innerHTML = entries.map((r, i) => `
+      <div class="board-row ${r.name.toLowerCase() === me ? 'me' : ''}" style="animation-delay:${Math.min(i, 12) * 0.03}s">
+        <span class="rank">${medal[i] ?? i + 1}</span>
+        <span class="who">${RUNNERS.find((x) => x.id === r.runner)?.emoji ?? '🏃🏾'} ${esc(r.name)}</span>
+        <span class="pts">${fmt(r.score)}<small>${fmt(r.distance)}m</small></span>
+      </div>`).join('');
   }
 
   runners() {

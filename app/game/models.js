@@ -822,12 +822,12 @@ export function makeKilimanjaro(baseMat, snowMat) {
   const mtn = new THREE.Mesh(geo, baseMat);
   mtn.position.y = 80;
   g.add(mtn);
-  const capGeo = new THREE.CylinderGeometry(62, 108, 42, 18, 2);
+  const capGeo = new THREE.CylinderGeometry(74, 134, 48, 18, 2);
   const cp = capGeo.attributes.position;
   for (let i = 0; i < cp.count; i++) if (cp.getY(i) < 0) cp.setY(i, cp.getY(i) - rand(0, 16));
   capGeo.computeVertexNormals();
   const cap = new THREE.Mesh(capGeo, snowMat);
-  cap.position.y = 141;
+  cap.position.y = 140;
   g.add(cap);
   // Mawenzi — the jagged secondary peak
   const maw = new THREE.Mesh(new THREE.ConeGeometry(70, 110, 7), baseMat);
@@ -1001,3 +1001,5 @@ export function makeTotem(emoji, ring) {
   };
   return g;
 }
+
+export { quad, spots, ringStripes };

@@ -1,36 +1,27 @@
 import * as THREE from 'three';
 import { curve, bend, bakeRigid } from './materials.js';
+import { makeRunner, Animals, makeEagle, makeHornbill, makeTruck, makeRamp, makeTotem } from './models.js';
 import {
-  makeRunner, Animals, makeEagle, makeHornbill, makeLog, makeBranchGate, makeBoulder, makeMoundObstacle,
-  makeTruck, makeRamp, makeTotem,
-} from './models.js';
+  RegionAnimals, makeLogStyled, makeGateStyled, makeBoulderStyled, makeMoundStyled, makeCart, makeRockfall,
+} from './regionModels.js';
 import { World, Particles, LANE_W } from './world.js';
 import { audio } from './audio.js';
-import { RUNNERS, ALLIES, ALLY_IDS, CHAPTERS, TUTORIAL, SHOUTS } from '../data/content.js';
-import { save, multiplier } from '../data/save.js';
+import { makeChunk, tutorialChunk, KINDS, TRUCK_LEN, JUMP_V, GRAVITY } from './patterns.js';
+import { RUNNERS, ALLIES, ALLY_IDS, TUTORIAL, SHOUTS } from '../data/content.js';
+import { REGIONS, regionIndexAt, regionAt } from '../data/regions.js';
+import { save, persist, multiplier } from '../data/save.js';
 
 const LANES = [-LANE_W, 0, LANE_W];
-const GRAVITY = 58;
-const JUMP_V = 16;
 const SLIDE_T = 0.62;
-const TRUCK_LEN = 7;
+const SHIELD_T = 30;
+const COMBO_STEPS = [[10, 50], [25, 150], [50, 400], [100, 1000], [200, 2500]];
+const WARN_ICONS = { rhino: '🦏', buffalo: '🐃', wildebeest: '🦬', rockfall: '🪨', crossing: '🐘', truck: '🚚' };
 const rand = (a, b) => a + Math.random() * (b - a);
 const randi = (n) => (Math.random() * n) | 0;
 const pick = (a) => a[randi(a.length)];
 const lerp = (a, b, t) => a + (b - a) * t;
 const damp = (a, b, k, dt) => lerp(a, b, 1 - Math.exp(-k * dt));
 const shuffle = (a) => a.sort(() => Math.random() - 0.5);
-
-// Collision profiles: vertical extent and z-length of each obstacle kind.
-const KINDS = {
-  log: { y0: 0, y1: 0.85, len: 0.9 },
-  gate: { y0: 1.12, y1: 3.4, len: 0.4 },
-  boulder: { y0: 0, y1: 2.7, len: 2.0 },
-  mound: { y0: 0, y1: 2.9, len: 1.5 },
-  truck: { y0: 0, y1: 2.7, len: TRUCK_LEN, top: 2.7 },
-  ramp: { y0: 0, y1: 0, len: 5, ramp: 2.7 },
-  rhino: { y0: 0, y1: 1.9, len: 2.4 },
-};
 
 export class Game {
   constructor(canvas) {
@@ -60,6 +51,10 @@ export class Game {
     this.buildCoins();
     this.buildAllies();
     this.buildChasers();
+    this.buildShield();
+    this.timeScale = 1;
+    this.slowmo = 0;
+    this.startJ = this.startFor(save.startRegion);
     this.setRunner(save.runner);
     this.resetRun();
     this.state = 'menu';
@@ -139,6 +134,23 @@ export class Game {
     });
   }
 
+  buildShield() {
+    const m = bend(new THREE.MeshBasicMaterial({ color: 0x7fe0ff, transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending }));
+    this.shieldMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(1.25, 2), m);
+    this.shieldMesh.scale.set(0.85, 1.15, 0.85);
+    this.shieldMesh.visible = false;
+    this.scene.add(this.shieldMesh);
+  }
+
+  /** Journey distance a run starts from (only unlocked regions can be chosen). */
+  startFor(i) {
+    const idx = Math.max(0, Math.min(i ?? 0, save.regionMax ?? 0, REGIONS.length - 1));
+    return REGIONS[idx].at;
+  }
+  get J() {
+    return this.D + this.startJ;
+  }
+
   buildCoins() {
     const geo = new THREE.CylinderGeometry(0.36, 0.36, 0.09, 14);
     geo.rotateX(Math.PI / 2);
@@ -164,7 +176,13 @@ export class Game {
     this.seeds = 0;
     this.combo = 0;
     this.comboT = 0;
-    this.stats = { seeds: 0, distance: 0, jumps: 0, slides: 0, allies: 0, score: 0, roofs: 0, smash: 0, nearMiss: 0 };
+    this.stats = { seeds: 0, distance: 0, jumps: 0, slides: 0, allies: 0, score: 0, roofs: 0, smash: 0, nearMiss: 0, regions: 0, bestCombo: 0 };
+    this.shield = 0;
+    this.lap = 0;
+    this.runTime = 0;
+    this.timeScale = 1;
+    this.slowmo = 0;
+    if (this.shieldMesh) this.shieldMesh.visible = false;
     this.p = { lane: 1, prevLane: 1, x: 0, y: 0, vy: 0, grounded: true, slide: 0, invuln: 0, laneT: 9, onTruck: null, ground: 0 };
     this.powers = {};
     this.chaseT = 0;
@@ -173,6 +191,7 @@ export class Game {
     this.nextChunk = 45;
     this.nextTotemAt = 260 + rand(0, 140);
     this.chapter = -1;
+    this.region = -1;
     this.tutorial = !save.tutorialDone;
     this.tutorialIdx = 0;
     this.chunkIdx = 0;
@@ -183,6 +202,8 @@ export class Game {
 
   start() {
     this.resetRun();
+    this.startJ = this.startFor(save.startRegion);
+    this.world.reset(this.J);
     this.runId = (this.runId ?? 0) + 1;
     this.state = 'running';
     this.camMode = 'run';
@@ -208,6 +229,8 @@ export class Game {
 
   toMenu(mode = 'menu') {
     this.resetRun();
+    this.startJ = this.startFor(save.startRegion);
+    this.world.reset(this.J);
     this.state = 'menu';
     this.camMode = mode;
     audio.setIntensity(0);
@@ -217,13 +240,36 @@ export class Game {
   revive() {
     this.revives++;
     // clear the way ahead
-    for (const o of this.obstacles) if (o.wz < this.D + 50) o.dead = true;
+    for (const o of this.obstacles) if (o.wz < this.D + 50 || o.moving) o.dead = true;
     this.p.invuln = 3;
     this.p.y = Math.max(this.p.y, 0);
     this.state = 'running';
     this.chaseT = 0;
     audio.muffle(false);
     audio.powerup();
+  }
+
+  /** Raises Ngao, the shield charm: it absorbs one crash. */
+  useShield() {
+    if (this.state !== 'running' || this.shield > 0 || (save.charms ?? 0) <= 0) return false;
+    save.charms--;
+    persist();
+    this.shield = SHIELD_T;
+    this.shieldMesh.visible = true;
+    audio.powerup();
+    this.haptic(30);
+    this.emit('shield', { on: true, dur: SHIELD_T });
+    return true;
+  }
+
+  breakShield() {
+    this.shield = 0;
+    this.shieldMesh.visible = false;
+    this.p.invuln = Math.max(this.p.invuln, 1.4);
+    this.fx.sparkle(this.p.x, 1.2, 0, 0x7fe0ff, 24);
+    audio.smash();
+    this.emit('shield', { on: false, broke: true });
+    this.emit('shout', { text: 'Ngao saved you!', sub: 'Shield broken' });
   }
 
   /* ------------------------------------------------------------- input */
@@ -254,7 +300,7 @@ export class Game {
           p.slide = 0;
           this.stats.jumps++;
           audio.jump();
-          this.fx.dust(p.x, 0, 0xd9b07a, 4);
+          this.fx.dust(p.x, 0, this.world.dustColor(), 4);
         }
         break;
       case 'down':
@@ -271,17 +317,21 @@ export class Game {
 
   /* -------------------------------------------------------------- loop */
   frame() {
-    let dt = Math.min(this.clock.getDelta(), 0.05);
+    const realDt = Math.min(this.clock.getDelta(), 0.05);
+    this.adaptQuality(realDt);
+    // slow-motion for near misses
+    if (this.slowmo > 0) this.slowmo -= realDt;
+    this.timeScale = damp(this.timeScale, this.slowmo > 0 ? 0.35 : 1, this.slowmo > 0 ? 30 : 6, realDt);
+    const dt = realDt * this.timeScale;
     this.time += dt;
-    this.adaptQuality(dt);
 
     if (this.state === 'running') this.updateRun(dt);
     else if (this.state === 'dying') this.updateDying(dt);
     else if (this.state === 'menu') this.updateMenu(dt);
 
     if (this.state !== 'paused') {
-      this.world.update(dt, this.D, this.camera, this.time);
-      this.world.setTime(this.D);
+      this.world.update(dt, this.J, this.camera, this.time);
+      this.world.setTime(this.J, dt);
       this.fx.update(dt, this.state === 'running' ? this.speed * dt : 0);
       this.updateCoinsMesh();
       for (const t of this.totems) t.mesh.userData.spin(this.time);
@@ -315,6 +365,10 @@ export class Game {
     for (const c of this.chasers) c.root.visible = false;
     // drift the world gently so the herds and clouds feel alive
     this.D += dt * 1.2;
+    if (this.region !== regionIndexAt(this.J).index) {
+      this.region = regionIndexAt(this.J).index;
+      audio.setRegion(REGIONS[this.region].music);
+    }
   }
 
   updateRun(dt) {
@@ -328,6 +382,7 @@ export class Game {
     this.speed = damp(this.speed, target, 3, dt);
     const step = this.speed * dt;
     this.D += step;
+    this.runTime += dt;
     this.stats.distance = Math.floor(this.D);
     const mult = multiplier() * (pw.simba ? 2 : 1);
     this.score += step * mult;
@@ -341,7 +396,19 @@ export class Game {
     if (p.invuln > 0) p.invuln -= dt;
     if (this.chaseT > 0) this.chaseT -= dt;
     if (this.comboT > 0) this.comboT -= dt;
-    else this.combo = 0;
+    else if (this.combo) {
+      this.combo = 0;
+      this.emit('combo', 0);
+    }
+    if (this.shield > 0) {
+      this.shield -= dt;
+      if (this.shield <= 0) {
+        this.shield = 0;
+        this.shieldMesh.visible = false;
+        this.emit('shield', { on: false });
+      }
+    }
+    audio.setLevel(Object.keys(pw).length ? 3 : this.speed > 25 ? 2 : 1, this.speed);
     p.laneT += dt;
 
     // ---- lateral
@@ -367,7 +434,7 @@ export class Game {
           p.vy = 0;
           p.grounded = true;
           audio.land();
-          this.fx.dust(p.x, 0, 0xd9b07a, 5);
+          this.fx.dust(p.x, 0, this.world.dustColor(), 5);
         }
       }
     }
@@ -381,7 +448,12 @@ export class Game {
     this.updateChasers(dt);
     this.checkStory();
 
-    if (p.grounded && !pw.tembo && Math.random() < dt * 14) this.fx.dust(p.x, 0.3, 0xc9955a, 1);
+    if (p.grounded && !pw.tembo && Math.random() < dt * 14) this.fx.dust(p.x, 0.3, this.world.dustColor(), 1);
+    if (this.shield > 0) {
+      this.shieldMesh.position.set(p.x, p.y + 1 + (pw.tembo ? 1.95 : 0), 0);
+      this.shieldMesh.rotation.y += dt * 1.5;
+      this.shieldMesh.material.opacity = this.shield < 3 && Math.floor(this.time * 8) % 2 ? 0.06 : 0.22;
+    }
     this.emit('hud', this);
   }
 
@@ -390,7 +462,7 @@ export class Game {
     let g = 0;
     for (const o of this.obstacles) {
       if (o.dead || (!o.top && !o.ramp)) continue;
-      if (Math.abs(x - LANES[o.lane]) > 1.0) continue;
+      if (Math.abs(x - o.x) > 1.0) continue;
       const near = o.wz - o.len / 2;
       const far = o.wz + o.len / 2;
       if (this.D < near - 0.3 || this.D > far + 0.3) continue;
@@ -408,13 +480,17 @@ export class Game {
   /* --------------------------------------------------------- obstacles */
   addObstacle(kind, lane, wz, opts = {}) {
     const k = KINDS[kind];
+    const style = regionAt(this.startJ + wz).style;
     let m;
+    let anim = null;
     let top = k.top;
     switch (kind) {
-      case 'log': m = makeLog(); break;
-      case 'gate': m = makeBranchGate(); break;
-      case 'boulder': m = makeBoulder(); break;
-      case 'mound': m = makeMoundObstacle(); break;
+      case 'log': m = makeLogStyled(style.log); break;
+      case 'gate': m = makeGateStyled(style.gate); break;
+      case 'boulder': m = makeBoulderStyled(style.rock); break;
+      case 'mound': m = makeMoundStyled(); break;
+      case 'cart': m = makeCart(); break;
+      case 'rockfall': m = makeRockfall(style.rock); break;
       case 'ramp': m = makeRamp(k.len, k.ramp); break;
       case 'truck': {
         const t = makeTruck(TRUCK_LEN, !!opts.moving);
@@ -422,19 +498,64 @@ export class Game {
         top = t.height;
         break;
       }
-      case 'rhino': {
-        const r = Animals.rhino();
-        m = r.root;
-        opts.anim = r;
-        break;
-      }
+      case 'rhino': anim = Animals.rhino(); break;
+      case 'wildebeest': anim = Animals.wildebeest(); break;
+      case 'buffalo': anim = RegionAnimals.buffalo(); break;
+      case 'croc': anim = RegionAnimals.croc(); break;
+      case 'gorilla': anim = RegionAnimals.gorilla(true); break;
+      case 'crossing': anim = Animals.elephant(); break;
     }
-    if (kind !== 'rhino') bakeRigid(m, true);
-    m.position.x = LANES[lane];
+    if (anim) m = anim.root;
+    else if (kind !== 'rockfall') bakeRigid(m, true);
+    // animals in the lane face the runner
+    if (kind === 'croc' || kind === 'gorilla') m.rotation.y = Math.PI;
+    if (kind === 'crossing') {
+      m.scale.setScalar(0.72);
+      m.rotation.y = opts.cross.dir > 0 ? -Math.PI / 2 : Math.PI / 2;
+    }
+    const x = kind === 'crossing' ? -opts.cross.dir * 7 : LANES[lane];
+    m.position.x = x;
     this.scene.add(m);
-    const o = { kind, lane, wz, len: k.len, y0: k.y0, y1: k.y1, top, ramp: k.ramp, mesh: m, moving: opts.moving ?? 0, anim: opts.anim, dead: false, passed: false, zPrev: false };
+    const o = {
+      kind, lane, x, wz, len: k.len, y0: k.y0, y1: k.y1, top, ramp: k.ramp, mesh: m, anim,
+      moving: opts.moving ?? 0, cross: opts.cross, dead: false, passed: false, zPrev: false,
+      warned: false, rockY: kind === 'rockfall' ? 18 : 0,
+    };
+    if (kind === 'rockfall') m.userData.rock.position.y = o.rockY;
     this.obstacles.push(o);
     return o;
+  }
+
+  /** Lane-crossing and falling hazards, plus early warnings for anything fast. */
+  updateHazard(o, dt) {
+    const dz = o.wz - this.D;
+    const closing = this.speed + (o.moving || 0);
+    if (!o.warned && (o.moving || o.kind === 'rockfall' || o.kind === 'crossing') && dz > 0 && dz / closing < 2.3) {
+      o.warned = true;
+      const lane = o.kind === 'crossing' ? (o.cross.dir > 0 ? 0 : 2) : o.lane;
+      this.emit('warn', { lane, icon: WARN_ICONS[o.kind] ?? '⚠️' });
+    }
+    if (o.kind === 'rockfall') {
+      const rock = o.mesh.userData.rock;
+      const ring = o.mesh.userData.warn;
+      if (dz < this.speed * 1.05 && o.rockY > 0) {
+        o.rockVy = (o.rockVy ?? 0) - 60 * dt;
+        o.rockY = Math.max(0, o.rockY + o.rockVy * dt);
+        if (o.rockY === 0) {
+          this.shake = Math.max(this.shake, 0.35);
+          this.fx.debris(o.x, 0.3, this.D - o.wz, [0xf4f7fb, 0x8c8e96], 10);
+          audio.land();
+        }
+      }
+      rock.position.y = o.rockY;
+      rock.rotation.x += dt * (o.rockY > 0 ? 6 : 0);
+      ring.visible = o.rockY > 0;
+      ring.scale.setScalar(1 + Math.sin(this.time * 14) * 0.12);
+    }
+    if (o.kind === 'crossing' && dz < 70) {
+      o.x += o.cross.dir * o.cross.v * dt;
+      o.mesh.position.x = o.x;
+    }
   }
 
   updateObstacles(dt, prevD) {
@@ -447,7 +568,8 @@ export class Game {
     for (let i = this.obstacles.length - 1; i >= 0; i--) {
       const o = this.obstacles[i];
       if (o.moving) o.wz -= o.moving * dt;
-      if (o.anim) o.anim.update(dt, 1.4, 'run');
+      if (o.anim) o.anim.update(dt, o.moving ? 1.4 : o.kind === 'crossing' ? 0.6 : 1, o.moving ? 'run' : o.kind === 'crossing' ? 'walk' : 'idle');
+      this.updateHazard(o, dt);
 
       if (o.flying) {
         o.vy -= 30 * dt;
@@ -466,19 +588,25 @@ export class Game {
         this.obstacles.splice(i, 1);
         continue;
       }
-      if (o.flying || o.kind === 'ramp' && pw.tai) continue;
+      if (o.flying || (o.kind === 'ramp' && pw.tai)) continue;
+      if (o.kind === 'rockfall' && o.rockY > 2) {
+        o.zPrev = false;
+        continue;
+      }
 
-      const ox = LANES[o.lane];
+      const ox = o.x;
       const zOver = Math.abs(this.D - o.wz) < o.len / 2 + 0.35;
       const xOver = Math.abs(p.x - ox) < 1.05 + 0.32;
 
       // near-miss: a big blocker whizzes past in the lane we just left
       if (!o.passed && this.D > o.wz + o.len / 2) {
         o.passed = true;
-        if (Math.abs(p.x - ox) < 2.8 && Math.abs(p.x - ox) > 1.5 && p.laneT < 0.45 && (o.kind === 'truck' || o.kind === 'boulder' || o.kind === 'rhino' || o.kind === 'mound')) {
+        if (Math.abs(p.x - ox) < 2.8 && Math.abs(p.x - ox) > 1.5 && p.laneT < 0.45 && KINDS[o.kind].pass === 'hard') {
           this.stats.nearMiss++;
           this.emit('shout', { text: 'Close call!', sub: pick(SHOUTS) });
           this.score += 50 * multiplier();
+          this.slowmo = 0.22;
+          audio.whoosh();
         }
       }
 
@@ -501,7 +629,10 @@ export class Game {
         if (hit) {
           const side = o.zPrev && changing;
           if (invincible) this.smash(o);
-          else if (side) this.stumble(false);
+          else if (this.shield > 0) {
+            this.smash(o);
+            this.breakShield();
+          } else if (side) this.stumble(false);
           else return this.crash(o);
         }
       }
@@ -513,17 +644,19 @@ export class Game {
     if (o.flying) return;
     o.flying = true;
     o.vy = rand(9, 14);
-    o.vx = (o.lane - 1 || (Math.random() < 0.5 ? -1 : 1)) * rand(5, 9);
+    o.vx = (Math.sign(o.x) || (Math.random() < 0.5 ? -1 : 1)) * rand(5, 9);
     o.vz = rand(15, 30);
     o.spin = rand(-8, 8);
     o.moving = 0;
+    o.cross = null;
+    if (o.kind === 'crossing') o.kind = 'boulder';
     this.stats.smash += this.powers.tembo ? 1 : 0;
     this.score += 25 * multiplier();
     this.shake = 0.5;
     audio.smash();
     this.haptic(25);
-    const cols = o.kind === 'truck' ? [0x4f6b3a, 0x2a2522, 0x8a4a22] : o.kind === 'log' || o.kind === 'gate' ? [0x6b4526, 0xd9b07a, 0x6f8c33] : [0xa08a78, 0x93806e, 0xd9b07a];
-    this.fx.debris(LANES[o.lane], 0.5, -1, cols, 16);
+    const cols = o.kind === 'truck' ? [0x4f6b3a, 0x2a2522, 0x8a4a22] : o.kind === 'log' || o.kind === 'gate' ? [0x6b4526, 0xd9b07a, 0x6f8c33] : o.kind === 'cart' ? [0xe4572e, 0xf6d04d, 0x8a5a32] : [0xa08a78, 0x93806e, 0xd9b07a];
+    this.fx.debris(o.x, 0.5, -1, cols, 16);
   }
 
   stumble(edge) {
@@ -559,7 +692,8 @@ export class Game {
     audio.muffle(true);
     this.haptic([60, 40, 120]);
     this.fx.debris(this.p.x, 1, -0.5, [0xd9b07a, 0xffffff, 0xc28c55], 14);
-    if (o?.kind === 'rhino') o.moving = 0;
+    if (o?.moving) o.moving = 0;
+    if (o?.cross) o.cross = null;
     setTimeout(() => audio.cackle(), 500);
   }
 
@@ -595,7 +729,10 @@ export class Game {
       distance: Math.floor(this.D),
       stats: { ...this.stats },
       caught: this.caught,
-      chapter: this.chapter,
+      chapter: this.region,
+      region: REGIONS[this.region]?.id ?? 'serengeti',
+      lap: this.lap,
+      duration: this.runTime,
       revives: this.revives,
     };
   }
@@ -603,153 +740,40 @@ export class Game {
   /* ------------------------------------------------------------ spawning */
   spawn() {
     while (this.nextChunk < this.D + 170) {
-      const len = this.tutorial ? this.tutorialChunk(this.nextChunk) : this.chunk(this.nextChunk);
+      let chunk = null;
+      if (this.tutorial) {
+        chunk = tutorialChunk(this.chunkIdx++, this.nextChunk);
+        if (!chunk) {
+          this.tutorial = false;
+          save.tutorialDone = true;
+          persist();
+        }
+      }
+      if (!chunk) {
+        chunk = makeChunk({
+          z: this.nextChunk,
+          D: this.D,
+          speed: this.speed,
+          region: regionAt(this.startJ + this.nextChunk),
+          wantTotem: this.D + 150 > this.nextTotemAt,
+        });
+      }
+      this.applyChunk(chunk.ops);
       const diff = Math.min(1, this.D / 6000);
       const gap = Math.max(12, this.speed * lerp(1.15, 0.62, diff));
-      this.nextChunk += len + gap;
+      this.nextChunk += chunk.len + gap;
     }
   }
 
-  tutorialChunk(z) {
-    const i = this.chunkIdx++;
-    switch (i) {
-      case 0: this.coinLine(1, z, z + 16); return 16;
-      case 1: this.addObstacle('boulder', 1, z + 8); this.coinLine(0, z, z + 14); this.coinLine(2, z, z + 14); return 16;
-      case 2: [0, 1, 2].forEach((l) => this.addObstacle('log', l, z + 10)); this.coinArc(1, z + 10); return 16;
-      case 3: [0, 1, 2].forEach((l) => this.addObstacle('gate', l, z + 10)); this.coinLine(1, z + 6, z + 14, 1.6, 0.6); return 16;
-      case 4: this.addTotem(pick(['tembo', 'duma', 'hondo']), 1, z + 10); this.coinLine(0, z, z + 20); return 20;
-      default:
-        this.tutorial = false;
-        save.tutorialDone = true;
-        return 10;
-    }
-  }
-
-  chunk(z) {
-    this.chunkIdx++;
-    const d = this.D;
-    const pats = [
-      ['single', 3], ['double', d > 300 ? 3 : 1], ['logs', 2], ['gates', 2], ['mix', d > 400 ? 3 : 1],
-      ['trucks', d > 250 ? 3.5 : 0.5], ['oncoming', d > 900 ? 2 : 0], ['rhino', d > 600 ? 1.6 : 0],
-      ['snake', 1.2], ['zigzag', d > 500 ? 2 : 0], ['logrun', d > 350 ? 1.4 : 0],
-    ];
-    const total = pats.reduce((s, p) => s + p[1], 0);
-    let r = Math.random() * total;
-    let pat = 'single';
-    for (const [name, w] of pats) {
-      if ((r -= w) <= 0) {
-        pat = name;
-        break;
+  applyChunk(ops) {
+    for (const op of ops) {
+      switch (op[0]) {
+        case 'obs': this.addObstacle(op[1], op[2], op[3], op[4]); break;
+        case 'line': this.coinLine(op[1], op[2], op[3], op[4], op[5], op[6]); break;
+        case 'arc': this.coinArc(op[1], op[2]); break;
+        case 'totem': this.addTotem(op[1], op[2], op[3]); break;
       }
     }
-    const wantTotem = this.D + 150 > this.nextTotemAt;
-    const L = [0, 1, 2];
-
-    switch (pat) {
-      case 'single': {
-        const l = randi(3);
-        this.addObstacle(pick(['boulder', 'mound']), l, z + 2);
-        const free = L.filter((x) => x !== l);
-        this.coinLine(pick(free), z - 6, z + 10);
-        if (wantTotem) this.addTotem(null, free.find((x) => x !== l), z + 2);
-        return 6;
-      }
-      case 'double': {
-        const free = randi(3);
-        L.filter((l) => l !== free).forEach((l) => this.addObstacle(pick(['boulder', 'mound', 'boulder']), l, z + 2));
-        this.coinLine(free, z - 8, z + 12);
-        return 6;
-      }
-      case 'logs': {
-        L.forEach((l) => this.addObstacle('log', l, z + 2));
-        this.coinArc(randi(3), z + 2);
-        return 4;
-      }
-      case 'gates': {
-        L.forEach((l) => this.addObstacle('gate', l, z + 2));
-        this.coinLine(randi(3), z - 3, z + 6, 1.5, 0.6);
-        return 4;
-      }
-      case 'mix': {
-        const kinds = shuffle(['log', 'gate', pick(['boulder', 'mound'])]);
-        kinds.forEach((k, l) => this.addObstacle(k, l, z + 2));
-        const li = kinds.indexOf('log');
-        this.coinArc(li, z + 2);
-        return 4;
-      }
-      case 'trucks': {
-        const lanes = shuffle([...L]).slice(0, 1 + randi(2));
-        let longest = 0;
-        lanes.forEach((l, i) => {
-          const n = 1 + randi(3);
-          const off = i * rand(0, 8);
-          const withRamp = i === 0;
-          let zz = z + off;
-          if (withRamp) {
-            this.addObstacle('ramp', l, zz + KINDS.ramp.len / 2);
-            this.coinLine(l, zz + 0.5, zz + 4.5, 1.2, 0, true);
-            zz += KINDS.ramp.len;
-          }
-          for (let k = 0; k < n; k++) this.addObstacle('truck', l, zz + TRUCK_LEN / 2 + k * TRUCK_LEN);
-          this.coinLine(l, zz + 1, zz + n * TRUCK_LEN - 1, 1.8, 2.7 + 0.6);
-          longest = Math.max(longest, zz + n * TRUCK_LEN - z);
-        });
-        const free = L.filter((l) => !lanes.includes(l));
-        if (free.length && Math.random() < 0.5) this.addObstacle('log', free[0], z + longest * 0.5);
-        if (free.length && wantTotem) this.addTotem(null, free[0], z + longest * 0.75);
-        return longest;
-      }
-      case 'oncoming': {
-        const l = randi(3);
-        const v = rand(7, 11);
-        // place far enough ahead that it arrives roughly in chunk position
-        const lead = (z - this.D) * (v / Math.max(this.speed, 1));
-        this.addObstacle('truck', l, z + lead + TRUCK_LEN, { moving: v });
-        const free = L.filter((x) => x !== l);
-        this.coinLine(pick(free), z - 4, z + 14);
-        return 10;
-      }
-      case 'rhino': {
-        const l = randi(3);
-        const v = rand(6, 9);
-        const lead = (z - this.D) * (v / Math.max(this.speed, 1));
-        this.addObstacle('rhino', l, z + lead + 2, { moving: v });
-        const free = L.filter((x) => x !== l);
-        this.addObstacle('log', pick(free), z + 2);
-        this.emit('warn', { lane: l });
-        return 8;
-      }
-      case 'snake': {
-        let l = randi(3);
-        for (let k = 0; k < 4; k++) {
-          this.coinLine(l, z + k * 8, z + k * 8 + 6);
-          l = Math.max(0, Math.min(2, l + pick([-1, 1])));
-        }
-        if (wantTotem) this.addTotem(null, l, z + 34);
-        return 34;
-      }
-      case 'zigzag': {
-        let l = randi(3);
-        for (let k = 0; k < 3; k++) {
-          this.addObstacle(pick(['boulder', 'mound']), l, z + k * 14);
-          const nl = L.filter((x) => x !== l);
-          this.coinLine(pick(nl), z + k * 14 - 5, z + k * 14 + 3);
-          l = pick(nl);
-        }
-        return 30;
-      }
-      case 'logrun': {
-        const l = randi(3);
-        for (let k = 0; k < 3; k++) {
-          this.addObstacle('log', l, z + k * 12);
-          this.coinArc(l, z + k * 12);
-        }
-        const other = pick(L.filter((x) => x !== l));
-        this.addObstacle('gate', other, z + 12);
-        return 26;
-      }
-    }
-    return 8;
   }
 
   coinLine(lane, from, to, step = 2, y = 0, rampUp = false) {
@@ -829,8 +853,16 @@ export class Game {
     this.seeds++;
     this.stats.seeds = this.seeds;
     this.combo++;
-    this.comboT = 0.6;
+    this.comboT = 0.9;
+    this.stats.bestCombo = Math.max(this.stats.bestCombo, this.combo);
     this.score += 5 * multiplier() * (this.powers.simba ? 2 : 1);
+    const step = COMBO_STEPS.find(([n]) => n === this.combo);
+    if (step) {
+      this.score += step[1] * multiplier();
+      this.emit('shout', { text: `Combo ×${this.combo}!`, sub: `+${(step[1] * multiplier()).toLocaleString()}` });
+      audio.chime();
+    }
+    this.emit('combo', this.combo);
     audio.coin(this.combo);
     this.fx.sparkle(c.x, c.y, this.D - c.wz, 0xffd34d, 4);
     this.emit('seed', this.seeds);
@@ -1000,13 +1032,26 @@ export class Game {
 
   /* --------------------------------------------------------------- story */
   checkStory() {
-    let c = 0;
-    for (let i = 0; i < CHAPTERS.length; i++) if (this.D >= CHAPTERS[i].at) c = i;
-    if (c !== this.chapter) {
-      this.chapter = c;
-      this.emit('chapter', { index: c, ...CHAPTERS[c], first: c > save.chapterSeen });
-      if (c > 0) audio.chime();
-      if (c > save.chapterSeen) save.chapterSeen = c;
+    const { index, lap } = regionIndexAt(this.J);
+    if (index !== this.region || lap !== this.lap) {
+      const first = this.region === -1;
+      if (lap > this.lap) {
+        this.emit('lap', { lap });
+        this.score += 5000 * multiplier();
+      }
+      this.region = index;
+      this.lap = lap;
+      if (!first) this.stats.regions++;
+      const r = REGIONS[index];
+      const isNew = index > (save.regionMax ?? 0);
+      if (isNew) {
+        save.regionMax = index;
+        persist();
+      }
+      this.chapter = index;
+      this.emit('chapter', { index, ...r, lap, unlocked: isNew });
+      audio.setRegion(r.music);
+      if (!first) audio.chime();
     }
     if (this.tutorialIdx < TUTORIAL.length && !save.tutorialDone) {
       const t = TUTORIAL[this.tutorialIdx];

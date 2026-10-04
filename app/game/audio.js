@@ -3,14 +3,19 @@
  * so the game ships with zero audio files.
  */
 const NOTE = (n) => 440 * Math.pow(2, (n - 69) / 12);
-// D major pentatonic, centred around D5
-const PENTA = [62, 64, 66, 69, 71, 74, 76, 78, 81, 83, 86];
-const CHORDS = [
-  [50, 54, 57], // D
-  [47, 50, 54], // Bm
-  [43, 47, 50], // G
-  [45, 49, 52], // A
-];
+// Melody scales around D5. Each region picks one (and a transposition).
+const SCALES = {
+  major: [62, 64, 66, 69, 71, 74, 76, 78, 81, 83, 86], // D major pentatonic
+  minor: [62, 65, 67, 69, 72, 74, 77, 79, 81, 84, 86], // D minor pentatonic
+  taarab: [62, 63, 66, 67, 69, 70, 74, 75, 78, 79, 81], // a Swahili-coast, hijaz-flavoured mode
+};
+const CHORD_SETS = {
+  major: [[50, 54, 57], [47, 50, 54], [43, 47, 50], [45, 49, 52]], // D Bm G A
+  minor: [[50, 53, 57], [46, 50, 53], [48, 52, 55], [45, 48, 52]], // Dm Bb C Am
+  taarab: [[50, 54, 57], [51, 55, 58], [50, 54, 57], [43, 46, 50]], // D Eb D Gm
+};
+let PENTA = SCALES.major;
+let CHORDS = CHORD_SETS.major;
 // Melody per chord as indices into PENTA (-1 = rest), 8 eighth-notes per bar.
 const MELODY = [
   [5, -1, 3, 4, 5, -1, 7, 5],
@@ -31,11 +36,13 @@ class AudioEngine {
   noiseBuf = null;
   musicOn = true;
   soundOn = true;
-  intensity = 0; // 0 = menu (gentle), 1 = running (full groove)
+  intensity = 0; // 0 = menu (gentle), 1 = running, 2 = fast, 3 = an ally is helping
   step = 0;
   nextTime = 0;
   timer = null;
   tempo = 116;
+  baseTempo = 116;
+  transpose = 0;
 
   unlock() {
     if (this.ctx) {
@@ -97,6 +104,21 @@ class AudioEngine {
   }
   setIntensity(v) {
     this.intensity = v;
+    if (v === 0) this.tempo = this.baseTempo;
+  }
+  /** Layers build as the run speeds up; tempo creeps up a little too. */
+  setLevel(level, speed = 15) {
+    this.intensity = level;
+    this.tempo = this.baseTempo + Math.min(14, Math.max(0, speed - 15) * 0.6);
+  }
+  setRegion(music) {
+    if (!music) return;
+    PENTA = SCALES[music.scale] ?? SCALES.major;
+    CHORDS = CHORD_SETS[music.scale] ?? CHORD_SETS.major;
+    this.transpose = music.transpose ?? 0;
+    this.baseTempo = music.tempo ?? 116;
+    if (this.intensity === 0) this.tempo = this.baseTempo;
+    if (this.delay) this.delay.delayTime.value = (60 / this.baseTempo) * 0.75;
   }
   muffle(on) {
     if (!this.ctx) return;
@@ -117,7 +139,8 @@ class AudioEngine {
   playStep(step, t) {
     const bar = Math.floor(step / 16) % 8;
     const s16 = step % 16;
-    const chord = CHORDS[bar % 4];
+    const tr = this.transpose;
+    const chord = CHORDS[bar % 4].map((n) => n + tr);
     const full = this.intensity > 0;
 
     // bass on the downbeats
@@ -127,9 +150,16 @@ class AudioEngine {
     // melody (eighths)
     if (s16 % 2 === 0) {
       const idx = MELODY[bar][s16 / 2];
-      if (idx >= 0 && (full || s16 % 4 === 0)) this.kalimba(NOTE(PENTA[idx]), t, full ? 0.2 : 0.14, true);
+      if (idx >= 0 && (full || s16 % 4 === 0)) {
+        this.kalimba(NOTE(PENTA[idx] + tr), t, full ? 0.2 : 0.14, true);
+        // level 2: an octave-up shimmer doubles the tune
+        if (this.intensity >= 2) this.kalimba(NOTE(PENTA[idx] + tr + 12), t + 0.01, 0.07);
+      }
     }
+    // level 3: a sparkling arpeggio while an ally helps
+    if (this.intensity >= 3 && s16 % 2 === 1) this.kalimba(NOTE(chord[(s16 >> 1) % 3] + 24), t, 0.05);
     if (!full) return;
+    if (this.intensity >= 2 && (s16 === 3 || s16 === 7 || s16 === 15)) this.drumSlap(t, 0.35);
     // djembe groove
     if (s16 === 0 || s16 === 8 || s16 === 11) this.drumLow(t);
     if (s16 === 4 || s16 === 12) this.drumSlap(t);
