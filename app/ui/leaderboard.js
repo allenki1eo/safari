@@ -46,8 +46,9 @@ async function readJson(res) {
   }
 }
 
-export async function fetchBoard() {
-  const res = await fetch('/api/scores', { headers: { accept: 'application/json' } });
+export async function fetchBoard(board) {
+  const query = board === 'daily' ? '?board=daily' : '';
+  const res = await fetch(`/api/scores${query}`, { headers: { accept: 'application/json' } });
   const data = await readJson(res);
   if (!res.ok) throw Object.assign(new Error(data.error || 'Could not load the board'), { status: res.status });
   return data;
@@ -85,6 +86,7 @@ export async function postScore(entry) {
       allies: entry.allies,
       chapter: entry.chapter,
       runner: entry.runner,
+      duration: entry.duration ?? 0,
     }),
   });
   const data = await readJson(res);

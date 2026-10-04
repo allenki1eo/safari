@@ -30,6 +30,8 @@ export const KINDS = {
   rhino: { y0: 0, y1: 1.9, len: 2.4, pass: 'hard', charger: true },
   buffalo: { y0: 0, y1: 1.8, len: 2.2, pass: 'hard', charger: true },
   wildebeest: { y0: 0, y1: 1.7, len: 1.8, pass: 'hard', charger: true },
+  lion: { y0: 0, y1: 1.55, len: 2.1, pass: 'hard', charger: true },
+  water: { y0: 0, y1: 0.42, len: 6, pass: 'jump', water: true },
   crossing: { y0: 0, y1: 3.2, len: 1.8, pass: 'hard', crosser: true },
 };
 
@@ -61,6 +63,10 @@ export function makeChunk({ z, D, speed, region, wantTotem = false, rng = Math.r
     ['single', 3], ['double', D > 300 ? 3 : 1], ['logs', 2], ['gates', 2], ['mix', D > 400 ? 3 : 1],
     ['trucks', region.trucks ? (D > 250 ? 3.5 : 0.5) : 0], ['oncoming', region.trucks && D > 900 ? 2 : 0],
     ['snake', 1.2], ['zigzag', D > 500 ? 2 : 0], ['logrun', D > 350 ? 1.4 : 0],
+    // Daily route moments: a river you have to jump, a lion that can clip you,
+    // and a wildebeest close enough to fill the screen. Same weights everywhere,
+    // so the day's seed — not the region — decides when they show up.
+    ['river', 1.7], ['lion', 1.15], ['beast', 1.25],
   ];
   for (const [name, w] of Object.entries(region.specials ?? {})) pats.push([name, D > 150 ? w : w * 0.3]);
   const total = pats.reduce((s, p) => s + p[1], 0);
@@ -182,6 +188,28 @@ export function makeChunk({ z, D, speed, region, wantTotem = false, rng = Math.r
       obs('crossing', 1, z + 6, { cross: { dir: fromLeft ? 1 : -1, v: rand(1.8, 2.6) } });
       line(randi(3), z - 4, z + 14);
       return { len: 14, ops, pat };
+    }
+    case 'river': {
+      // water across every lane — the only way through is a jump
+      L.forEach((l) => obs('water', l, z + 4));
+      arc(randi(3), z + 4);
+      return { len: 12, ops, pat };
+    }
+    case 'lion': {
+      const l = randi(3);
+      const v = rand(7, 10);
+      obs('lion', l, z + lead(v) + 2, { moving: v });
+      line(pick(L.filter((x) => x !== l)), z - 6, z + 12);
+      return { len: 10, ops, pat };
+    }
+    case 'beast': {
+      // one charging wildebeest, sometimes a second right behind it
+      const l = randi(3);
+      const v = rand(6.5, 9);
+      obs('wildebeest', l, z + lead(v) + 2, { moving: v });
+      if (rng() < 0.45) obs('wildebeest', l, z + lead(v) + 8, { moving: v });
+      line(pick(L.filter((x) => x !== l)), z - 4, z + 14);
+      return { len: 12, ops, pat };
     }
     case 'snake': {
       let l = randi(3);

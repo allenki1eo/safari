@@ -29,7 +29,8 @@ async function scoresMiddleware(req, res, next) {
   if (path !== '/api/scores') return next();
   try {
     const body = req.method === 'POST' ? await readJson(req) : undefined;
-    const result = await handleScoreRequest(req.method, body);
+    const query = Object.fromEntries(new URLSearchParams((req.url || '').split('?')[1] || ''));
+    const result = await handleScoreRequest(req.method, body, query);
     send(res, result.status, result.body);
   } catch (err) {
     if (err?.code === 'TOO_BIG' || err instanceof SyntaxError) {

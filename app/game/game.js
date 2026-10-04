@@ -7,10 +7,13 @@ import {
 } from './regionModels.js';
 import { World, Particles, LANE_W } from './world.js';
 import { audio } from './audio.js';
-import { makeChunk, tutorialChunk, KINDS, TRUCK_LEN, JUMP_V, GRAVITY } from './patterns.js';
+import { makeChunk, KINDS, TRUCK_LEN, JUMP_V, GRAVITY } from './patterns.js';
 import { RUNNERS, ALLIES, ALLY_IDS, TUTORIAL, SHOUTS } from '../data/content.js';
 import { REGIONS, regionIndexAt, regionAt } from '../data/regions.js';
 import { save, persist, multiplier } from '../data/save.js';
+import {
+  chunkPlan, darDay, ghostDistance, lionClip, nearMissSpec, rngAt, waterClear, wildebeestFill,
+} from '../data/daily.js';
 
 const LANES = [-LANE_W, 0, LANE_W];
 const castShadows = (root) => root.traverse((o) => o.isMesh && !o.material.transparent && (o.castShadow = true));
@@ -155,9 +158,11 @@ export class Game {
     this.scene.add(this.shieldMesh);
   }
 
-  /** Journey distance a run starts from (only unlocked regions can be chosen). */
-  startFor(i) {
-    const idx = Math.max(0, Math.min(i ?? 0, save.regionMax ?? 0, REGIONS.length - 1));
+  /** Journey distance a run starts from. A shared link may start a locked region. */
+  startFor(i, allowLocked = false) {
+    const cap = allowLocked ? REGIONS.length - 1 : (save.regionMax ?? 0);
+    const idx = Math.max(0, Math.min(i ?? 0, cap, REGIONS.length - 1));
+    this.startIndex = idx;
     return REGIONS[idx].at;
   }
   get J() {
@@ -174,6 +179,8 @@ export class Game {
     this.coinMesh.count = 0;
     this.scene.add(this.coinMesh);
     this.dummy = new THREE.Object3D();
+    this.waterGeo = new THREE.BoxGeometry(LANE_W * 1.05, 0.16, KINDS.water.len);
+    this.waterMat = bend(new THREE.MeshLambertMaterial({ color: 0x2a9bb8, transparent: true, opacity: 0.9 }));
   }
 
   /* --------------------------------------------------------------- run */
@@ -202,20 +209,25 @@ export class Game {
     this.chaseDist = 14;
     this.stumbleT = 0;
     this.nextChunk = 45;
-    this.nextTotemAt = 260 + rand(0, 140);
     this.chapter = -1;
     this.region = -1;
-    this.tutorial = !save.tutorialDone;
+    this.day = darDay();
     this.tutorialIdx = 0;
-    this.chunkIdx = 0;
+    this.cardMoment = null;
+    this.freeze = 0;
+    this.ghostPassed = false;
+    this.nextTotemAt = 260 + rngAt(this.day, 3, 0)() * 140;
     this.revives = 0;
     this.deathT = 0;
     for (const a of Object.values(this.allyModels)) a.root.visible = false;
+    if (this.ghost) this.ghost.root.visible = false;
   }
 
   start() {
     this.resetRun();
-    this.startJ = this.startFor(save.startRegion);
+    const linked = this.linkedStart;
+    this.startJ = linked == null ? this.startFor(save.startRegion) : this.startFor(linked, true);
+    this.world.setDay(this.day);
     this.world.reset(this.J);
     this.runId = (this.runId ?? 0) + 1;
     this.state = 'running';
@@ -243,6 +255,7 @@ export class Game {
   toMenu(mode = 'menu') {
     this.resetRun();
     this.startJ = this.startFor(save.startRegion);
+    this.world.setDay(this.day);
     this.world.reset(this.J);
     this.state = 'menu';
     this.camMode = mode;
@@ -332,9 +345,16 @@ export class Game {
   frame() {
     const realDt = Math.min(this.clock.getDelta(), 0.05);
     this.adaptQuality(realDt);
-    // slow-motion for near misses
-    if (this.slowmo > 0) this.slowmo -= realDt;
-    this.timeScale = damp(this.timeScale, this.slowmo > 0 ? 0.35 : 1, this.slowmo > 0 ? 30 : 6, realDt);
+    // A near-miss holds for a short beat. Other close calls only ease into slow motion.
+    if (this.state === 'paused') {
+      /* leave the clock where the pause caught it */
+    } else if (this.freeze > 0) {
+      this.freeze -= realDt;
+      this.timeScale = damp(this.timeScale, 0.06, 28, realDt);
+    } else {
+      if (this.slowmo > 0) this.slowmo -= realDt;
+      this.timeScale = damp(this.timeScale, this.slowmo > 0 ? 0.35 : 1, this.slowmo > 0 ? 30 : 6, realDt);
+    }
     const dt = realDt * this.timeScale;
     this.time += dt;
     timeU.value = this.time;
@@ -458,6 +478,7 @@ export class Game {
 
     this.spawn();
     this.updateObstacles(dt, prevD);
+    this.updateGhost(dt);
     this.updatePickups(dt);
     this.updateRunnerVisual(dt);
     this.updateAllies(dt);
@@ -516,13 +537,19 @@ export class Game {
       }
       case 'rhino': anim = Animals.rhino(); break;
       case 'wildebeest': anim = Animals.wildebeest(); break;
+      case 'lion': anim = Animals.lion(); break;
       case 'buffalo': anim = RegionAnimals.buffalo(); break;
       case 'croc': anim = RegionAnimals.croc(); break;
       case 'gorilla': anim = RegionAnimals.gorilla(true); break;
       case 'crossing': anim = Animals.elephant(); break;
+      case 'water': {
+        m = new THREE.Mesh(this.waterGeo, this.waterMat);
+        m.position.y = 0.08;
+        break;
+      }
     }
     if (anim) m = anim.root;
-    else if (kind !== 'rockfall') finishProp(bakeRigid(m, true));
+    else if (kind !== 'rockfall' && kind !== 'water') finishProp(bakeRigid(m, true));
     castShadows(m);
     // animals in the lane face the runner
     if (kind === 'croc' || kind === 'gorilla') m.rotation.y = Math.PI;
@@ -621,7 +648,7 @@ export class Game {
       // near-miss: a big blocker whizzes past in the lane we just left
       if (!o.passed && this.D > o.wz + o.len / 2) {
         o.passed = true;
-        if (Math.abs(p.x - ox) < 2.8 && Math.abs(p.x - ox) > 1.5 && p.laneT < 0.45 && KINDS[o.kind].pass === 'hard') {
+        if (!o.specialMiss && Math.abs(p.x - ox) < 2.8 && Math.abs(p.x - ox) > 1.5 && p.laneT < 0.45 && KINDS[o.kind].pass === 'hard') {
           this.stats.nearMiss++;
           this.emit('shout', { text: 'Close call!', sub: pick(SHOUTS) });
           this.score += 50 * multiplier();
@@ -655,6 +682,34 @@ export class Game {
           } else if (side) this.stumble(false);
           else return this.crash(o);
         }
+      }
+
+      if (this.state === 'running') {
+        if (!o.clipChecked && o.kind === 'lion' && this.D > o.wz) {
+          o.clipChecked = true;
+          if (lionClip({ kind: 'lion', dx: Math.abs(p.x - o.x) })) this.noteNearMiss('lion', o);
+        }
+        if (!o.filled && o.kind === 'wildebeest') {
+          const dz = o.wz - this.D;
+          if (wildebeestFill({ kind: 'wildebeest', dz, dx: Math.abs(p.x - o.x) })) {
+            o.filled = true;
+            this.noteNearMiss('wildebeest', o);
+          }
+        }
+        if (o.kind === 'water' && !o.cleared && Math.abs(p.x - o.x) < 1.3) {
+          const bank = o.wz + o.len / 2;
+          const over = this.D + 0.3 > o.wz - o.len / 2 && this.D < bank + 0.4;
+          if (over && p.y > o.y1 + 0.05) o.jumped = true;
+          if (o.jumped && p.grounded && this.D >= bank) {
+            o.cleared = true;
+            const margin = this.D - bank;
+            if (waterClear({ jumped: true, grounded: true, margin, wasOver: prevD < bank })) this.noteNearMiss('water', o);
+          }
+        }
+      }
+      if (o.pump) {
+        o.mesh.scale.setScalar(this.freeze > 0 ? o.pump : 1);
+        if (this.freeze <= 0) o.pump = 0;
       }
       o.zPrev = zOver;
     }
@@ -700,8 +755,84 @@ export class Game {
     }
   }
 
+  /** Holds the trail for a beat and keeps that moment for the share card. */
+  noteNearMiss(kind, obstacle) {
+    if (this.state !== 'running' || this.freeze > 0) return;
+    const spec = nearMissSpec(kind);
+    if (!spec) return;
+    if (obstacle) obstacle.specialMiss = true;
+    this.freeze = 0.62;
+    this.cardMoment = spec;
+    this.stats.nearMiss++;
+    this.score += 50 * multiplier();
+    if (kind === 'wildebeest' && obstacle?.mesh) obstacle.pump = 2.15;
+    if (kind === 'lion') this.shake = Math.max(this.shake, 0.28);
+    this.emit('shout', { text: spec.shout, sub: spec.line });
+    audio.whoosh();
+    this.haptic(20);
+  }
+
+  /**
+   * The faint runner ahead. Hidden unless `run` is a real finish: a name, a
+   * distance and a time. A missing ghost is not replaced with a made-up score.
+   */
+  setGhost(run) {
+    const distance = Math.floor(Number(run?.distance) || 0);
+    const duration = Math.floor(Number(run?.duration) || 0);
+    const name = String(run?.name || '').trim().slice(0, 16);
+    if (!name || distance <= 0 || duration <= 0) {
+      this.ghostRun = null;
+      if (this.ghost) this.ghost.root.visible = false;
+      return;
+    }
+    const runner = RUNNERS.some((r) => r.id === run.runner) ? run.runner : 'zuri';
+    this.ghostRun = { name, distance, duration, runner };
+    this.ghostPassed = false;
+    this.ensureGhost(runner);
+  }
+
+  ensureGhost(runnerId) {
+    if (this.ghost && this.ghostRunnerId === runnerId) return;
+    if (this.ghost) this.scene.remove(this.ghost.root);
+    const def = RUNNERS.find((r) => r.id === runnerId) ?? RUNNERS[0];
+    const ghost = makeRunner(def);
+    ghost.root.traverse((node) => {
+      if (!node.isMesh) return;
+      const material = node.material.clone();
+      material.transparent = true;
+      material.opacity = 0.32;
+      material.depthWrite = false;
+      node.material = material;
+      node.castShadow = false;
+    });
+    ghost.shadow.visible = false;
+    ghost.root.visible = false;
+    this.scene.add(ghost.root);
+    this.ghost = ghost;
+    this.ghostRunnerId = def.id;
+  }
+
+  updateGhost(dt) {
+    const run = this.ghostRun;
+    if (!run || !this.ghost) return;
+    const dist = ghostDistance(run, this.runTime);
+    if (dist == null) {
+      this.ghost.root.visible = false;
+      return;
+    }
+    const ahead = dist - this.D;
+    this.ghost.root.visible = ahead > -40 && ahead < 90;
+    this.ghost.root.position.set(LANES[0], 0, -ahead);
+    this.ghost.update(dt, this.speed, 'run');
+    if (!this.ghostPassed && ahead < -0.4) {
+      this.ghostPassed = true;
+      this.emit('shout', { text: 'Passed!', sub: run.name });
+    }
+  }
+
   crash(o, caught = false) {
     this.state = 'dying';
+    this.freeze = 0;
     this.deathT = 0;
     this.caught = caught;
     this.chaseT = 99;
@@ -752,36 +883,31 @@ export class Game {
       chapter: this.region,
       region: REGIONS[this.region]?.id ?? 'serengeti',
       lap: this.lap,
-      duration: this.runTime,
+      duration: Math.max(0, Math.round(this.runTime)),
       revives: this.revives,
+      day: this.day,
+      startRegion: this.startIndex ?? 0,
+      runner: this.runnerId,
+      nearMiss: this.cardMoment
+        ? { kind: this.cardMoment.kind, line: this.cardMoment.line, shout: this.cardMoment.shout }
+        : null,
     };
   }
 
   /* ------------------------------------------------------------ spawning */
   spawn() {
     while (this.nextChunk < this.D + 170) {
-      let chunk = null;
-      if (this.tutorial) {
-        chunk = tutorialChunk(this.chunkIdx++, this.nextChunk);
-        if (!chunk) {
-          this.tutorial = false;
-          save.tutorialDone = true;
-          persist();
-        }
-      }
-      if (!chunk) {
-        chunk = makeChunk({
-          z: this.nextChunk,
-          D: this.D,
-          speed: this.speed,
-          region: regionAt(this.startJ + this.nextChunk),
-          wantTotem: this.D + 150 > this.nextTotemAt,
-        });
-      }
+      const plan = chunkPlan(this.day, this.nextChunk);
+      const chunk = makeChunk({
+        z: plan.z,
+        D: plan.D,
+        speed: plan.speed,
+        rng: plan.rng,
+        region: regionAt(this.startJ + plan.z),
+        wantTotem: plan.z + 150 > this.nextTotemAt,
+      });
       this.applyChunk(chunk.ops);
-      const diff = Math.min(1, this.D / 6000);
-      const gap = Math.max(12, this.speed * lerp(1.15, 0.62, diff));
-      this.nextChunk += chunk.len + gap;
+      this.nextChunk += chunk.len + plan.gap;
     }
   }
 
@@ -817,13 +943,13 @@ export class Game {
   }
 
   addTotem(id, lane, wz) {
-    id ??= pick(ALLY_IDS);
+    id ??= ALLY_IDS[Math.floor(rngAt(this.day, 4, wz)() * ALLY_IDS.length)];
     const a = ALLIES[id];
     const m = makeTotem(a.emoji, a.ring);
     m.position.x = LANES[lane];
     this.scene.add(m);
     this.totems.push({ id, lane, wz, mesh: m });
-    this.nextTotemAt = this.D + rand(420, 700);
+    this.nextTotemAt = wz + 420 + rngAt(this.day, 3, wz)() * 280;
   }
 
   /* ------------------------------------------------------------- pickups */
@@ -1078,6 +1204,10 @@ export class Game {
       if (this.D >= t.at) {
         this.tutorialIdx++;
         this.emit('tutorial', t);
+        if (this.tutorialIdx >= TUTORIAL.length) {
+          save.tutorialDone = true;
+          persist();
+        }
       }
     }
   }

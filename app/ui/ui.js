@@ -2,8 +2,9 @@ import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO } from '../data/content
 import { REGIONS, COUNTRIES } from '../data/regions.js';
 import { save, persist, ensureMissions, checkMissions, claimMissionSet, multiplier, claimDaily } from '../data/save.js';
 import { audio } from '../game/audio.js';
-import { shareRun } from './share.js';
+import { whatsAppHref } from './share.js';
 import { fetchBoard, leaveDecision, postScore, renderRows, runnerName, scoreSavePlan } from './leaderboard.js';
+import { darDay, ghostFrom, parseShareLink, routeForLink } from '../data/daily.js';
 
 const $ = (html) => {
   const t = document.createElement('template');
@@ -73,7 +74,11 @@ export class UI {
     this.screen = null;
     this.hud = null;
     this.params = new URLSearchParams(location.search);
-    this.challenge = this.params.get('c') ? { score: parseInt(this.params.get('c'), 10) || 0, name: (this.params.get('n') || 'A friend').slice(0, 16) } : null;
+    this.link = parseShareLink(this.params);
+    this.route = routeForLink(this.link, darDay());
+    this.challenge = this.route.challenge;
+    this.ghostRun = ghostFrom(this.route.friend, null);
+    if (!this.ghostRun) this.loadYesterday();
     this.missionTick = 0;
     this.selIdx = Math.max(0, RUNNERS.findIndex((r) => r.id === save.runner));
     this.postedRunId = null;
@@ -146,7 +151,10 @@ export class UI {
           <div class="sub">SPIRIT OF THE SERENGETI</div>
         </div>
         <div class="title-bottom">
-          ${this.challenge ? `<div class="challenge"><span style="font-size:28px">🔥</span><div><b>${esc(this.challenge.name)}</b> challenges you to beat <b>${fmt(this.challenge.score)}</b> points!</div></div>` : ''}
+          ${this.challenge ? `<div class="challenge"><span style="font-size:28px">🔥</span><div>${this.challenge.sameDay === false
+            ? `<b>${esc(this.challenge.name)}</b> ran that on an earlier route. Today's trail is a new one.`
+            : `<b>${esc(this.challenge.name)}</b> challenges you to beat <b>${fmt(this.challenge.score)}</b> on today's route!`}</div></div>` : ''}
+          ${this.ghostRun ? `<div class="best-line">${esc(this.ghostRun.name)} is a faint runner ahead — pass them.</div>` : ''}
           ${save.best ? `<div class="best-line">Best run <b>${fmt(save.best)}</b> pts · <b>${fmt(save.bestDistance)}m</b></div>` : ''}
           <button class="start-chip" data-act="journey" data-click>
             <span class="flag">${COUNTRIES[start.country].flag}</span>
@@ -245,10 +253,26 @@ export class UI {
   /* --------------------------------------------------------------- run */
   startRun() {
     audio.unlock();
+    this.game.linkedStart = this.route.startRegion;
+    this.game.setGhost(this.ghostRun);
     this.show($('<div class="screen" style="pointer-events:none"></div>'));
     this.buildHud();
     this.game.start();
     this.missionTick = 0;
+  }
+
+  /** Yesterday's best, when the server has one. A friend link already set the ghost. */
+  async loadYesterday() {
+    try {
+      const data = await fetchBoard('daily');
+      if (this.route.friend) return;
+      const ghost = ghostFrom(null, data.yesterday);
+      if (!ghost) return;
+      this.ghostRun = ghost;
+      this.game.setGhost(ghost);
+    } catch {
+      /* no ghost rather than a made-up one */
+    }
   }
 
   buildHud() {
@@ -259,6 +283,7 @@ export class UI {
           <div class="score-box">
             <div class="score">0</div>
             <div class="mult">×${multiplier()}</div>
+            <div class="ghost-chip" hidden></div>
           </div>
           <div class="hud-right">
             <div class="row">
@@ -287,6 +312,7 @@ export class UI {
       seeds: el.querySelector('.seeds-chip .n'),
       seedsChip: el.querySelector('.seeds-chip'),
       dist: el.querySelector('.dist'),
+      ghost: el.querySelector('.ghost-chip'),
       powers: el.querySelector('.powers'),
       combo: el.querySelector('.combo'),
       warns: el.querySelector('.warns'),
@@ -330,6 +356,16 @@ export class UI {
       el.classList.toggle('ending', left < 1.5);
     }
     if (g.shield > 0) E.shield.style.setProperty('--p', (g.shield / 30).toFixed(3));
+    const ghost = g.ghostRun;
+    if (E.ghost) {
+      if (!ghost) E.ghost.hidden = true;
+      else {
+        const dist = Math.min(ghost.distance, (ghost.distance / ghost.duration) * g.runTime);
+        const ahead = Math.round(dist - g.D);
+        E.ghost.hidden = false;
+        E.ghost.textContent = ahead >= 0 ? `${ghost.name} · ${fmt(ahead)}m ahead` : `Passed ${ghost.name}`;
+      }
+    }
     // missions — checked a few times per second
     if ((this.missionTick += 1) % 20 === 0) {
       for (const done of checkMissions(g.stats)) this.toast('🎯', `<b>Mission complete!</b><br>${esc(done.text)}`);
@@ -584,6 +620,7 @@ export class UI {
       <div class="screen over scrim-full">
         <div class="panel card">
           <div class="caught">${run.caught ? '🐾 Fisi caught you!' : '💥 Ouch!'}</div>
+          ${this.shareCardHtml(run)}
           <div class="big-score">${fmt(run.score)}</div>
           ${newBest ? '<div class="new-best">★ NEW BEST ★</div>' : `<div class="muted">Best ${fmt(save.best)}</div>`}
           ${beatChallenge ? `<div class="challenge" style="margin-top:12px;justify-content:center">🏆 You beat <b>&nbsp;${esc(this.challenge.name)}</b>!</div>` : ''}
@@ -603,7 +640,7 @@ export class UI {
           <div style="display:flex;flex-direction:column;gap:12px">
             <button class="btn big" type="button" data-act="again">↻ Run again</button>
             <div class="row2">
-              <button class="btn teal" type="button" data-act="share">${ICON.share.replace('<svg', '<svg width="22" height="22"')} Challenge</button>
+              <button class="btn teal" type="button" data-act="share">${ICON.share.replace('<svg', '<svg width="22" height="22"')} WhatsApp</button>
               <button class="btn ghost" type="button" data-act="home">🏠 Home</button>
             </div>
           </div>
@@ -616,9 +653,7 @@ export class UI {
       } else if (act === 'post') {
         this.postRun(el, run);
       } else if (act === 'share') {
-        const r = await shareRun(run);
-        if (r === 'copied') this.toast('🔗', 'Challenge link copied — send it to a friend!');
-        else if (r === 'downloaded') this.toast('🖼️', 'Score card saved!');
+        this.shareOnWhatsApp(run);
       } else if (act === 'board') {
         this.showBoard();
       }
@@ -628,6 +663,44 @@ export class UI {
     if (ms.every((m) => m.done)) setTimeout(() => this.missionSetComplete(), 900);
   }
 
+  shareCardHtml(run) {
+    const miss = run.nearMiss?.line
+      ? `${esc(run.nearMiss.line)} · ${esc(run.nearMiss.shout)}`
+      : 'Clean run · no close call';
+    return `
+      <div class="share-card">
+        <div class="share-kicker">Today's route</div>
+        <div class="share-dist">${fmt(run.distance)}m</div>
+        <div class="share-rank" data-share-rank>Today <span class="muted">…</span></div>
+        <div class="share-miss">${miss}</div>
+      </div>`;
+  }
+
+  paintDailyRank(root, daily, failed = false) {
+    const el = root.querySelector('[data-share-rank]');
+    if (!el) return;
+    if (daily?.rank) {
+      el.innerHTML = `Today <b>#${fmt(daily.rank)}</b>`;
+      return;
+    }
+    el.textContent = failed ? "Today's rank didn't save" : 'Today — off the board';
+  }
+
+  shareOnWhatsApp(run) {
+    const href = whatsAppHref({
+      ...run,
+      name: save.name || run.name,
+      runner: run.runner || save.runner,
+    });
+    const opened = window.open(href, '_blank', 'noopener,noreferrer');
+    if (!opened) {
+      navigator.clipboard?.writeText(href).then(
+        () => this.toast('🔗', 'WhatsApp link copied — send it to a friend!'),
+        () => this.toast('📲', href),
+      );
+    }
+  }
+
   /** Saves a finished run. A stored name posts immediately; otherwise the card asks. */
   recordFinishedRun(root, run) {
     const plan = scoreSavePlan(save.name);
@@ -635,6 +708,7 @@ export class UI {
       this.submitRun(root, run, plan.name);
       return;
     }
+    if (!(run.score > 0)) this.paintDailyRank(root, null);
     this.loadPreview(root, run, plan.action === 'ask');
   }
 
@@ -678,6 +752,7 @@ export class UI {
           allies: run.stats?.allies ?? 0,
           chapter: Math.max(0, run.chapter || 0),
           runner: save.runner,
+          duration: Math.max(0, Math.round(run.duration || 0)),
         });
         save.name = data.entry.name;
         save.playerId = data.entry.id;
@@ -685,7 +760,11 @@ export class UI {
         this.postedRunId = this.game.runId;
         this.postedEntry = data.entry;
         this.lastTop = data.top;
-        if (root.isConnected) this.paintBoard(root, data.top, data.entry, '', run);
+        if (data.daily?.rank) run.rank = data.daily.rank;
+        if (root.isConnected) {
+          this.paintBoard(root, data.top, data.entry, '', run);
+          this.paintDailyRank(root, data.daily);
+        }
         if (data.entry.improved && data.entry.rank) audio.buy();
         finish(true);
       } catch (err) {
@@ -697,6 +776,7 @@ export class UI {
             ? `“${name}” is taken. Pick another name.`
             : (err.message || 'Could not save your score');
           this.paintBoard(root, top, null, message, run, true);
+          this.paintDailyRank(root, null, true);
           root.querySelector('[data-lb-name]')?.focus();
         }
         finish(false);
@@ -789,31 +869,52 @@ export class UI {
           <h2>Leaderboard</h2>
           <div class="chip">🏆</div>
         </div>
-        <div class="sheet-body"></div>
+        <div class="sheet-body">
+          <div class="lb-tabs">
+            <button type="button" data-board="all" class="on">All-time</button>
+            <button type="button" data-board="daily">Today</button>
+          </div>
+          <div class="lb-rows"></div>
+        </div>
       </div>`);
-    const body = el.querySelector('.sheet-body');
+    const rows = el.querySelector('.lb-rows');
     const close = () => el.remove();
     el.querySelector('[data-act=back]').addEventListener('click', close);
     el.addEventListener('pointerdown', (e) => {
       if (e.target.closest('[data-click]')) audio.click();
     });
     el.addEventListener('click', (e) => {
-      if (e.target.closest('[data-act=retry]')) this.fillBoard(body);
+      const tab = e.target.closest('[data-board]');
+      if (tab) {
+        el.querySelectorAll('[data-board]').forEach((b) => b.classList.toggle('on', b === tab));
+        this.fillBoard(rows, tab.dataset.board);
+        return;
+      }
+      if (e.target.closest('[data-act=retry]')) {
+        const which = el.querySelector('[data-board].on')?.dataset.board || 'all';
+        this.fillBoard(rows, which);
+      }
     });
     this.overlay(el);
-    this.fillBoard(body);
+    this.fillBoard(rows, 'all');
   }
 
-  async fillBoard(body) {
-    body.innerHTML = '<p class="muted">Loading the savanna board…</p>';
+  async fillBoard(body, board = 'all') {
+    const daily = board === 'daily';
+    body.innerHTML = `<p class="muted">${daily ? "Loading today's route…" : 'Loading the savanna board…'}</p>`;
     try {
       if (this._submitTask) await this._submitTask;
-      const { top } = await fetchBoard();
+      const data = await fetchBoard(daily ? 'daily' : undefined);
       if (!body.isConnected) return;
       const youId = save.playerId ?? null;
-      body.innerHTML = top?.length
-        ? `<p class="muted" style="margin:0 4px">One best run per runner, ranked by score.</p>${renderRows(top, { youId, youName: '' })}`
+      const top = data.top || [];
+      const intro = daily
+        ? `<p class="muted" style="margin:0 4px">Today's route · ${esc(data.day || '')} · resets at midnight in Dar es Salaam.</p>`
+        : '<p class="muted" style="margin:0 4px">One best run per runner, ranked by score.</p>';
+      const empty = daily
+        ? '<div class="panel lb-empty-card"><div class="e">🌅</div><p>No scores on today\'s route yet. Finish a run and it lands here.</p></div>'
         : '<div class="panel lb-empty-card"><div class="e">🌱</div><p>No scores yet. Finish a run and put your name on the board.</p></div>';
+      body.innerHTML = top.length ? `${intro}${renderRows(top, { youId, youName: '' })}` : empty;
     } catch (err) {
       if (!body.isConnected) return;
       body.innerHTML = `
