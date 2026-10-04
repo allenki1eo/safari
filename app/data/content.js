@@ -1,0 +1,161 @@
+/* All narrative + tuning content lives here so the story can grow without touching the engine. */
+
+export const RUNNERS = [
+  {
+    id: 'zuri', name: 'Zuri', title: 'The Young Ranger', cost: 0, emoji: '🧒🏾',
+    bio: 'Raised at the edge of the plains, Zuri can name every bird by its song.',
+    skin: 0x6b4226, shirt: 0xc9a46a, pants: 0x5b4a32, shoes: 0x3b2a1c, hair: 0x1a120c,
+    accent: 0xd7263d, head: 'wrap', scarf: 0xd7263d, scarfPattern: 0x1b2a6b, backpack: 0x8a5a2b, sleeves: true, wristband: 0xf4d35e,
+  },
+  {
+    id: 'juma', name: 'Juma', title: 'Striker of Arusha', cost: 600, emoji: '⚽',
+    bio: 'Fastest feet in the village league. Has never once lost a race to a goat.',
+    skin: 0x5a3620, shirt: 0xf4d35e, pants: 0x1b4f9c, shoes: 0xffffff, hair: 0x120c08,
+    accent: 0x1b998b, head: 'cap', socks: 0x1b998b, shorts: true, wristband: 0x1b998b,
+  },
+  {
+    id: 'neema', name: 'Neema', title: 'Keeper of Beads', cost: 1500, emoji: '📿',
+    bio: 'Her beadwork tells the story of the migration. She means to finish it.',
+    skin: 0x4a2c18, shirt: 0x6a2c91, pants: 0x4a2c18, shoes: 0x7a4a22, hair: 0x120c08,
+    accent: 0xd7263d, head: 'beads', necklace: true, dress: 0x6a2c91, scarf: 0xe94f37, scarfPattern: 0xf4d35e, shorts: true,
+  },
+  {
+    id: 'baraka', name: 'Baraka', title: 'The Explorer', cost: 3000, emoji: '🧭',
+    bio: 'Maps every kopje, names every baobab. Carries far too many snacks.',
+    skin: 0x7a4a2a, shirt: 0xe8dcc0, pants: 0x6b5a3a, shoes: 0x4a3420, hair: 0x2a1a10,
+    accent: 0xb38b4d, head: 'hat', backpack: 0x3f6b3a, sleeves: true, scarf: 0x1b998b,
+  },
+  {
+    id: 'amani', name: 'Amani', title: 'Night Runner', cost: 6000, emoji: '🌙',
+    bio: 'Runs by starlight. The fireflies follow her home.',
+    skin: 0x3e2414, shirt: 0x1b2a6b, pants: 0x101828, shoes: 0x4de1ff, hair: 0x0a0806,
+    accent: 0x4de1ff, head: 'braids', scarf: 0x4de1ff, scarfPattern: 0xffffff, wristband: 0x4de1ff, necklace: true,
+  },
+  {
+    id: 'kito', name: 'Kito', title: 'Little Legend', cost: 12000, emoji: '👑',
+    bio: 'The youngest runner ever to outpace Fisi. Nobody knows how. Kito won\'t say.',
+    skin: 0x6b4226, shirt: 0xff7a2f, pants: 0x2b1a0e, shoes: 0xf4d35e, hair: 0x120c08,
+    accent: 0xf4d35e, head: 'mohawk', scarf: 0xf4d35e, scarfPattern: 0xd7263d, wristband: 0xd7263d, shorts: true,
+  },
+];
+
+export const ALLIES = {
+  tembo: {
+    id: 'tembo', name: 'Tembo', species: 'Elephant', emoji: '🐘', ring: '#ffb347', color: '#ffb347',
+    power: 'Stampede Ride', desc: 'Ride Tembo and smash straight through anything in your path.',
+    base: 8, perLevel: 1.5,
+    lines: ['Climb aboard, little one!', 'Nothing stands before Tembo!', 'Hold my ears — and hold on tight!'],
+  },
+  tai: {
+    id: 'tai', name: 'Tai', species: 'Martial Eagle', emoji: '🦅', ring: '#7fd1ff', color: '#7fd1ff',
+    power: 'Sky Lift', desc: 'Tai carries you over the savanna along a river of golden seeds.',
+    base: 6, perLevel: 1.2,
+    lines: ['To the clouds!', 'The plains look small from up here!', 'Mind my feathers!'],
+  },
+  duma: {
+    id: 'duma', name: 'Duma', species: 'Cheetah', emoji: '🐆', ring: '#ffd34d', color: '#ffd34d',
+    power: 'Lightning Dash', desc: 'Match Duma stride for stride — blistering speed, untouchable.',
+    base: 5, perLevel: 1.0,
+    lines: ['Try to keep up!', 'Zero to ninety, baby!', 'Faster! FASTER!'],
+  },
+  twiga: {
+    id: 'twiga', name: 'Twiga', species: 'Giraffe', emoji: '🦒', ring: '#9be15d', color: '#9be15d',
+    power: 'Sky-High Spring', desc: 'Twiga lends you her long legs. Jumps soar twice as high.',
+    base: 10, perLevel: 2,
+    lines: ['Reach for the acacia tops!', 'Up, up and away, dear!', 'Long legs, big leaps!'],
+  },
+  hondo: {
+    id: 'hondo', name: 'Hondo', species: 'Hornbill', emoji: '🐦', ring: '#ff6b6b', color: '#ff6b6b',
+    power: 'Seed Magnet', desc: 'Hondo swoops for every seed nearby and drops them in your bag.',
+    base: 10, perLevel: 2,
+    lines: ['Shiny! Mine! Er… yours!', 'Hondo sees ALL the seeds!', 'Leave the collecting to me!'],
+  },
+  simba: {
+    id: 'simba', name: 'Mfalme', species: 'Lion', emoji: '🦁', ring: '#ff9f1c', color: '#ff9f1c',
+    power: 'Royal Roar', desc: 'The lion king\'s roar doubles every point you earn.',
+    base: 10, perLevel: 2,
+    lines: ['ROOOAAARRR!', 'The plains bow to us!', 'Run, cub — the pride is with you!'],
+  },
+};
+export const ALLY_IDS = Object.keys(ALLIES);
+export const UPGRADE_COSTS = [250, 600, 1200, 2500, 5000];
+
+/* -------------------------------------------------------------------------- */
+export const CHAPTERS = [
+  {
+    at: 0, title: 'The Stolen Song', place: 'Golden Plains',
+    speaker: 'Bibi Tembo', emoji: '🐘',
+    line: 'Run, child! Gather the scattered golden seeds — the herds will follow their song.',
+  },
+  {
+    at: 700, title: 'Kopjes of the Pride', place: 'Moru Kopjes',
+    speaker: 'Mfalme', emoji: '🦁',
+    line: 'Fisi\'s pack passed these rocks at dawn. The pride runs with you now.',
+  },
+  {
+    at: 1700, title: 'The Sunset Stampede', place: 'Grumeti River',
+    speaker: 'Duma', emoji: '🐆',
+    line: 'The herds are restless without the song. Stay light on your feet!',
+  },
+  {
+    at: 3000, title: 'Night of a Thousand Eyes', place: 'Seronera Valley',
+    speaker: 'Hondo', emoji: '🐦',
+    line: 'Those glowing eyes? Hyenas. Follow the fireflies — they know the way.',
+  },
+  {
+    at: 4500, title: 'Dawn at the Rustmaw Den', place: 'Gol Mountains',
+    speaker: 'Tai', emoji: '🦅',
+    line: 'I see the Heart Seed glowing in their trucks! Just a little further!',
+  },
+  {
+    at: 6500, title: 'The Song Returns', place: 'Ngorongoro Rim',
+    speaker: 'Bibi Tembo', emoji: '🐘',
+    line: 'Listen… the plains are singing again. You are a legend now, little runner.',
+  },
+];
+
+export const INTRO = [
+  {
+    art: 'dawn', speaker: 'The Serengeti', emoji: '🌅',
+    text: 'Every year, two million hooves follow an ancient melody across the plains — the Song of the Savanna.',
+  },
+  {
+    art: 'heart', speaker: 'The Heart Seed', emoji: '✨',
+    text: 'The song lives in the Heart Seed, a golden seed that has bloomed beneath the great baobab for a thousand years.',
+  },
+  {
+    art: 'fisi', speaker: 'Fisi, King of Hyenas', emoji: '😈',
+    text: '“Hehehe! With the Heart Seed, every herd will march where FISI says!” Last night, Fisi and his Rustmaw gang stole it.',
+  },
+  {
+    art: 'scatter', speaker: 'The Plains', emoji: '🌾',
+    text: 'As their trucks roared away, golden seeds spilled across the land. Without the song, the herds are lost.',
+  },
+  {
+    art: 'elder', speaker: 'Bibi Tembo', emoji: '🐘',
+    text: '“You, child. You are quick and your heart is kind. The animals will help those who help them. Run — and don\'t stop!”',
+  },
+];
+
+export const TUTORIAL = [
+  { at: 25, text: 'Swipe ← → to switch lanes', icon: '↔️' },
+  { at: 75, text: 'Swipe ↑ to jump logs', icon: '⬆️' },
+  { at: 125, text: 'Swipe ↓ to slide under branches', icon: '⬇️' },
+  { at: 175, text: 'Grab glowing totems to call an animal ally!', icon: '🐾' },
+];
+
+/* -------------------------------------------------------------------------- */
+// Missions come in sets of three. Completing a set raises your permanent multiplier.
+export const MISSION_POOL = [
+  { id: 'seeds', text: 'Collect {n} seeds in one run', stat: 'seeds', n: [80, 200, 400, 700, 1000] },
+  { id: 'dist', text: 'Run {n}m in one run', stat: 'distance', n: [500, 1200, 2500, 4000, 6000] },
+  { id: 'jumps', text: 'Jump {n} times in one run', stat: 'jumps', n: [15, 30, 50, 80, 120] },
+  { id: 'slides', text: 'Slide {n} times in one run', stat: 'slides', n: [10, 20, 35, 55, 80] },
+  { id: 'allies', text: 'Call {n} animal allies in one run', stat: 'allies', n: [1, 2, 4, 6, 9] },
+  { id: 'score', text: 'Score {n} points in one run', stat: 'score', n: [3000, 10000, 25000, 60000, 120000] },
+  { id: 'roofs', text: 'Run across {n} Rustmaw trucks', stat: 'roofs', n: [2, 5, 10, 18, 30] },
+  { id: 'smash', text: 'Smash {n} obstacles riding Tembo', stat: 'smash', n: [3, 8, 15, 25, 40] },
+  { id: 'nearmiss', text: 'Pull off {n} close calls', stat: 'nearMiss', n: [3, 8, 15, 25, 40] },
+];
+
+export const SHOUTS = ['Hakuna shida!', 'Safi sana!', 'Pole pole? Never!', 'Kimbia!', 'Poa!', 'Hatari!', 'Mambo poa!'];
