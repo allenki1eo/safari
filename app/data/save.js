@@ -1,5 +1,5 @@
 import { MISSION_POOL, ALLY_IDS, outfitId } from './content.js';
-import { regionIndexAt } from './regions.js';
+import { REGIONS, regionIndexAt } from './regions.js';
 
 const KEY = 'kimbia.save.v1';
 
@@ -18,6 +18,7 @@ const defaults = () => ({
   chapterSeen: 0,
   regionMax: 0, // furthest region reached — unlocks it on the journey map
   startRegion: 0,
+  journey: 2, // region indexes refer to this journey's map (see JOURNEY_V1)
   charms: 1, // Ngao shield charms (one on the house)
   introSeen: false,
   tutorialDone: false,
@@ -30,12 +31,26 @@ const defaults = () => ({
   hunt: { day: '', done: 0, got: 0 }, // word hunt: words spelled today, letters of the current one
 });
 
+/** The journey before Lake Manyara, Tarangire and Ruaha joined it, by index. */
+const JOURNEY_V1 = ['serengeti', 'ngorongoro', 'kilimanjaro', 'selous', 'zanzibar', 'mara', 'amboseli', 'bwindi'];
+
+export function fromJourneyV1(index) {
+  const id = JOURNEY_V1[Math.max(0, Math.min(JOURNEY_V1.length - 1, Math.floor(Number(index) || 0)))];
+  return Math.max(0, REGIONS.findIndex((r) => r.id === id));
+}
+
 function read() {
   try {
     const raw = localStorage.getItem(KEY);
     if (raw) {
-      const data = { ...defaults(), ...JSON.parse(raw) };
+      const stored = JSON.parse(raw);
+      const data = { ...defaults(), ...stored };
       data.outfit = outfitId(data.outfit);
+      // saves from the 8-region journey hold indexes into that map; carry them over by region
+      if (!stored.journey) {
+        for (const k of ['regionMax', 'startRegion', 'mapSeen']) if (k in stored) data[k] = fromJourneyV1(stored[k]);
+        data.journey = 2;
+      }
       // v1 saves tracked distance-based chapters; translate to journey regions once
       if (data.chapterSeen && !data.regionMax) {
         const OLD = [0, 700, 1700, 3000, 4500, 6500];

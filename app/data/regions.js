@@ -1,6 +1,7 @@
 /**
  * The journey. Each region is one chapter of the chase after Fisi and the Heart Seed:
- * across Tanzania, north into Kenya and west to the misty mountains of Uganda.
+ * across Tanzania (plains, crater, lakeshore, baobab country, the mountain, the wild south and
+ * the coast), north into Kenya and west to the misty mountains of Uganda.
  * Everything that makes a place feel different — ground, flora, fauna, hazards,
  * weather, music — is data here, so new regions are cheap to add.
  */
@@ -17,7 +18,10 @@ export const PROP_TYPES = [
   'snowrock', 'palm', 'doum', 'papyrus', 'hut', 'stonehouse', 'banana', 'jungle', 'fern', 'treefern', 'flowers',
   'ngalawa', 'banda', 'parasol', 'mangrove', 'coralrock', 'seaweed', 'fishrack', 'lighthouse',
 ];
-export const HERD_TYPES = ['zebra', 'giraffe', 'elephant', 'wildebeest', 'buffalo', 'flamingo', 'hippo', 'gorilla', 'lion', 'rhino', 'dolphin', 'crab'];
+export const HERD_TYPES = [
+  'zebra', 'giraffe', 'elephant', 'wildebeest', 'buffalo', 'flamingo', 'hippo', 'gorilla', 'lion', 'rhino', 'dolphin', 'crab',
+  'gazelle', 'warthog', 'wilddog',
+];
 
 export const REGIONS = [
   {
@@ -29,7 +33,7 @@ export const REGIONS = [
     hill: '#c9a86a', fog: null,
     kili: { x: -260, y: -26, z: -720, s: 1 },
     props: [['acacia', 5], ['baobab', 1.4], ['kopje', 1.2], ['mound', 2], ['bush', 3.5], ['grass', 7]],
-    herd: [['zebra', 'walk', 3], ['giraffe', 'walk', 2], ['elephant', 'walk', 1.2], ['wildebeest', 'idle', 2.5]],
+    herd: [['zebra', 'walk', 3], ['giraffe', 'walk', 2], ['elephant', 'walk', 1.2], ['wildebeest', 'idle', 2.5], ['gazelle', 'idle', 2], ['warthog', 'idle', 0.8]],
     blocks: ['boulder', 'mound'], style: { log: 'log', gate: 'branch', rock: 'rock' },
     trucks: true, specials: { rhino: 1.6 },
     music: { transpose: 0, tempo: 116, scale: 'major' },
@@ -49,6 +53,34 @@ export const REGIONS = [
     music: { transpose: 2, tempo: 118, scale: 'major' },
   },
   {
+    id: 'manyara', country: 'tz', name: 'Lake Manyara', len: 800,
+    title: 'Lake of Flamingos', speaker: 'Heroe the Flamingo', emoji: '🦩',
+    line: 'Fisi slipped along the lakeshore! The lions here nap up in the trees — don\'t look up, just run!',
+    blurb: 'A pink-fringed soda lake under the Rift Valley wall, ringed by groundwater forest.',
+    ground: { grass: '#9fb456', path: '#a8703f', water: '#a9d3cc', waterSide: -1 },
+    hill: '#5f7f3a', fog: { tint: '#d6e6c8', amount: 0.14 },
+    kili: { x: -260, y: -200, z: -720, s: 1 },
+    props: [['jungle', 1.6], ['fever', 2.5], ['acacia', 3], ['papyrus', 2], ['bush', 3], ['grass', 6], ['flowers', 1.5], ['doum', 1]],
+    herd: [['flamingo', 'idle', 4], ['elephant', 'walk', 1.2], ['giraffe', 'walk', 1], ['zebra', 'walk', 1], ['buffalo', 'idle', 1], ['lion', 'idle', 0.6]],
+    blocks: ['boulder', 'mound'], style: { log: 'log', gate: 'branch', rock: 'rock' },
+    trucks: true, specials: { river: 1.6, lion: 1.2 },
+    music: { transpose: 4, tempo: 118, scale: 'major' },
+  },
+  {
+    id: 'tarangire', country: 'tz', name: 'Tarangire', len: 800,
+    title: 'Baobab Kingdom', speaker: 'Mzee Mbuyu the Baobab', emoji: '🌳',
+    line: 'I have watched elephants pass for a thousand years. Fisi ran south — mind the herds crossing!',
+    blurb: 'Ancient baobabs and termite towers, where elephant families gather by the hundred.',
+    ground: { grass: '#c9a85a', path: '#b8794a' },
+    hill: '#b8975e', fog: { tint: '#f0dfb8', amount: 0.12 },
+    kili: { x: 200, y: -80, z: -950, s: 1.4 },
+    props: [['baobab', 4.5], ['acacia', 3], ['mound', 2.8], ['bush', 3], ['grass', 7], ['kopje', 0.6]],
+    herd: [['elephant', 'walk', 4.5], ['giraffe', 'walk', 1.2], ['zebra', 'walk', 1.2], ['wildebeest', 'idle', 1], ['warthog', 'idle', 1.4], ['gazelle', 'idle', 1]],
+    blocks: ['boulder', 'mound'], style: { log: 'log', gate: 'branch', rock: 'rock' },
+    trucks: true, specials: { crossing: 2.2 },
+    music: { transpose: 1, tempo: 116, scale: 'major' },
+  },
+  {
     id: 'kilimanjaro', country: 'tz', name: 'Mount Kilimanjaro', len: 800,
     title: 'Roof of Africa', speaker: 'Tai the Eagle', emoji: '🦅',
     line: 'Fisi is climbing to the glaciers! Watch the skies — the mountain throws rocks!',
@@ -63,6 +95,20 @@ export const REGIONS = [
     music: { transpose: -3, tempo: 112, scale: 'minor' },
   },
   {
+    id: 'ruaha', country: 'tz', name: 'Ruaha', len: 800,
+    title: 'Land of Painted Wolves', speaker: 'Mbwa Mwitu the Wild Dog', emoji: '🐕',
+    line: 'My pack saw Fisi sneaking toward the Rufiji. Run with us — and keep clear of the lions!',
+    blurb: 'Wild, rocky country cut by the Great Ruaha River: baobabs, big prides and painted wolves.',
+    ground: { grass: '#c4a062', path: '#a5603a', water: '#6f8d74', waterSide: 1 },
+    hill: '#a88456', fog: { tint: '#efcf9e', amount: 0.14 },
+    kili: { x: -260, y: -200, z: -720, s: 1 },
+    props: [['baobab', 3.5], ['kopje', 2.2], ['acacia', 2.5], ['doum', 1.4], ['bush', 3], ['grass', 6]],
+    herd: [['wilddog', 'walk', 1.6], ['elephant', 'walk', 1.6], ['giraffe', 'walk', 1], ['gazelle', 'idle', 1.4], ['warthog', 'idle', 1], ['lion', 'idle', 0.8], ['buffalo', 'idle', 0.6]],
+    blocks: ['boulder', 'mound'], style: { log: 'log', gate: 'branch', rock: 'rock' },
+    trucks: true, specials: { lion: 2 },
+    music: { transpose: -1, tempo: 120, scale: 'minor' },
+  },
+  {
     id: 'selous', country: 'tz', name: 'Selous · Nyerere', len: 800,
     title: 'River of Kings', speaker: 'Kiboko the Hippo', emoji: '🦛',
     line: 'The Rufiji runs fast here. Crocodiles nap on the trail — hop over, don\'t wake them!',
@@ -71,7 +117,7 @@ export const REGIONS = [
     hill: '#7d9446', fog: { tint: '#d8e4b8', amount: 0.15 },
     kili: { x: -260, y: -200, z: -720, s: 1 },
     props: [['doum', 4], ['palm', 1.5], ['papyrus', 3], ['bush', 3], ['grass', 5], ['baobab', 1]],
-    herd: [['hippo', 'idle', 3], ['elephant', 'walk', 1], ['giraffe', 'walk', 1], ['buffalo', 'idle', 1]],
+    herd: [['hippo', 'idle', 3], ['elephant', 'walk', 1], ['giraffe', 'walk', 1], ['buffalo', 'idle', 1], ['wilddog', 'walk', 0.8], ['warthog', 'idle', 0.6]],
     blocks: ['boulder', 'mound'], style: { log: 'log', gate: 'branch', rock: 'rock' },
     trucks: true, specials: { croc: 2.4 },
     music: { transpose: 5, tempo: 118, scale: 'major' },
@@ -103,7 +149,7 @@ export const REGIONS = [
     hill: '#b58552', fog: null,
     kili: { x: -260, y: -200, z: -720, s: 1 },
     props: [['acacia', 5], ['bush', 3], ['grass', 8], ['mound', 1.5], ['kopje', 0.6]],
-    herd: [['wildebeest', 'walk', 6], ['zebra', 'walk', 2], ['lion', 'idle', 1], ['giraffe', 'walk', 1]],
+    herd: [['wildebeest', 'walk', 6], ['zebra', 'walk', 2], ['lion', 'idle', 1], ['giraffe', 'walk', 1], ['gazelle', 'idle', 1.5], ['warthog', 'idle', 0.6]],
     blocks: ['boulder', 'mound'], style: { log: 'log', gate: 'branch', rock: 'rock' },
     trucks: true, specials: { stampede: 2.6, rhino: 0.6 },
     music: { transpose: 0, tempo: 122, scale: 'major' },

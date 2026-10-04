@@ -12,7 +12,7 @@ describe('running lanes stay lit', () => {
 
   it('uses that one floor for every region, morning through night', () => {
     expect(REGIONS.map((r) => r.id)).toEqual([
-      'serengeti', 'ngorongoro', 'kilimanjaro', 'selous', 'zanzibar', 'mara', 'amboseli', 'bwindi',
+      'serengeti', 'ngorongoro', 'manyara', 'tarangire', 'kilimanjaro', 'ruaha', 'selous', 'zanzibar', 'mara', 'amboseli', 'bwindi',
     ]);
     for (const r of REGIONS) {
       expect(r.ground.grass, r.id).toMatch(/^#[0-9a-f]{6}$/i);

@@ -2,6 +2,7 @@
   "name": "Kimbia! — Spirit of the Serengeti",
   "short_name": "Kimbia!",
   "description": "Outrun Fisi the hyena king across the Serengeti with the help of your animal allies.",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "fullscreen",

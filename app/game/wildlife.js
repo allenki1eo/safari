@@ -9,8 +9,9 @@ import { PAT, PATTERN_GLSL } from './rigkit.js';
  * Textured, animated savanna animals from 0 A.D. by Wildfire Games (CC-BY-SA 3.0; see
  * static/models/animals/LICENSE.txt): lion, lioness, zebra, wildebeest, rhino, giraffe,
  * African elephant and hippo, plus a hyena, cheetah and buffalo recoated from 0 A.D.'s wolf,
- * tiger and bull. Each wraps the code-built animal from fauna.js, which stands in until
- * the model arrives, so the herds never wait on the network.
+ * tiger and bull, a painted wild dog from the same wolf, gazelle, warthog (0 A.D.'s boar),
+ * crocodile, and elephant and giraffe calves. Where a code-built animal exists (fauna.js) it
+ * stands in until the model arrives, so the herds never wait on the network.
  */
 
 const BASE = `${import.meta.env.BASE_URL}models/animals/`;
@@ -51,7 +52,16 @@ const CLIPS = {
   cheetah: { run: 'Run', walk: 'Walk', idle: ['Idle', 'Idle2', 'Idle3'] },
   buffalo: { run: 'Run', walk: 'Walk', idle: ['Idle', 'Idle2', 'Feeding'] },
   hippo: { run: 'Run', walk: 'Walk', idle: ['Idle', 'Idle2'] },
+  wilddog: { run: 'Run', walk: 'Walk', idle: ['Idle', 'Idle2', 'Idle3'] },
+  gazelle: { run: 'Run', walk: 'Walk', idle: ['Idle', 'Idle2', 'Idle3'] },
+  warthog: { run: 'Run', walk: 'Walk', idle: ['Idle', 'Idle2'] },
+  elephant_calf: { run: 'Run', walk: 'Walk', idle: ['Idle', 'Idle2'] },
+  giraffe_calf: { run: 'Run', walk: 'Walk', idle: ['Idle', 'Idle2'] },
+  croc: { run: 'Run', walk: 'Walk', idle: ['Idle', 'Idle2'] },
 };
+
+// species drawn from another species' model file: the wild dog is 0 A.D.'s wolf, like the hyena
+const FILES = { wilddog: 'hyena' };
 
 /**
  * New coats for models borrowed from a cousin: the texture keeps the fur's light and shade
@@ -62,6 +72,9 @@ const COATS = {
   cheetah: { base: 0xe0ae58, mark: 0x1d140c, type: PAT.spots, scale: 11, blur: 4, lo: 0.75 },
   hyena: { base: 0xa8916f, mark: 0x3d2f22, type: PAT.spots, scale: 8, blur: 2, lo: 0.55 },
   buffalo: { base: 0x4a4038, mark: 0x4a4038, type: PAT.none, scale: 1, blur: 0, lo: 0.35 },
+  // the painted wolf: blotches of black over tan and cream
+  wilddog: { base: 0xa8803f, mark: 0x1c1712, type: PAT.spots, scale: 4.6, blur: 2, lo: 0.6 },
+  warthog: { base: 0x9a8a76, mark: 0x9a8a76, type: PAT.none, scale: 1, blur: 1, lo: 0.6 },
 };
 
 const materials = new Map();
@@ -150,8 +163,8 @@ function addBandana(model) {
  * A 0 A.D. animal with the game's animal API (`root` facing -z, `update(dt, rate, mode)`),
  * sized to match the hand-built stand-in so lanes, hit boxes and the ride stay right.
  */
-export function makeWildAnimal(kind, makeFallback, { saddle = false, boss = false } = {}) {
-  const file = load(kind);
+export function makeWildAnimal(kind, makeFallback, { saddle = false, boss = false, height = 1 } = {}) {
+  const file = load(FILES[kind] ?? kind);
   const root = new THREE.Group();
   const holder = new THREE.Group();
   holder.rotation.y = Math.PI; // the models face +z
@@ -161,6 +174,7 @@ export function makeWildAnimal(kind, makeFallback, { saddle = false, boss = fals
 
   const refHeight = () => {
     const key = kind + (saddle ? '+saddle' : ''); // the boss is sized by its caller
+    if (!makeFallback) return height; // no code-built cousin: sized from `height` (metres)
     if (!refHeights.has(key)) {
       const probe = fallback ?? makeFallback();
       const h = new THREE.Box3().setFromObject(probe.root).getSize(new THREE.Vector3()).y;
@@ -172,7 +186,7 @@ export function makeWildAnimal(kind, makeFallback, { saddle = false, boss = fals
   const swapIn = () => {
     if (rig || !file.gltf) return;
     const model = cloneSkinned(file.gltf.scene);
-    let shadows = false;
+    let shadows = !fallback;
     fallback?.root.traverse((o) => o.isMesh && o.castShadow && (shadows = true));
     // measured on the skinned pose: some meshes carry a node scale that skinning ignores
     // and standing in the idle pose, since a bind pose can crouch or sprawl
@@ -213,8 +227,10 @@ export function makeWildAnimal(kind, makeFallback, { saddle = false, boss = fals
 
   if (file.gltf) swapIn();
   if (!rig) {
-    fallback = makeFallback();
-    root.add(fallback.root);
+    if (makeFallback) {
+      fallback = makeFallback();
+      root.add(fallback.root);
+    }
     file.promise.then(swapIn);
   }
 

@@ -123,8 +123,33 @@ input { font: inherit; }
 /* ---------------------------------------------------------------- title */
 .title { justify-content: space-between; }
 .title-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
-.title-actions { display: flex; gap: 8px; }
-.title-top .chips { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.title-actions { display: flex; gap: 8px; align-items: center; }
+
+/* install: a pill beside the leaderboard; it glows once the browser can install in one tap */
+.install-pill {
+  height: 52px; display: inline-flex; align-items: center; gap: 6px; padding: 0 14px 0 11px; border-radius: 16px;
+  font-family: var(--display); font-size: 17px; letter-spacing: 0.3px; color: var(--earth);
+  background: linear-gradient(180deg, var(--sun-2), var(--sun)); border: 1px solid rgba(255,255,255,0.55);
+  box-shadow: 0 4px 0 #b9790e, var(--shadow); transition: transform 0.1s;
+}
+.install-pill svg { width: 20px; height: 20px; }
+.install-pill:active { transform: translateY(2px) scale(0.97); box-shadow: 0 2px 0 #b9790e, var(--shadow); }
+.install-pill.ready { animation: installGlow 2.4s ease-in-out infinite; }
+@keyframes installGlow { 50% { box-shadow: 0 4px 0 #b9790e, 0 0 0 6px rgba(255,201,64,0.25), 0 0 24px rgba(255,201,64,0.6); } }
+@media (max-width: 360px) { .install-pill span { display: none; } .install-pill { padding: 0 14px; } }
+
+.btn.small { min-height: 40px; font-size: 16px; padding: 0 16px; border-radius: 12px; }
+.install-card { text-align: center; }
+.install-card h2 { margin: 6px 0 4px; }
+.install-card > .muted { margin: 0 6px 14px; line-height: 1.4; }
+.install-icon img { border-radius: 18px; box-shadow: 0 8px 20px rgba(0,0,0,0.35); margin-top: 6px; }
+.install-steps { list-style: none; padding: 0; margin: 0 0 6px; display: grid; gap: 8px; text-align: left; }
+.install-steps li { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 14px; background: rgba(255,244,222,0.08); border: 1px solid var(--line); line-height: 1.35; }
+.install-steps li > b { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-family: var(--display); font-weight: 400; color: var(--earth); background: var(--sun); }
+.install-steps .key { display: inline-grid; place-items: center; width: 24px; height: 24px; vertical-align: middle; border-radius: 7px; background: rgba(255,244,222,0.16); }
+.install-steps .key svg { width: 16px; height: 16px; }
+.title-top .chips { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; min-width: 0; }
+.title-top .chip { white-space: nowrap; }
 .logo { text-align: center; margin-top: 2vh; animation: rise 0.7s ease both; }
 .logo h1 {
   font-family: var(--display); font-size: clamp(64px, 19vw, 120px); line-height: 0.9; margin: 0; letter-spacing: 2px;

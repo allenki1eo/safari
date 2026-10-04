@@ -34,7 +34,7 @@ let clock = () => new Date();
 export function setLeaderboardClock(fn) {
   clock = typeof fn === 'function' ? fn : () => new Date();
 }
-// `chapter` is the furthest journey region reached (0 = Serengeti … 7 = Bwindi)
+// `chapter` is the furthest journey region reached (an index into REGIONS: 0 = Serengeti)
 const CHAPTER_MAX = REGIONS.length - 1;
 const RUNNER_IDS = new Set(RUNNERS.map((runner) => runner.id));
 

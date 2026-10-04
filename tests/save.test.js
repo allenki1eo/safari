@@ -33,3 +33,17 @@ describe('progress & missions', () => {
     expect(claimDaily()).toBeNull();
   });
 });
+
+describe('journey migration', () => {
+  it('carries progress from the 8-region journey over by region', async () => {
+    const { fromJourneyV1 } = await import('../app/data/save.js');
+    const { REGIONS } = await import('../app/data/regions.js');
+    const id = (i) => REGIONS[fromJourneyV1(i)].id;
+    expect(id(0)).toBe('serengeti');
+    expect(id(2)).toBe('kilimanjaro');
+    expect(id(3)).toBe('selous');
+    expect(id(4)).toBe('zanzibar');
+    expect(id(7)).toBe('bwindi');
+    expect(id(99)).toBe('bwindi');
+  });
+});

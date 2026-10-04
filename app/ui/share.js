@@ -14,7 +14,7 @@ export async function makeCard(run) {
   c.height = H;
   const g = c.getContext('2d');
 
-  const night = run.chapter >= 3 && run.chapter <= 4;
+  const night = ['ruaha', 'selous'].includes(REGIONS[Math.max(0, run.chapter)]?.id);
   const sky = g.createLinearGradient(0, 0, 0, H);
   if (night) {
     sky.addColorStop(0, '#070b26');
