@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [claude/tanzania-game-levels-iMB32]
+  pull_request:
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          filter: blob:none
+          sparse-checkout: |
+            app
+            api
+            server
+            migrations
+            scripts
+            static
+            tests
+            index.html
+            package.json
+            package-lock.json
+            vite.config.js
+            vercel.json
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build

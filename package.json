@@ -8,13 +8,14 @@
     "build": "vite build",
     "preview": "vite preview",
     "db:init": "node scripts/init-db.mjs",
-    "test": "node --test server/leaderboard.test.js"
+    "test": "vitest run && node --test server/leaderboard.test.js"
   },
   "dependencies": {
     "@libsql/client": "^0.15.15",
     "three": "^0.170.0"
   },
   "devDependencies": {
-    "vite": "^5.4.10"
+    "vite": "^5.4.10",
+    "vitest": "^2.1.9"
   }
 }

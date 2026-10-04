@@ -42,4 +42,4 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
 }
 
 // handy for debugging from the console
-window.__kimbia = { game, ui };
+window.__kimbia = { game, ui, save };

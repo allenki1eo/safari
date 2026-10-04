@@ -1,4 +1,5 @@
 import { MISSION_POOL, ALLY_IDS } from './content.js';
+import { regionIndexAt } from './regions.js';
 
 const KEY = 'kimbia.save.v1';
 
@@ -14,11 +15,15 @@ const defaults = () => ({
   missionLevel: 0, // completed sets → multiplier = 1 + missionLevel
   missions: null,
   chapterSeen: 0,
+  regionMax: 0, // furthest region reached — unlocks it on the journey map
+  startRegion: 0,
+  charms: 1, // Ngao shield charms (one on the house)
   introSeen: false,
   tutorialDone: false,
   sound: true,
   music: true,
   haptics: true,
+  quality: 'auto', // graphics: auto | high | low
   lastDaily: '',
   streak: 0,
 });
@@ -26,7 +31,15 @@ const defaults = () => ({
 function read() {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) return { ...defaults(), ...JSON.parse(raw) };
+    if (raw) {
+      const data = { ...defaults(), ...JSON.parse(raw) };
+      // v1 saves tracked distance-based chapters; translate to journey regions once
+      if (data.chapterSeen && !data.regionMax) {
+        const OLD = [0, 700, 1700, 3000, 4500, 6500];
+        data.regionMax = regionIndexAt(OLD[Math.min(data.chapterSeen, OLD.length - 1)]).index;
+      }
+      return data;
+    }
   } catch {
     /* private mode / blocked storage — play on with defaults */
   }

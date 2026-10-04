@@ -1,32 +1,105 @@
 import * as THREE from 'three';
-import { bend, mat, G, mesh, bakeRigid } from './materials.js';
+import { bend, mat, G, mesh, bakeRigid, finishProp, pathTexture, grassTexture, waterMaterial, SWAY_EXT, setBlobStrength } from './materials.js';
 import {
   Animals, makeAcacia, makeBaobab, makeKopje, makeTermiteMound, makeGrass, makeBush, makeKilimanjaro,
 } from './models.js';
+import {
+  RegionAnimals, makeFeverTree, makeGroundsel, makeLobelia, makeMontane, makeSnowRock, makePalm, makeDoum,
+  makePapyrus, makeHut, makeStoneHouse, makeBanana, makeJungleTree, makeFern, makeTreeFern, makeFlowers, makeDhow,
+} from './regionModels.js';
+import { REGIONS, regionIndexAt, PROP_TYPES, JOURNEY_LEN } from '../data/regions.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const C = (h) => new THREE.Color(h);
+const smooth = (t) => t * t * (3 - 2 * t);
+const clamp01 = (t) => Math.min(1, Math.max(0, t));
 
 export const LANE_W = 2.4;
 export const SEG_LEN = 24;
 const SEG_COUNT = 9;
+const AHEAD = 235;
+const BLEND = 70; // metres over which one region melts into the next
 
 /* ---------------------------------------------------------------- palettes */
-// Times of day keyed by distance — the story's chapters ride the sun across the sky.
-const CYCLE = 7600;
+// Time of day is keyed to journey distance, so the sun sets somewhere around Kilimanjaro.
+const CYCLE = JOURNEY_LEN; // one full journey = one day, so every lap looks the same
+const DAY = { top: '#4f9be0', hor: '#ffe2ac', fog: '#f5d9a6', sun: '#fff1d2', sunI: 2.4, hemiS: '#f4ead8', hemiG: '#b08a4a', hemiI: 1.25, sunH: 0.42, night: 0, cloud: '#ffffff' };
+const NOON = { top: '#3f8ad6', hor: '#ffe7b8', fog: '#f7deaf', sun: '#fff4dc', sunI: 2.6, hemiS: '#f6eedf', hemiG: '#b8924e', hemiI: 1.3, sunH: 0.75, night: 0, cloud: '#ffffff' };
+const GOLD = { top: '#4b5aa8', hor: '#ffb070', fog: '#f4b47a', sun: '#ffb46a', sunI: 2.2, hemiS: '#ffd0a8', hemiG: '#a0663a', hemiI: 1.1, sunH: 0.16, night: 0, cloud: '#ffd2b0' };
+const DUSK = { top: '#2a2a6e', hor: '#ff7a45', fog: '#e8805a', sun: '#ff8040', sunI: 1.6, hemiS: '#ff9a7a', hemiG: '#6a3a2a', hemiI: 0.95, sunH: 0.04, night: 0.15, cloud: '#ff9a7a' };
+const NIGHT = { top: '#070b26', hor: '#26306e', fog: '#1d2558', sun: '#a9bcff', sunI: 0.9, hemiS: '#6a7ad0', hemiG: '#1e1a30', hemiI: 0.75, sunH: 0.5, night: 1, cloud: '#3a4278' };
+const DAWN = { top: '#5a58a8', hor: '#ffad8a', fog: '#e9a68e', sun: '#ffc09a', sunI: 1.7, hemiS: '#ffc8c0', hemiG: '#7a5a52', hemiI: 1.0, sunH: 0.08, night: 0.1, cloud: '#ffd0c8' };
+const BRIGHT = { top: '#3a95e6', hor: '#e8f4ff', fog: '#f2efe2', sun: '#fff6e0', sunI: 2.6, hemiS: '#f2f6ff', hemiG: '#c9b48a', hemiI: 1.35, sunH: 0.8, night: 0, cloud: '#ffffff' };
+// Serengeti morning → crater noon → Kili sunset → Rufiji night → Zanzibar dawn and blazing day
+// → Mara day → golden Amboseli → soft misty Bwindi → morning again.
 const PALETTES = [
-  { at: 0, top: '#4f9be0', hor: '#ffe2ac', fog: '#f5d9a6', sun: '#fff1d2', sunI: 2.4, hemiS: '#f4ead8', hemiG: '#b08a4a', hemiI: 1.25, sunH: 0.42, night: 0, hill: '#c9a86a', cloud: '#ffffff' },
-  { at: 1100, top: '#3f8ad6', hor: '#ffe7b8', fog: '#f7deaf', sun: '#fff4dc', sunI: 2.6, hemiS: '#f6eedf', hemiG: '#b8924e', hemiI: 1.3, sunH: 0.75, night: 0, hill: '#c4a564', cloud: '#ffffff' },
-  { at: 1900, top: '#4b5aa8', hor: '#ffb070', fog: '#f4b47a', sun: '#ffb46a', sunI: 2.2, hemiS: '#ffd0a8', hemiG: '#a0663a', hemiI: 1.1, sunH: 0.16, night: 0, hill: '#b98450', cloud: '#ffd2b0' },
-  { at: 2600, top: '#2a2a6e', hor: '#ff7a45', fog: '#e8805a', sun: '#ff8040', sunI: 1.6, hemiS: '#ff9a7a', hemiG: '#6a3a2a', hemiI: 0.95, sunH: 0.04, night: 0.15, hill: '#8a4a3a', cloud: '#ff9a7a' },
-  { at: 3200, top: '#070b26', hor: '#26306e', fog: '#1d2558', sun: '#a9bcff', sunI: 0.9, hemiS: '#6a7ad0', hemiG: '#1e1a30', hemiI: 0.75, sunH: 0.5, night: 1, hill: '#1c2148', cloud: '#3a4278' },
-  { at: 4300, top: '#0b1030', hor: '#2c3070', fog: '#232a60', sun: '#b4c4ff', sunI: 0.9, hemiS: '#7080d8', hemiG: '#221c34', hemiI: 0.8, sunH: 0.4, night: 1, hill: '#20254e', cloud: '#3e4680' },
-  { at: 5000, top: '#5a58a8', hor: '#ffad8a', fog: '#e9a68e', sun: '#ffc09a', sunI: 1.7, hemiS: '#ffc8c0', hemiG: '#7a5a52', hemiI: 1.0, sunH: 0.08, night: 0.1, hill: '#a87a6a', cloud: '#ffd0c8' },
-  { at: 6000, top: '#5aa2e2', hor: '#ffdcb0', fog: '#f2d4a8', sun: '#fff0d0', sunI: 2.3, hemiS: '#f2e9d8', hemiG: '#ad8a4c', hemiI: 1.2, sunH: 0.3, night: 0, hill: '#c6a66a', cloud: '#ffffff' },
-  { at: CYCLE, top: '#4f9be0', hor: '#ffe2ac', fog: '#f5d9a6', sun: '#fff1d2', sunI: 2.4, hemiS: '#f4ead8', hemiG: '#b08a4a', hemiI: 1.25, sunH: 0.42, night: 0, hill: '#c9a86a', cloud: '#ffffff' },
-].map((p) => ({ ...p, top: C(p.top), hor: C(p.hor), fog: C(p.fog), sun: C(p.sun), hemiS: C(p.hemiS), hemiG: C(p.hemiG), hill: C(p.hill), cloud: C(p.cloud) }));
+  { at: 0, ...DAY }, { at: 900, ...NOON }, { at: 1750, ...GOLD }, { at: 2200, ...DUSK }, { at: 2550, ...NIGHT },
+  { at: 3000, ...NIGHT }, { at: 3250, ...DAWN }, { at: 3600, ...BRIGHT }, { at: 4300, ...NOON }, { at: 4900, ...DAY },
+  { at: 5250, ...GOLD }, { at: 5650, ...DAY }, { at: CYCLE, ...DAY },
+].map((p) => ({ ...p, top: C(p.top), hor: C(p.hor), fog: C(p.fog), sun: C(p.sun), hemiS: C(p.hemiS), hemiG: C(p.hemiG), cloud: C(p.cloud) }));
 
-const smooth = (t) => t * t * (3 - 2 * t);
+/* Pre-parsed region colours */
+const RC = REGIONS.map((r) => ({
+  grass: C(r.ground.grass),
+  path: C(r.ground.path),
+  water: r.ground.water ? C(r.ground.water) : null,
+  hill: C(r.hill),
+  fogTint: r.fog ? C(r.fog.tint) : null,
+}));
+
+/* ------------------------------------------------------------- prop table */
+// factory, |x| range, cull distance (small things vanish sooner)
+const PROPS = {
+  acacia: [() => makeAcacia(rand(0.9, 1.3)), 9, 34],
+  baobab: [() => makeBaobab(rand(0.9, 1.3)), 12, 40],
+  kopje: [() => makeKopje(rand(1, 1.8)), 22, 55],
+  mound: [() => makeTermiteMound(rand(0.8, 1.2)), 6.5, 18],
+  bush: [() => makeBush(rand(0.8, 1.4)), 6, 26, true],
+  grass: [() => makeGrass(rand(1, 1.8)), 5.5, 30, true],
+  fever: [() => makeFeverTree(rand(0.9, 1.2)), 9, 36],
+  groundsel: [() => makeGroundsel(rand(0.9, 1.4)), 6, 28],
+  lobelia: [() => makeLobelia(rand(0.9, 1.3)), 5.5, 22, true],
+  montane: [() => makeMontane(rand(0.9, 1.3)), 12, 44],
+  snowrock: [() => makeSnowRock(rand(0.8, 1.6)), 6, 34],
+  palm: [() => makePalm(rand(0.9, 1.3)), 7, 32],
+  doum: [() => makeDoum(rand(0.9, 1.3)), 8, 34],
+  papyrus: [() => makePapyrus(rand(0.9, 1.3)), 6, 20, true],
+  hut: [() => makeHut(rand(0.9, 1.1)), 10, 30],
+  stonehouse: [() => makeStoneHouse(1), 9, 22],
+  banana: [() => makeBanana(rand(0.9, 1.3)), 6, 20],
+  jungle: [() => makeJungleTree(rand(0.9, 1.3)), 7.5, 30],
+  fern: [() => makeFern(rand(0.8, 1.5)), 5.5, 18, true],
+  treefern: [() => makeTreeFern(rand(0.9, 1.3)), 6, 22],
+  flowers: [() => makeFlowers(rand(0.8, 1.3)), 5.5, 22, true],
+  dhow: [() => makeDhow(rand(0.9, 1.3)), 24, 70],
+};
+for (const t of PROP_TYPES) if (!PROPS[t]) throw new Error(`missing prop factory: ${t}`);
+// how far each plant's tips move in the wind (metres)
+const SWAY = {
+  acacia: 0.22, baobab: 0.06, bush: 0.08, grass: 0.18, fever: 0.28, groundsel: 0.05, lobelia: 0.04, montane: 0.16,
+  palm: 0.45, doum: 0.28, papyrus: 0.3, banana: 0.3, jungle: 0.16, fern: 0.14, treefern: 0.22, flowers: 0.1,
+};
+
+const HERD = {
+  zebra: () => Animals.zebra(),
+  giraffe: () => Animals.giraffe(),
+  elephant: () => Animals.elephant(),
+  wildebeest: () => Animals.wildebeest(),
+  lion: () => Animals.lion(),
+  rhino: () => Animals.rhino(),
+  buffalo: () => RegionAnimals.buffalo(),
+  flamingo: () => RegionAnimals.flamingo(),
+  hippo: () => RegionAnimals.hippo(),
+  gorilla: () => RegionAnimals.gorilla(),
+};
+
+function weighted(list) {
+  let total = 0;
+  for (const e of list) total += e[e.length - 1];
+  let r = Math.random() * total;
+  for (const e of list) if ((r -= e[e.length - 1]) <= 0) return e;
+  return list[0];
+}
 
 /* ---------------------------------------------------------------- sky */
 const skyVert = /* glsl */ `
@@ -54,11 +127,16 @@ const skyFrag = /* glsl */ `
 export class World {
   constructor(scene) {
     this.scene = scene;
-    this.palette = { ...PALETTES[0], top: new THREE.Color(), hor: new THREE.Color(), fog: new THREE.Color(), sun: new THREE.Color(), hemiS: new THREE.Color(), hemiG: new THREE.Color(), hill: new THREE.Color(), cloud: new THREE.Color() };
+    const P = {};
+    for (const k of ['top', 'hor', 'fog', 'sun', 'hemiS', 'hemiG', 'cloud']) P[k] = new THREE.Color();
+    this.palette = P;
+    this.blend = { a: 0, b: 0, t: 0, index: 0, lap: 0 };
+    this.tmp = new THREE.Color();
+    this.tmp2 = new THREE.Color();
+    this.tmpV = new THREE.Vector3();
+    this.sunDir = new THREE.Vector3(-0.45, 0.4, -1).normalize();
 
     scene.fog = new THREE.Fog(0xf5d9a6, 45, 175);
-
-    // Lights
     this.hemi = new THREE.HemisphereLight(0xd6ecff, 0xb08a4a, 1.2);
     scene.add(this.hemi);
     this.sun = new THREE.DirectionalLight(0xffffff, 2.2);
@@ -68,10 +146,32 @@ export class World {
     this.buildSky();
     this.buildBackdrop();
     this.buildGround();
-    this.buildScenery();
-    this.buildHerds();
-    this.buildFireflies();
-    this.setTime(0);
+    this.buildWeather();
+    this.buildBlades();
+    this.pools = new Map();
+    this.props = [];
+    this.herd = [];
+    this.reset(0);
+  }
+
+  /* --------------------------------------------------------------- region */
+  /** Region blend at journey distance J: a → b with weight t near borders. */
+  mixAt(J) {
+    const { index, lap, local } = regionIndexAt(J);
+    const r = REGIONS[index];
+    const next = (index + 1) % REGIONS.length;
+    const t = smooth(clamp01((local - (r.len - BLEND)) / BLEND));
+    return { a: index, b: next, t, index, lap };
+  }
+
+  /** Mixes a per-region colour (from RC) into `out`. */
+  mixColor(out, key, m, fallback) {
+    const ca = RC[m.a][key] ?? fallback;
+    const cb = RC[m.b][key] ?? fallback;
+    return out.copy(ca).lerp(cb, m.t);
+  }
+  mixNum(m, fn) {
+    return fn(REGIONS[m.a]) * (1 - m.t) + fn(REGIONS[m.b]) * m.t;
   }
 
   /* ------------------------------------------------------------------ sky */
@@ -89,7 +189,6 @@ export class World {
     this.sky = sky;
     this.scene.add(sky);
 
-    // Stars
     const n = 900;
     const pos = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
@@ -104,7 +203,6 @@ export class World {
     this.stars.renderOrder = -9;
     this.scene.add(this.stars);
 
-    // Clouds
     this.cloudMat = new THREE.MeshLambertMaterial({ color: 0xffffff, fog: false, flatShading: true, emissive: 0x444444 });
     this.clouds = [];
     for (let i = 0; i < 9; i++) {
@@ -126,235 +224,461 @@ export class World {
   buildBackdrop() {
     this.mtnMat = new THREE.MeshLambertMaterial({ color: 0x8a90b0, flatShading: true, fog: false });
     this.snowMat = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true, fog: false, emissive: 0x333344 });
-    const kili = makeKilimanjaro(this.mtnMat, this.snowMat);
-    kili.position.set(-260, -26, -720);
-    kili.scale.set(1.25, 0.95, 1);
-    this.kili = kili;
-    this.scene.add(kili);
+    this.kili = makeKilimanjaro(this.mtnMat, this.snowMat);
+    this.scene.add(this.kili);
 
-    // Rolling horizon hills fill the haze band between the curved ground and the sky.
     this.hillMat = new THREE.MeshLambertMaterial({ color: 0xc9a86a, flatShading: true, fog: false });
     this.hillMat2 = new THREE.MeshLambertMaterial({ color: 0xc9a86a, flatShading: true, fog: false });
-    this.hills = new THREE.Group();
+    this.silMat = new THREE.MeshBasicMaterial({ color: 0x6a5a3a, fog: false });
+    // two halves so the ocean side can sink away on the coast
+    this.hillsL = new THREE.Group();
+    this.hillsR = new THREE.Group();
     for (let i = 0; i < 26; i++) {
       const a = -Math.PI * 0.95 + (i / 25) * Math.PI * 0.9;
       const r = rand(330, 380);
       const h = mesh(G.ico1, i % 2 ? this.hillMat : this.hillMat2, rand(60, 120), rand(28, 50), rand(40, 60), Math.cos(a) * r, -38, Math.sin(a) * r);
       h.rotation.y = -a;
-      this.hills.add(h);
+      (Math.cos(a) < 0 ? this.hillsL : this.hillsR).add(h);
     }
-    // flat-topped acacia silhouettes on the horizon
-    this.silMat = new THREE.MeshBasicMaterial({ color: 0x6a5a3a, fog: false });
     for (let i = 0; i < 14; i++) {
       const a = -Math.PI * 0.85 + rand(0, Math.PI * 0.7);
       const r = rand(300, 320);
       const x = Math.cos(a) * r;
       const z = Math.sin(a) * r;
       const y = rand(-2, 1);
-      this.hills.add(mesh(G.cyl, this.silMat, 0.6, 9, 0.6, x, y + 4.5, z));
-      this.hills.add(mesh(G.ico1, this.silMat, rand(8, 11), 1.6, rand(6, 8), x, y + 9.5, z));
+      const grp = x < 0 ? this.hillsL : this.hillsR;
+      grp.add(mesh(G.cyl, this.silMat, 0.6, 9, 0.6, x, y + 4.5, z));
+      grp.add(mesh(G.ico1, this.silMat, rand(8, 11), 1.6, rand(6, 8), x, y + 9.5, z));
     }
-    bakeRigid(this.hills);
-    this.scene.add(this.hills);
+    bakeRigid(this.hillsL);
+    bakeRigid(this.hillsR);
+    this.scene.add(this.hillsL, this.hillsR);
+
+    // Ngorongoro's crater wall — a ring of steep green ridges close to the horizon
+    this.rimMat = new THREE.MeshLambertMaterial({ color: 0x6f8f45, flatShading: true, fog: false });
+    this.rim = new THREE.Group();
+    for (let i = 0; i < 22; i++) {
+      const a = -Math.PI + (i / 21) * Math.PI;
+      const r = rand(250, 280);
+      this.rim.add(mesh(G.ico1, this.rimMat, rand(55, 80), rand(60, 85), rand(40, 55), Math.cos(a) * r, -30, Math.sin(a) * r));
+    }
+    bakeRigid(this.rim);
+    this.scene.add(this.rim);
+
+    // Bwindi's rolling forested hills
+    this.forestMat = new THREE.MeshLambertMaterial({ color: 0x2f5a2c, flatShading: true, fog: false });
+    this.forest = new THREE.Group();
+    for (let i = 0; i < 40; i++) {
+      const a = -Math.PI + (i / 39) * Math.PI;
+      const r = rand(200, 260);
+      this.forest.add(mesh(G.ico1, this.forestMat, rand(30, 55), rand(35, 60), rand(30, 45), Math.cos(a) * r, -20, Math.sin(a) * r));
+    }
+    bakeRigid(this.forest);
+    this.scene.add(this.forest);
+
+    // horizon ocean for the coast
+    this.oceanMat = new THREE.MeshLambertMaterial({ color: 0x3fc1c9, fog: false, emissive: 0x0a3a40 });
+    this.ocean = new THREE.Mesh(new THREE.CircleGeometry(700, 32, Math.PI * 0.5, Math.PI), this.oceanMat);
+    this.ocean.rotation.x = -Math.PI / 2;
+    this.ocean.position.y = -8;
+    this.scene.add(this.ocean);
   }
 
   /* --------------------------------------------------------------- ground */
   buildGround() {
-    const grassGeo = new THREE.PlaneGeometry(220, SEG_LEN, 22, 4);
+    // brightness-only vertex colours; hue comes from each segment's region tint
+    const grassGeo = new THREE.PlaneGeometry(220, SEG_LEN, 22, 12);
     grassGeo.rotateX(-Math.PI / 2);
     const gc = [];
-    const base = [C('#d6b25a'), C('#c9a24c'), C('#dcbc66'), C('#bfa04e'), C('#b9a556')];
     const p = grassGeo.attributes.position;
     for (let i = 0; i < p.count; i++) {
       const x = p.getX(i);
       const z = p.getZ(i);
-      // deterministic noise keyed on x and *edge-safe* z so tiles stitch seamlessly
       const n = Math.sin(x * 0.37) * 0.5 + Math.sin(x * 0.11 + (Math.abs(z) > SEG_LEN / 2 - 0.1 ? 0 : z * 0.3)) * 0.5;
-      const c = base[Math.floor((n * 0.5 + 0.5) * (base.length - 0.01))].clone();
-      if (Math.abs(x) < 6) c.lerp(C('#b98a4e'), 0.5);
-      gc.push(c.r, c.g, c.b);
+      let v = 0.88 + (n * 0.5 + 0.5) * 0.2;
+      if (Math.abs(x) < 6) v *= 0.92;
+      gc.push(v, v, v);
       p.setY(i, Math.abs(x) > 14 ? Math.sin(x * 0.2) * 0.4 : 0);
     }
     grassGeo.setAttribute('color', new THREE.Float32BufferAttribute(gc, 3));
     grassGeo.computeVertexNormals();
-    const grassMat = bend(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }));
 
-    const pathMat = mat(0xc28c55);
-    const rutMat = mat(0xa9773f);
-    const edgeMat = mat(0xd2a066);
+    const trailGeo = new THREE.PlaneGeometry(LANE_W * 3 + 0.9, SEG_LEN, 1, 12);
+    trailGeo.rotateX(-Math.PI / 2);
+    pathTexture().repeat.set(1, SEG_LEN / (LANE_W * 3 + 0.9));
+    const waterGeo = new THREE.PlaneGeometry(110, SEG_LEN, 4, 12);
+    waterGeo.rotateX(-Math.PI / 2);
+    const foamGeo = new THREE.PlaneGeometry(1.2, SEG_LEN, 1, 12);
+    foamGeo.rotateX(-Math.PI / 2);
+    const foamMat = bend(new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75 }));
 
+    const shade = (v) => mat(new THREE.Color(v, v, v).getHex());
     this.segments = [];
     for (let i = 0; i < SEG_COUNT; i++) {
       const g = new THREE.Group();
-      g.add(new THREE.Mesh(grassGeo, grassMat));
-      g.add(mesh(G.box, pathMat, LANE_W * 3 + 0.9, 0.05, SEG_LEN, 0, 0.0, 0));
-      for (let l = -1; l <= 1; l++) g.add(mesh(G.box, rutMat, 1.3, 0.05, SEG_LEN, l * LANE_W, 0.012, 0));
-      for (const s of [-1, 1]) g.add(mesh(G.box, edgeMat, 0.5, 0.07, SEG_LEN, s * (LANE_W * 1.5 + 0.55), 0.0, 0));
-      // little pebbles & tufts along the path edge
+      const grassMat = bend(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, map: grassTexture() }), { key: 'grass' });
+      const grass = new THREE.Mesh(grassGeo, grassMat);
+      grass.userData.keep = true;
+      grass.receiveShadow = true;
+      g.add(grass);
+      // the trail surface itself: a textured strip with worn lanes, tyre tracks and footprints
+      const trailMat = bend(new THREE.MeshLambertMaterial({ map: pathTexture() }), { key: 'trail' });
+      const trail = new THREE.Mesh(trailGeo, trailMat);
+      trail.position.y = 0.035;
+      trail.receiveShadow = true;
+      trail.userData.keep = true;
+      g.add(trail);
+
+      // path pieces are white-ish so the region tint shows through
+      const path = new THREE.Group();
+      path.add(mesh(G.boxLong, shade(1.0), LANE_W * 3 + 0.9, 0.05, SEG_LEN, 0, 0, 0));
+      for (const s of [-1, 1]) path.add(mesh(G.boxLong, shade(1.08), 0.5, 0.07, SEG_LEN, s * (LANE_W * 1.5 + 0.55), 0, 0));
       for (let k = 0; k < 6; k++) {
         const s = Math.random() < 0.5 ? -1 : 1;
-        const peb = mesh(G.dodec, mat(0x9c8a78), rand(0.1, 0.22), rand(0.08, 0.15), rand(0.1, 0.2), s * rand(4.1, 5.2), 0.06, rand(-SEG_LEN / 2, SEG_LEN / 2));
-        g.add(peb);
+        path.add(mesh(G.dodec, shade(0.7), rand(0.1, 0.22), rand(0.08, 0.15), rand(0.1, 0.2), s * rand(4.1, 5.2), 0.06, rand(-SEG_LEN / 2, SEG_LEN / 2)));
       }
-      for (let k = 0; k < 7; k++) {
-        const patch = mesh(G.cyl6, mat(Math.random() < 0.5 ? 0xb8834e : 0xc9955e), rand(0.25, 0.6), 0.02, rand(0.4, 0.9), rand(-3.8, 3.8), 0.03, rand(-SEG_LEN / 2, SEG_LEN / 2));
-        patch.rotation.y = rand(0, 3);
-        g.add(patch);
-      }
-      for (let k = 0; k < 5; k++) {
-        const s = Math.random() < 0.5 ? -1 : 1;
-        g.add(makeGrass(rand(0.6, 1)).translateX(s * rand(4.6, 7)).translateZ(rand(-SEG_LEN / 2, SEG_LEN / 2)));
-      }
-      bakeRigid(g, true);
-      g.userData.wz = (i - 1) * SEG_LEN;
+      bakeRigid(path, true);
+      const pathMat = bend(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }));
+      path.children.forEach((c) => {
+        c.material = pathMat;
+        c.receiveShadow = true;
+      });
+      g.add(path);
+
+      const waterMat = waterMaterial(0x3fc1c9);
+      const water = new THREE.Mesh(waterGeo, waterMat);
+      water.position.y = 0.46;
+      g.add(water);
+      const foam = new THREE.Mesh(foamGeo, foamMat);
+      foam.position.y = 0.48;
+      g.add(foam);
+
+      g.userData = { wz: 0, grassMat, pathMat, trailMat, waterMat, water, foam, region: -1 };
       this.segments.push(g);
       this.scene.add(g);
     }
   }
 
-  /* ------------------------------------------------------------- scenery */
-  buildScenery() {
-    this.props = [];
-    const add = (factory, count, xMin, xMax, small = false) => {
-      for (let i = 0; i < count; i++) {
-        const obj = bakeRigid(factory(), true);
-        obj.userData.cull = small ? -100 : -180;
-        obj.userData.xr = [xMin, xMax];
-        obj.userData.wz = rand(-10, 220);
-        obj.position.x = (Math.random() < 0.5 ? -1 : 1) * rand(xMin, xMax);
-        obj.rotation.y = rand(0, Math.PI * 2);
-        this.props.push(obj);
-        this.scene.add(obj);
+  tintSegment(seg) {
+    const u = seg.userData;
+    const m = this.mixAt(u.wz + SEG_LEN / 2);
+    this.mixColor(u.grassMat.color, 'grass', m);
+    this.mixColor(u.pathMat.color, 'path', m);
+    u.trailMat.color.copy(u.pathMat.color);
+    const ra = REGIONS[m.a].ground;
+    const rb = REGIONS[m.b].ground;
+    const wr = m.t < 0.5 ? ra : rb;
+    const hasWater = !!wr.water;
+    u.water.visible = u.foam.visible = hasWater;
+    if (hasWater) {
+      u.waterMat.color.set(wr.water);
+      const side = wr.waterSide ?? -1;
+      u.water.position.x = side * (14 + 55);
+      u.foam.position.x = side * 14.3;
+    }
+  }
+
+  /* ------------------------------------------------------------ grass blades */
+  /** Thousands of instanced, wind-blown blades lining the trail (High quality only). */
+  buildBlades() {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute([-0.05, 0, 0, 0.05, 0, 0, 0, 1, 0.02], 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute([0, 0.3, 1, 0, 0.3, 1, 0, 0.3, 1], 3));
+    geo.setAttribute('aSway', new THREE.Float32BufferAttribute([0, 0, 0.28], 1));
+    this.bladeMat = bend(new THREE.MeshLambertMaterial({ color: 0xd4b05a, side: THREE.DoubleSide }), SWAY_EXT);
+    this.bladeTiles = [];
+    const TL = 40;
+    const per = 1800;
+    const m4 = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const e = new THREE.Euler();
+    const col = new THREE.Color();
+    for (let t = 0; t < 3; t++) {
+      const im = new THREE.InstancedMesh(geo, this.bladeMat, per);
+      for (let i = 0; i < per; i++) {
+        const side = Math.random() < 0.5 ? -1 : 1;
+        const x = side * (4.75 + Math.pow(Math.random(), 1.6) * 16);
+        const h = rand(0.35, 0.95) * (1 - Math.abs(x) / 40);
+        e.set(rand(-0.25, 0.25), rand(0, Math.PI), rand(-0.25, 0.25));
+        m4.compose(new THREE.Vector3(x, 0, -Math.random() * TL), q.setFromEuler(e), new THREE.Vector3(rand(0.7, 1.4), h, 1));
+        im.setMatrixAt(i, m4);
+        const v = rand(0.78, 1.12);
+        im.setColorAt(i, col.setRGB(v, v * rand(0.95, 1.05), v * 0.9));
       }
-    };
-    add(() => makeAcacia(rand(0.9, 1.3)), 16, 9, 34);
-    add(() => makeBaobab(rand(0.9, 1.3)), 5, 12, 40);
-    add(() => makeKopje(rand(1, 1.8)), 5, 22, 55);
-    add(() => makeTermiteMound(rand(0.8, 1.2)), 8, 6.5, 18);
-    add(() => makeBush(rand(0.8, 1.4)), 16, 6, 26, true);
-    add(() => makeGrass(rand(1, 1.8)), 30, 5.5, 30, true);
+      im.frustumCulled = false;
+      im.userData.wz = t * TL;
+      im.visible = false;
+      this.bladeTiles.push(im);
+      this.scene.add(im);
+    }
+    this.bladeLen = TL;
   }
 
-  buildHerds() {
-    this.herd = [];
-    const spawn = (kind, count, xMin, xMax, mode) => {
-      for (let i = 0; i < count; i++) {
-        const a = Animals[kind]();
-        a.root.userData = { wz: rand(20, 230), xr: [xMin, xMax], mode, kind, walkV: rand(0.6, 1.4), dir: 1 };
-        a.root.position.x = (Math.random() < 0.5 ? -1 : 1) * rand(xMin, xMax);
-        this.face(a);
-        if (mode !== 'walk') a.root.rotation.y = rand(0, Math.PI * 2);
-        this.herd.push(a);
-        this.scene.add(a.root);
-      }
-    };
-    spawn('zebra', 3, 12, 30, 'walk');
-    spawn('giraffe', 2, 16, 36, 'walk');
-    spawn('elephant', 2, 24, 44, 'walk');
-    spawn('wildebeest', 2, 14, 34, 'idle');
+  setDetail(high) {
+    this.detail = high;
+    setBlobStrength(high ? 0.55 : 1);
   }
 
-  /** Point a walking animal along the plain, heading away from the track first. */
-  face(a) {
-    const u = a.root.userData;
-    u.dir = Math.sign(a.root.position.x) || 1;
-    a.root.rotation.y = u.dir > 0 ? -Math.PI / 2 : Math.PI / 2;
-  }
-
-  buildFireflies() {
-    const n = 120;
+  /* --------------------------------------------------------------- weather */
+  buildWeather() {
+    const n = 140;
     const pos = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) pos.set([rand(-25, 25), rand(0.3, 4), rand(-80, 10)], i * 3);
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    this.fireflyMat = new THREE.PointsMaterial({ color: 0xd8ff6a, size: 0.22, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
-    bend(this.fireflyMat);
+    this.fireflyMat = bend(new THREE.PointsMaterial({ color: 0xd8ff6a, size: 0.22, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
     this.fireflies = new THREE.Points(g, this.fireflyMat);
     this.fireflies.frustumCulled = false;
     this.scene.add(this.fireflies);
+
+    const sn = 420;
+    const sp = new Float32Array(sn * 3);
+    for (let i = 0; i < sn; i++) sp.set([rand(-30, 30), rand(0, 22), rand(-70, 12)], i * 3);
+    const sgeo = new THREE.BufferGeometry();
+    sgeo.setAttribute('position', new THREE.BufferAttribute(sp, 3));
+    this.snowFallMat = bend(new THREE.PointsMaterial({ color: 0xffffff, size: 0.16, transparent: true, opacity: 0, depthWrite: false }));
+    this.snow = new THREE.Points(sgeo, this.snowFallMat);
+    this.snow.frustumCulled = false;
+    this.scene.add(this.snow);
+  }
+
+  /* --------------------------------------------------------------- spawning */
+  take(type, factory, prep) {
+    let pool = this.pools.get(type);
+    if (!pool) this.pools.set(type, (pool = []));
+    let obj = pool.pop();
+    if (!obj) {
+      obj = factory();
+      prep?.(obj);
+      obj.userData.type = type;
+    }
+    return obj;
+  }
+  give(obj) {
+    obj.visible = false;
+    this.pools.get(obj.userData.type).push(obj);
+  }
+
+  spawnProp(wz) {
+    const ri = regionIndexAt(wz).index;
+    const region = REGIONS[ri];
+    let [type] = weighted(region.props);
+    const water = region.ground.water ? region.ground.waterSide ?? -1 : 0;
+    let side = Math.random() < 0.5 ? -1 : 1;
+    if (region.ocean && Math.random() < 0.08) {
+      type = 'dhow';
+      side = water;
+    }
+    const [factory, xMin, xMax, small] = PROPS[type];
+    const obj = this.take(type, factory, (o) => {
+      finishProp(bakeRigid(o, true), { sway: SWAY[type] ?? 0, ao: type !== 'dhow' });
+      o.traverse((c) => c.isMesh && !c.material.transparent && (c.castShadow = true));
+    });
+    let x = side * rand(xMin, xMax);
+    // keep land props out of the water (papyrus and dhows like it wet)
+    if (water && side === water && type !== 'dhow' && type !== 'papyrus') x = side * rand(xMin, Math.min(xMax, 13));
+    obj.position.set(x, type === 'dhow' ? 0.1 : 0, 0);
+    obj.rotation.y = type === 'dhow' ? rand(-0.4, 0.4) : rand(0, Math.PI * 2);
+    obj.userData.wz = wz;
+    obj.userData.cull = small ? -100 : -185;
+    obj.visible = true;
+    if (!obj.parent) this.scene.add(obj);
+    this.props.push(obj);
+  }
+
+  spawnHerd(wz) {
+    const region = REGIONS[regionIndexAt(wz).index];
+    if (!region.herd.length) return;
+    const [kind, mode] = weighted(region.herd);
+    const a = this.take(kind, () => {
+      const m = HERD[kind]();
+      m.root.userData.anim = m;
+      return m.root;
+    });
+    const anim = a.userData.anim;
+    const water = region.ground.water ? region.ground.waterSide ?? -1 : 0;
+    const wet = kind === 'hippo' || kind === 'flamingo';
+    let side = Math.random() < 0.5 ? -1 : 1;
+    if (wet && water) side = water;
+    const big = kind === 'elephant' || kind === 'giraffe';
+    const xr = wet && water ? [17, 40] : kind === 'gorilla' ? [6, 16] : big ? [16, 40] : [11, 32];
+    a.position.set(side * rand(xr[0], xr[1]), wet && water && kind === 'hippo' ? -0.55 : 0, 0);
+    Object.assign(a.userData, { wz, xr, mode, walkV: rand(0.6, 1.4), dir: side });
+    a.rotation.y = mode === 'walk' ? (side > 0 ? -Math.PI / 2 : Math.PI / 2) : rand(0, Math.PI * 2);
+    a.visible = true;
+    if (!a.parent) this.scene.add(a);
+    this.herd.push({ root: a, anim });
+  }
+
+  /** Clears and re-populates everything around journey distance J. */
+  reset(J) {
+    for (const p of this.props) this.give(p);
+    for (const h of this.herd) this.give(h.root);
+    this.props = [];
+    this.herd = [];
+    this.propCursor = J - 20;
+    this.herdCursor = J + rand(10, 30);
+    this.bladeTiles?.forEach((t, i) => (t.userData.wz = Math.floor(J / this.bladeLen) * this.bladeLen + (i - 0.25) * this.bladeLen));
+    const base = Math.floor((J - 16) / SEG_LEN) * SEG_LEN;
+    this.segments.forEach((s, i) => {
+      s.userData.wz = base + i * SEG_LEN;
+      this.tintSegment(s);
+    });
+    this.populate(J);
+    this.snapBackdrop = true;
+  }
+
+  populate(J) {
+    // never backfill a gap we skipped over (e.g. a revive or a big jump in distance)
+    if (this.propCursor < J - 30) this.propCursor = J - 20;
+    if (this.herdCursor < J - 30) this.herdCursor = J;
+    while (this.propCursor < J + AHEAD) {
+      this.spawnProp(this.propCursor);
+      this.propCursor += rand(1.8, 3.2);
+    }
+    while (this.herdCursor < J + AHEAD + 20) {
+      this.spawnHerd(this.herdCursor);
+      this.herdCursor += rand(16, 30);
+    }
   }
 
   /* ---------------------------------------------------------------- time */
-  setTime(distance) {
-    const d = ((distance % CYCLE) + CYCLE) % CYCLE;
+  setTime(J, dt = 0.016) {
+    const d = ((J % CYCLE) + CYCLE) % CYCLE;
     let i = 0;
     while (i < PALETTES.length - 2 && PALETTES[i + 1].at <= d) i++;
     const a = PALETTES[i];
     const b = PALETTES[i + 1];
-    const t = smooth(Math.min(1, Math.max(0, (d - a.at) / (b.at - a.at))));
+    const t = smooth(clamp01((d - a.at) / (b.at - a.at)));
     const P = this.palette;
-    for (const k of ['top', 'hor', 'fog', 'sun', 'hemiS', 'hemiG', 'hill', 'cloud']) P[k].copy(a[k]).lerp(b[k], t);
+    for (const k of ['top', 'hor', 'fog', 'sun', 'hemiS', 'hemiG', 'cloud']) P[k].copy(a[k]).lerp(b[k], t);
     for (const k of ['sunI', 'hemiI', 'sunH', 'night']) P[k] = a[k] + (b[k] - a[k]) * t;
+
+    // region atmosphere
+    const m = (this.blend = this.mixAt(J));
+    const ra = REGIONS[m.a];
+    const rb = REGIONS[m.b];
+    const fogAmt = this.mixNum(m, (r) => r.fog?.amount ?? 0) * (1 - P.night * 0.6);
+    const tint = this.tmp.copy(RC[m.a].fogTint ?? P.fog).lerp(RC[m.b].fogTint ?? P.fog, m.t);
+    P.fog.lerp(tint, fogAmt);
+    P.hor.lerp(tint, fogAmt * 0.6);
+    const near = this.mixNum(m, (r) => r.fog?.near ?? 45);
+    const far = this.mixNum(m, (r) => r.fog?.far ?? 175);
 
     this.skyUniforms.uTop.value.copy(P.top);
     this.skyUniforms.uHor.value.copy(P.hor);
     this.skyUniforms.uFog.value.copy(P.fog);
     this.skyUniforms.uSun.value.copy(P.sun);
     this.skyUniforms.uNight.value = P.night;
-    // Sun (or moon) arcs low over the left horizon, roughly in front of the runner.
     const sd = this.skyUniforms.uSunDir.value.set(-0.45, P.sunH, -1).normalize();
-    this.sun.position.copy(sd).multiplyScalar(60);
+    this.sunDir.copy(sd);
+    if (!this.sun.castShadow) this.sun.position.copy(sd).multiplyScalar(60);
     this.sun.color.copy(P.sun);
     this.sun.intensity = P.sunI;
     this.hemi.color.copy(P.hemiS);
     this.hemi.groundColor.copy(P.hemiG);
     this.hemi.intensity = P.hemiI;
     this.scene.fog.color.copy(P.fog);
-    this.starMat.opacity = P.night;
+    this.scene.fog.near = near;
+    this.scene.fog.far = far;
+    this.starMat.opacity = P.night * (1 - fogAmt);
     this.fireflyMat.opacity = P.night * 0.9;
-    this.hillMat.color.copy(P.fog).lerp(P.hill, 0.55);
-    this.hillMat2.color.copy(P.fog).lerp(P.hill, 0.4);
-    this.silMat.color.copy(P.fog).lerp(P.hill, 0.9).multiplyScalar(0.7);
-    this.mtnMat.color.copy(P.fog).lerp(C('#6a6fa0'), 0.5);
+
+    const hill = this.mixColor(this.tmp2, 'hill', m);
+    this.hillMat.color.copy(P.fog).lerp(hill, 0.55);
+    this.hillMat2.color.copy(P.fog).lerp(hill, 0.4);
+    this.silMat.color.copy(P.fog).lerp(hill, 0.9).multiplyScalar(0.7);
+    this.rimMat.color.copy(P.fog).lerp(hill, 0.7);
+    this.forestMat.color.copy(P.fog).lerp(hill, 0.75);
+    this.mtnMat.color.copy(P.fog).lerp(C('#5a6088'), 0.5 + fogAmt * 0.4);
     this.snowMat.color.copy(P.sun).lerp(C('#ffffff'), 0.5);
     this.cloudMat.color.copy(P.cloud);
     this.cloudMat.emissive.copy(P.cloud).multiplyScalar(0.35);
+    this.oceanMat.color.set(rb.ocean && m.t > 0.5 ? rb.ground.water : ra.ground.water ?? '#3fc1c9').lerp(P.fog, 0.25);
+
+    // backdrop pieces glide in and out between regions
+    const k = this.snapBackdrop ? 1 : 1 - Math.exp(-1.5 * dt);
+    this.snapBackdrop = false;
+    const kp = (r) => r.kili;
+    const kx = this.mixNum(m, (r) => kp(r).x);
+    const ky = this.mixNum(m, (r) => kp(r).y);
+    const kz = this.mixNum(m, (r) => kp(r).z);
+    const ks = this.mixNum(m, (r) => kp(r).s);
+    this.kili.position.lerp(this.tmpV.set(kx, ky, kz), k);
+    this.kili.scale.setScalar(THREE.MathUtils.lerp(this.kili.scale.x, ks, k));
+    const show = (grp, on) => (grp.position.y = THREE.MathUtils.lerp(grp.position.y, on ? 0 : -140, k));
+    const pickR = m.t < 0.5 ? ra : rb;
+    show(this.rim, !!pickR.crater);
+    show(this.forest, !!pickR.forest);
+    show(this.hillsL, !(pickR.ocean && (pickR.ground.waterSide ?? -1) < 0));
+    show(this.hillsR, true);
+    this.ocean.visible = !!pickR.ocean;
+    this.snowFallMat.opacity = this.mixNum(m, (r) => (r.weather === 'snow' ? 0.9 : 0));
     return P;
   }
 
+  dustColor() {
+    const r = REGIONS[this.blend.index];
+    return this.tmp.set(r.ground.path).getHex();
+  }
+
   /* -------------------------------------------------------------- update */
-  update(dt, D, camera, time) {
-    // Sky follows the camera so it never clips.
+  update(dt, J, camera, time) {
     this.sky.position.copy(camera.position);
     this.stars.position.copy(camera.position);
+    this.ocean.position.x = camera.position.x;
+    this.ocean.position.z = camera.position.z;
 
     for (const seg of this.segments) {
-      if (seg.userData.wz + SEG_LEN < D - 16) seg.userData.wz += SEG_LEN * SEG_COUNT;
-      seg.position.z = D - seg.userData.wz - SEG_LEN / 2;
-    }
-
-    for (const p of this.props) {
-      p.visible = p.position.z > p.userData.cull;
-      if (p.userData.wz < D - 20) {
-        p.userData.wz = D + rand(170, 240);
-        const [a, b] = p.userData.xr;
-        p.position.x = (Math.random() < 0.5 ? -1 : 1) * rand(a, b);
-        p.rotation.y = rand(0, Math.PI * 2);
+      if (seg.userData.wz + SEG_LEN < J - 16) {
+        seg.userData.wz += SEG_LEN * SEG_COUNT;
+        this.tintSegment(seg);
       }
-      p.position.z = D - p.userData.wz;
+      seg.position.z = J - seg.userData.wz - SEG_LEN / 2;
     }
 
-    for (const a of this.herd) {
-      const u = a.root.userData;
-      if (u.wz < D - 25) {
-        u.wz = D + rand(180, 260);
-        const side = Math.random() < 0.5 ? -1 : 1;
-        a.root.position.x = side * rand(u.xr[0], u.xr[1]);
-        if (u.mode === 'walk') this.face(a);
+    // grass blades leapfrog along with the runner and take the region's colour
+    const pickR = this.blend.t < 0.5 ? REGIONS[this.blend.a] : REGIONS[this.blend.b];
+    const blades = this.detail && pickR.blades !== false;
+    if (blades) this.mixColor(this.bladeMat.color, 'grass', this.blend).multiplyScalar(1.05);
+    for (const t of this.bladeTiles) {
+      if (t.userData.wz + this.bladeLen < J - 12) t.userData.wz += this.bladeLen * this.bladeTiles.length;
+      t.position.z = J - t.userData.wz;
+      t.visible = blades;
+    }
+
+    this.populate(J);
+    for (let i = this.props.length - 1; i >= 0; i--) {
+      const p = this.props[i];
+      if (p.userData.wz < J - 22) {
+        this.give(p);
+        this.props.splice(i, 1);
+        continue;
+      }
+      p.position.z = J - p.userData.wz;
+      p.visible = p.position.z > p.userData.cull;
+    }
+
+    for (let i = this.herd.length - 1; i >= 0; i--) {
+      const { root: a, anim } = this.herd[i];
+      const u = a.userData;
+      if (u.wz < J - 25) {
+        this.give(a);
+        this.herd.splice(i, 1);
+        continue;
       }
       if (u.mode === 'walk') {
-        // amble across the plain, turning back before reaching the track
-        a.root.position.x += u.dir * u.walkV * dt;
-        const ax = Math.abs(a.root.position.x);
-        const outward = Math.sign(a.root.position.x) === u.dir;
+        a.position.x += u.dir * u.walkV * dt;
+        const ax = Math.abs(a.position.x);
+        const outward = Math.sign(a.position.x) === u.dir;
         if ((ax < u.xr[0] && !outward) || (ax > u.xr[1] + 6 && outward)) {
           u.dir *= -1;
-          a.root.rotation.y = u.dir > 0 ? -Math.PI / 2 : Math.PI / 2;
+          a.rotation.y = u.dir > 0 ? -Math.PI / 2 : Math.PI / 2;
         }
       }
-      a.root.position.z = D - u.wz;
-      a.root.visible = a.root.position.z > -175 && a.root.position.z < 12;
-      if (a.root.visible && a.root.position.z > -120) a.update(dt, 1, u.mode);
+      a.position.z = J - u.wz;
+      a.visible = a.position.z > -175 && a.position.z < 12;
+      if (a.visible && a.position.z > -120) anim.update(dt, 1, u.mode);
     }
 
     for (const c of this.clouds) {
@@ -369,6 +693,19 @@ export class World {
         if (z > 12) z -= 95;
         pos.setZ(i, z);
         pos.setY(i, pos.getY(i) + Math.sin(time * 2 + i) * dt * 0.4);
+      }
+      pos.needsUpdate = true;
+    }
+    if (this.snowFallMat.opacity > 0.01) {
+      const pos = this.snow.geometry.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        let y = pos.getY(i) - dt * 2.2;
+        let z = pos.getZ(i) + dt * 8;
+        if (y < 0) y += 22;
+        if (z > 12) z -= 82;
+        pos.setY(i, y);
+        pos.setZ(i, z);
+        pos.setX(i, pos.getX(i) + Math.sin(time + i) * dt * 0.6);
       }
       pos.needsUpdate = true;
     }

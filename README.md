@@ -28,14 +28,33 @@ Grab glowing totems on the trail:
 | 🐦 **Hondo** the hornbill | Seed magnet |
 | 🦁 **Mfalme** the lion | Royal roar: double points |
 
+### The journey
+
+Every run is a chase across East Africa. Each region has its own ground, plants, animals, weather, music, story beat and signature hazard:
+
+| | Region | Signature hazard |
+| --- | --- | --- |
+| 🇹🇿 | Serengeti | Charging rhinos, poacher trucks |
+| 🇹🇿 | Ngorongoro Crater | Charging buffalo · flamingo lake inside the crater wall |
+| 🇹🇿 | Mount Kilimanjaro | Rockfalls · snow, giant groundsels |
+| 🇹🇿 | Selous · Nyerere | Napping crocodiles · the Rufiji River |
+| 🇹🇿 | Zanzibar | Spice-market carts and fishing nets · dhows on turquoise water |
+| 🇰🇪 | Maasai Mara | Wildebeest stampedes |
+| 🇰🇪 | Amboseli | Elephants crossing beneath Kilimanjaro |
+| 🇺🇬 | Bwindi Forest | Mountain gorillas in misty rainforest |
+
+After Bwindi the run loops into a *legend lap*. Regions you reach unlock on the **Journey map**, and you can start future runs from any of them. Adding a region is mostly data: see `app/data/regions.js`.
+
 ### What keeps players coming back
 
-- **Six-chapter story** that moves the sun across the sky: golden morning → kopjes → sunset stampede → a firefly night → dawn at the Rustmaw den → the song returns.
+- **A story told across eight regions.** Each one has its own animal narrator, and the sun moves with you: morning on the Serengeti, sunset on Kilimanjaro, night on the Rufiji, dawn over Zanzibar.
 - **Missions** in sets of three that raise a permanent score multiplier.
 - **Six unlockable runners** (Zuri, Juma, Neema, Baraka, Amani, Kito) and ally upgrades.
 - **Daily rewards** with a 7-day streak.
 - **Challenge sharing**: the game renders a score card image and a link (`/?c=<score>&n=<name>`) that greets your friend with *"Allen challenges you to beat 12,000!"*
 - **Global leaderboard**: after a run, post your name and score. Rank is decided on the server. Open the board from the trophy on the title screen, or from the game-over card.
+- **Ngao shield charms**: buy them with seeds and tap 🛡️ mid-run to survive one crash.
+- **Seed combos, slow-motion close calls**, and music that builds as you speed up.
 - **Installable PWA** that works offline. The score API is network-only; the rest of the game still plays offline.
 
 ## Tech
@@ -54,7 +73,10 @@ app/
   game/materials.js  curved-world shader, material cache, mesh baking
   game/audio.js      procedural soundtrack + SFX
   game/input.js      swipe + keyboard
-  data/content.js    story, chapters, runners, allies, missions
+  data/content.js    story, runners, allies, missions
+  data/regions.js    the journey: every region's look, wildlife, hazards, music
+  game/patterns.js   obstacle pattern generator (pure, unit-tested)
+  game/regionModels.js  flora, fauna and hazards beyond the Serengeti
   data/save.js       local progress, missions, daily reward
   ui/ui.js           all screens (title, intro, HUD, game over, shop…)
   ui/leaderboard.js  fetch + render the global board (no database credentials)
@@ -62,6 +84,7 @@ app/
 api/scores.js        Vercel function: GET the top 20, POST a score
 server/              libSQL access, validation, and the Vite dev/preview middleware
 migrations/          SQL schema for the scores table
+tests/               vitest suites (pattern fairness, regions, save data)
 static/              PWA manifest, service worker, icons, fonts, og image
 ```
 
@@ -72,16 +95,23 @@ npm install
 cp .env.example .env   # then fill in Turso credentials
 npm run db:init        # create the scores table
 npm run dev            # http://localhost:5173  (also serves /api/scores)
+npm test               # vitest suites + leaderboard server tests
 npm run build          # outputs dist/
 ```
 
 For a local database without Turso Cloud, set `TURSO_DATABASE_URL=file:data/kimbia.db` and leave the token empty. Cloud databases use a `libsql://` URL and require `TURSO_AUTH_TOKEN`.
+
+`tests/patterns.test.js` generates thousands of obstacle chunks for every region and fails if any of them blocks all three lanes. CI (`.github/workflows/ci.yml`) runs the tests and the build on every pull request.
 
 ## Leaderboard
 
 Scores live in [Turso](https://turso.tech) (libSQL). The browser only calls `/api/scores`. `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are read on the server — do not prefix them with `VITE_`, or Vite will ship them to the client.
 
 `npm run db:init` runs `migrations/001_scores.sql`. The API also applies that file on first use (`CREATE TABLE IF NOT EXISTS`), so a new database is ready as soon as the env vars are set. The board returns the top 20 rows ordered by score, then by earlier submission. Rank is computed in SQL and any rank sent by the client is ignored. Names are 1–16 characters. Score, distance, seeds, and allies must be non-negative integers.
+
+## Analytics
+
+Vercel Web Analytics is wired into `index.html`. Turn it on in the Vercel dashboard (Project → Analytics) to start collecting page views.
 
 ## Deploy to Vercel
 

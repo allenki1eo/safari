@@ -1,4 +1,4 @@
-import { CHAPTERS } from '../data/content.js';
+import { REGIONS, COUNTRIES } from '../data/regions.js';
 import { save } from '../data/save.js';
 
 /** Draws a 1080×1350 social card for the run — the viral loop's centrepiece. */
@@ -99,10 +99,10 @@ export async function makeCard(run) {
   g.font = '800 44px Nunito, sans-serif';
   g.fillStyle = '#ffc940';
   g.fillText(`★ ${run.score.toLocaleString()} points  ·  ${run.seeds} seeds`, W / 2, 690);
-  const ch = CHAPTERS[Math.max(0, run.chapter)];
+  const reg = REGIONS[Math.max(0, run.chapter)];
   g.font = '800 32px Nunito, sans-serif';
   g.fillStyle = 'rgba(255,244,222,0.8)';
-  g.fillText(`Chapter ${run.chapter + 1}: ${ch.title}`, W / 2, 740);
+  g.fillText(`Reached ${reg.name}, ${COUNTRIES[reg.country].name}`, W / 2, 740);
 
   // call to action
   g.font = '72px "Lilita One", sans-serif';
@@ -161,7 +161,8 @@ export function challengeUrl(run) {
 /** Web Share with image when supported; falls back to text share, then download+copy. */
 export async function shareRun(run) {
   const url = challengeUrl(run);
-  const text = `I ran ${run.distance.toLocaleString()}m and scored ${run.score.toLocaleString()} in KIMBIA! 🦁🐘🦒 Can you outrun Fisi the hyena king?`;
+  const reg = REGIONS[Math.max(0, run.chapter)];
+  const text = `I ran ${run.distance.toLocaleString()}m to ${reg.name} ${COUNTRIES[reg.country].flag} and scored ${run.score.toLocaleString()} in KIMBIA! 🦁🐘🦒 Can you outrun Fisi the hyena king?`;
   let blob;
   try {
     blob = await makeCard(run);

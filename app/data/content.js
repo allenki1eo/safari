@@ -81,39 +81,6 @@ export const ALLY_IDS = Object.keys(ALLIES);
 export const UPGRADE_COSTS = [250, 600, 1200, 2500, 5000];
 
 /* -------------------------------------------------------------------------- */
-export const CHAPTERS = [
-  {
-    at: 0, title: 'The Stolen Song', place: 'Golden Plains',
-    speaker: 'Bibi Tembo', emoji: '🐘',
-    line: 'Run, child! Gather the scattered golden seeds — the herds will follow their song.',
-  },
-  {
-    at: 700, title: 'Kopjes of the Pride', place: 'Moru Kopjes',
-    speaker: 'Mfalme', emoji: '🦁',
-    line: 'Fisi\'s pack passed these rocks at dawn. The pride runs with you now.',
-  },
-  {
-    at: 1700, title: 'The Sunset Stampede', place: 'Grumeti River',
-    speaker: 'Duma', emoji: '🐆',
-    line: 'The herds are restless without the song. Stay light on your feet!',
-  },
-  {
-    at: 3000, title: 'Night of a Thousand Eyes', place: 'Seronera Valley',
-    speaker: 'Hondo', emoji: '🐦',
-    line: 'Those glowing eyes? Hyenas. Follow the fireflies — they know the way.',
-  },
-  {
-    at: 4500, title: 'Dawn at the Rustmaw Den', place: 'Gol Mountains',
-    speaker: 'Tai', emoji: '🦅',
-    line: 'I see the Heart Seed glowing in their trucks! Just a little further!',
-  },
-  {
-    at: 6500, title: 'The Song Returns', place: 'Ngorongoro Rim',
-    speaker: 'Bibi Tembo', emoji: '🐘',
-    line: 'Listen… the plains are singing again. You are a legend now, little runner.',
-  },
-];
-
 export const INTRO = [
   {
     art: 'dawn', speaker: 'The Serengeti', emoji: '🌅',
@@ -133,7 +100,7 @@ export const INTRO = [
   },
   {
     art: 'elder', speaker: 'Bibi Tembo', emoji: '🐘',
-    text: '“You, child. You are quick and your heart is kind. The animals will help those who help them. Run — and don\'t stop!”',
+    text: '“You, child. Fisi is fleeing across Tanzania — maybe all the way to Kenya and Uganda. The animals will help those who help them. Run — and don\'t stop!”',
   },
 ];
 
@@ -156,6 +123,8 @@ export const MISSION_POOL = [
   { id: 'roofs', text: 'Run across {n} Rustmaw trucks', stat: 'roofs', n: [2, 5, 10, 18, 30] },
   { id: 'smash', text: 'Smash {n} obstacles riding Tembo', stat: 'smash', n: [3, 8, 15, 25, 40] },
   { id: 'nearmiss', text: 'Pull off {n} close calls', stat: 'nearMiss', n: [3, 8, 15, 25, 40] },
+  { id: 'regions', text: 'Cross into {n} new regions in one run', stat: 'regions', n: [1, 2, 3, 4, 6] },
+  { id: 'combo', text: 'Reach a ×{n} seed combo', stat: 'bestCombo', n: [15, 30, 50, 80, 120] },
 ];
 
 export const SHOUTS = ['Hakuna shida!', 'Safi sana!', 'Pole pole? Never!', 'Kimbia!', 'Poa!', 'Hatari!', 'Mambo poa!'];

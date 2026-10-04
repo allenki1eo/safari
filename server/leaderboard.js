@@ -5,7 +5,8 @@
 import { createClient } from '@libsql/client';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { CHAPTERS, RUNNERS } from '../app/data/content.js';
+import { RUNNERS } from '../app/data/content.js';
+import { REGIONS } from '../app/data/regions.js';
 import { loadLocalEnv } from './env.js';
 
 loadLocalEnv();
@@ -22,7 +23,8 @@ const SCORE_MAX = 99_999_999;
 const DISTANCE_MAX = 9_999_999;
 const SEEDS_MAX = 999_999;
 const ALLIES_MAX = 999;
-const CHAPTER_MAX = CHAPTERS.length - 1;
+// `chapter` is the furthest journey region reached (0 = Serengeti … 7 = Bwindi)
+const CHAPTER_MAX = REGIONS.length - 1;
 const RUNNER_IDS = new Set(RUNNERS.map((runner) => runner.id));
 
 let clientPromise = null;
