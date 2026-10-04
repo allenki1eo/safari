@@ -21,7 +21,8 @@ export const time = { value: 0 };
 
 /**
  * Makes a material curve with the world. `ext` can inject extra GLSL:
- *   { key, vertexHead, vertexBegin, fragmentHead, fragmentColor, uniforms }
+ *   { key, vertexHead, vertexBegin, fragmentHead, fragmentColor, fragmentLight, uniforms }
+ * `fragmentLight` is inserted after Lambert lighting, still before tone mapping.
  */
 export function bend(material, ext = {}) {
   material.onBeforeCompile = (shader) => {
@@ -32,9 +33,13 @@ export function bend(material, ext = {}) {
     if (ext.vertexBegin) vs = vs.replace('#include <begin_vertex>', '#include <begin_vertex>\n' + ext.vertexBegin);
     vs = vs.replace('#include <project_vertex>', THREE.ShaderChunk.project_vertex.replace('gl_Position = projectionMatrix * mvPosition;', BEND));
     shader.vertexShader = vs;
-    if (ext.fragmentHead || ext.fragmentColor) {
+    if (ext.fragmentHead || ext.fragmentColor || ext.fragmentLight) {
       let fs = 'uniform float uTime;\n' + (ext.fragmentHead ?? '') + shader.fragmentShader;
       if (ext.fragmentColor) fs = fs.replace('#include <color_fragment>', '#include <color_fragment>\n' + ext.fragmentColor);
+      if (ext.fragmentLight) {
+        const lit = 'vec3 outgoingLight = reflectedLight.directDiffuse + reflectedLight.indirectDiffuse + totalEmissiveRadiance;';
+        fs = fs.replace(lit, `${lit}\n${ext.fragmentLight}`);
+      }
       shader.fragmentShader = fs;
     }
   };
@@ -42,6 +47,24 @@ export function bend(material, ext = {}) {
   material.customProgramCacheKey = () => key;
   return material;
 }
+
+/**
+ * Ground, path and lane albedo that Lambert is not allowed to crush to black.
+ * MeshLambert divides by π, and a low sun (or the night hemi) then tone-maps
+ * the trail into a void. This floor keeps a share of the surface colour —
+ * region tint, grass noise, worn lanes — in front of the runner at every
+ * time of day. It is one value for the whole journey, not a per-region hack.
+ */
+export const GROUND_LIFT = 1.45;
+const groundLiftUniform = { value: GROUND_LIFT };
+export const GROUND_LIGHT = {
+  fragmentHead: 'uniform float uGroundLift;\n',
+  // Gamma below 1 lifts dark grass and lane pixels more than pale ones, so a
+  // brown forest path and a golden savanna path both stay readable, and the
+  // worn lanes stay darker than the ridges between them.
+  fragmentLight: 'vec3 groundFloor = pow(max(diffuseColor.rgb, vec3(0.001)), vec3(0.62)) * uGroundLift;\noutgoingLight = max(outgoingLight, groundFloor);',
+  uniforms: { uGroundLift: groundLiftUniform },
+};
 
 /* ---- wind: plants carry a per-vertex sway weight (0 at the roots, 1 at the tips) ---- */
 const SWAY = {
@@ -139,12 +162,12 @@ export function pathTexture() {
     const lane = s / 3.375; // the texture spans 3 lanes plus margins
     for (let l = -1; l <= 1; l++) {
       const cx = s / 2 + l * lane;
-      const grd = g.createLinearGradient(cx - lane * 0.32, 0, cx + lane * 0.32, 0);
-      grd.addColorStop(0, 'rgba(90,90,90,0)');
-      grd.addColorStop(0.5, 'rgba(90,90,90,0.22)');
-      grd.addColorStop(1, 'rgba(90,90,90,0)');
+      const grd = g.createLinearGradient(cx - lane * 0.38, 0, cx + lane * 0.38, 0);
+      grd.addColorStop(0, 'rgba(255,255,255,0.16)');
+      grd.addColorStop(0.42, 'rgba(70,70,70,0.42)');
+      grd.addColorStop(1, 'rgba(255,255,255,0.16)');
       g.fillStyle = grd;
-      g.fillRect(cx - lane * 0.32, 0, lane * 0.64, s);
+      g.fillRect(cx - lane * 0.38, 0, lane * 0.76, s);
       // tyre tracks
       for (const off of [-0.22, 0.22]) {
         g.fillStyle = 'rgba(70,70,70,0.16)';
@@ -162,6 +185,12 @@ export function pathTexture() {
         g.ellipse(cx + side * 7 + (Math.random() - 0.5) * 4, y + Math.random() * 6, 3.4, 6, 0, 0, Math.PI * 2);
         g.fill();
       }
+    }
+    // pale ridges between the three running lanes so the corridors stay obvious
+    for (const edge of [-0.5, 0.5]) {
+      const x = s / 2 + edge * lane;
+      g.fillStyle = 'rgba(255,255,255,0.55)';
+      g.fillRect(x - 5, 0, 10, s);
     }
     speckle(g, s, 140, 2, 6, 120, 90);
   }));
