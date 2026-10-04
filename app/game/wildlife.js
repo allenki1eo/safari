@@ -3,11 +3,13 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { G, bakeRigid, bend, mat, mesh } from './materials.js';
+import { PAT, PATTERN_GLSL } from './rigkit.js';
 
 /**
  * Textured, animated savanna animals from 0 A.D. by Wildfire Games (CC-BY-SA 3.0; see
- * static/models/animals/LICENSE.txt): lion, lioness, zebra, wildebeest, rhino, giraffe and
- * African elephant. Each wraps the code-built animal from fauna.js, which stands in until
+ * static/models/animals/LICENSE.txt): lion, lioness, zebra, wildebeest, rhino, giraffe,
+ * African elephant and hippo, plus a hyena, cheetah and buffalo recoated from 0 A.D.'s wolf,
+ * tiger and bull. Each wraps the code-built animal from fauna.js, which stands in until
  * the model arrives, so the herds never wait on the network.
  */
 
@@ -32,7 +34,7 @@ function load(name) {
 
 /** Starts fetching the models the opening regions show first. */
 export function preloadWildlife() {
-  for (const n of ['zebra', 'wildebeest', 'giraffe', 'elephant', 'lion']) load(n);
+  for (const n of ['hyena', 'zebra', 'wildebeest', 'giraffe', 'elephant', 'lion']) load(n);
 }
 
 // mode -> clip(s); several idles take turns
@@ -44,18 +46,56 @@ const CLIPS = {
   rhino: { run: 'Run', walk: 'Walk', idle: ['Idle'] },
   giraffe: { run: 'Run', walk: 'Walk', idle: ['Idle', 'Idle2'] },
   elephant: { run: 'Run', walk: 'Walk', idle: ['Idle', 'Idle2'] },
+  // borrowed from cousins and recoated (see COATS): wolf -> hyena, tiger -> cheetah, bull -> buffalo
+  hyena: { run: 'Run', walk: 'Walk', idle: ['Idle', 'Idle2', 'Idle3'] },
+  cheetah: { run: 'Run', walk: 'Walk', idle: ['Idle', 'Idle2', 'Idle3'] },
+  buffalo: { run: 'Run', walk: 'Walk', idle: ['Idle', 'Idle2', 'Feeding'] },
+  hippo: { run: 'Run', walk: 'Walk', idle: ['Idle', 'Idle2'] },
+};
+
+/**
+ * New coats for models borrowed from a cousin: the texture keeps the fur's light and shade
+ * (sampled blurred, so the tiger's stripes melt away), and the colour and markings are
+ * painted on in the model's own space. `scale` is pattern cells per metre.
+ */
+const COATS = {
+  cheetah: { base: 0xe0ae58, mark: 0x1d140c, type: PAT.spots, scale: 11, blur: 4, lo: 0.75 },
+  hyena: { base: 0xa8916f, mark: 0x3d2f22, type: PAT.spots, scale: 8, blur: 2, lo: 0.55 },
+  buffalo: { base: 0x4a4038, mark: 0x4a4038, type: PAT.none, scale: 1, blur: 0, lo: 0.35 },
 };
 
 const materials = new Map();
-function curved(src) {
-  if (!materials.has(src)) {
-    const m = bend(new THREE.MeshLambertMaterial({ map: src.map, color: src.color }));
-    materials.set(src, m);
+function curved(src, kind, unit) {
+  const key = `${kind}|${src.uuid}`;
+  if (materials.has(key)) return materials.get(key);
+  const m = new THREE.MeshLambertMaterial({ map: src.map, color: src.color });
+  const coat = COATS[kind];
+  if (!coat) {
+    materials.set(key, bend(m));
+    return materials.get(key);
   }
-  return materials.get(src);
+  bend(m, {
+    key: `coat-${kind}`,
+    vertexHead: 'varying vec3 vCoat;\n',
+    vertexBegin: 'vCoat = position;\n',
+    fragmentHead: 'varying vec3 vCoat;\nuniform vec3 uBase, uMark;\nuniform vec4 uPat;\n' + PATTERN_GLSL,
+    fragmentColor: /* glsl */ `
+      vec3 fur = texture2D(map, vMapUv, uPat.z).rgb;
+      float shade = clamp(dot(fur, vec3(0.299, 0.587, 0.114)) / 0.42, uPat.w, 1.35);
+      diffuseColor.rgb = mix(uBase, uMark, patternMask(vCoat * uPat.y, uPat.x)) * shade;
+    `,
+    uniforms: {
+      uBase: { value: new THREE.Color(coat.base) },
+      uMark: { value: new THREE.Color(coat.mark) },
+      uPat: { value: new THREE.Vector4(coat.type, coat.scale * unit, coat.blur, coat.lo) },
+    },
+  });
+  materials.set(key, m);
+  return m;
 }
 
 const refHeights = new Map();
+const sizes = new Map();
 
 /** Tembo's ceremonial blanket, seated where 0 A.D. puts the elephant's rider. */
 function addSaddle(model) {
@@ -81,11 +121,36 @@ function addSaddle(model) {
   seat.add(g);
 }
 
+/** Fisi's tattered red bandana, tied round the hyena's neck. */
+function addBandana(model) {
+  let neck = null;
+  model.traverse((o) => o.isBone && o.name === 'Neck2' && (neck = o));
+  if (!neck) return;
+  model.updateMatrixWorld(true);
+  // built in metres facing +z like the model (which has no parent yet), then carried into the
+  // bone's frame with the full inverse, since these rigs can carry mirrored or skewed bone scales
+  const g = new THREE.Group();
+  const red = bend(new THREE.MeshLambertMaterial({ color: 0xb3261e }));
+  // the neck rises forward, so the band tilts with it; the bone runs along the top of the neck
+  const band = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.06, 6, 20), red);
+  band.position.y = -0.12;
+  band.rotation.x = -0.35;
+  g.add(band);
+  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.3, 4), red);
+  tail.position.set(0, -0.3, 0.1);
+  tail.rotation.x = Math.PI - 0.5;
+  g.add(tail);
+  const at = new THREE.Vector3().setFromMatrixPosition(neck.matrixWorld);
+  g.matrixAutoUpdate = false;
+  g.matrix.copy(neck.matrixWorld).invert().multiply(new THREE.Matrix4().makeTranslation(at.x, at.y, at.z));
+  neck.add(g);
+}
+
 /**
  * A 0 A.D. animal with the game's animal API (`root` facing -z, `update(dt, rate, mode)`),
  * sized to match the hand-built stand-in so lanes, hit boxes and the ride stay right.
  */
-export function makeWildAnimal(kind, makeFallback, { saddle = false } = {}) {
+export function makeWildAnimal(kind, makeFallback, { saddle = false, boss = false } = {}) {
   const file = load(kind);
   const root = new THREE.Group();
   const holder = new THREE.Group();
@@ -95,7 +160,7 @@ export function makeWildAnimal(kind, makeFallback, { saddle = false } = {}) {
   let rig = null;
 
   const refHeight = () => {
-    const key = kind + (saddle ? '+saddle' : '');
+    const key = kind + (saddle ? '+saddle' : ''); // the boss is sized by its caller
     if (!refHeights.has(key)) {
       const probe = fallback ?? makeFallback();
       const h = new THREE.Box3().setFromObject(probe.root).getSize(new THREE.Vector3()).y;
@@ -109,15 +174,34 @@ export function makeWildAnimal(kind, makeFallback, { saddle = false } = {}) {
     const model = cloneSkinned(file.gltf.scene);
     let shadows = false;
     fallback?.root.traverse((o) => o.isMesh && o.castShadow && (shadows = true));
+    // measured on the skinned pose: some meshes carry a node scale that skinning ignores
+    // and standing in the idle pose, since a bind pose can crouch or sprawl
+    if (!sizes.has(kind)) {
+      const idle = file.gltf.animations.find((c) => c.name === 'Idle');
+      const probe = idle && new THREE.AnimationMixer(model);
+      probe?.clipAction(idle).play();
+      probe?.update(0);
+      model.updateMatrixWorld(true);
+      sizes.set(kind, new THREE.Box3().setFromObject(model, true).getSize(new THREE.Vector3()));
+      probe?.stopAllAction();
+      probe?.uncacheRoot(model);
+    }
+    const size = sizes.get(kind);
+    const h = size.y;
+    const height = refHeight() * (kind === 'elephant' ? 0.96 : 1);
+    const longest = (v) => Math.max(v.x, v.y, v.z);
     model.traverse((o) => {
       if (!o.isMesh) return;
-      o.material = curved(o.material);
+      // metres per unit of the mesh's own positions (whatever its axes), to paint coats to scale
+      o.geometry.boundingBox ?? o.geometry.computeBoundingBox();
+      const unit = (longest(size) * height) / h / Math.max(1e-6, longest(o.geometry.boundingBox.getSize(new THREE.Vector3())));
+      o.material = curved(o.material, kind, unit);
       o.castShadow = shadows;
       o.frustumCulled = false;
     });
-    const h = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3()).y;
-    model.scale.setScalar((refHeight() * (kind === 'elephant' ? 0.96 : 1)) / h);
+    model.scale.setScalar(height / h);
     if (saddle) addSaddle(model);
+    if (boss) addBandana(model);
     holder.add(model);
     const mixer = new THREE.AnimationMixer(model);
     const actions = {};

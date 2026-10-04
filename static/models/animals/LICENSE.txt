@@ -1,5 +1,11 @@
 The files in this directory are Copyright (C) 2009 Wildfire Games.
 
+They are converted (glTF, compressed) from the 0 A.D. art at https://github.com/0ad/0ad:
+lion, lioness, African elephant, giraffe, zebra, wildebeest, rhino, hippo
+(hippopotamus), and three used as stand-ins and recoloured in the game: hyena (wolf),
+cheetah (tiger) and buffalo (bull_a with the black cattle texture). Clips were trimmed
+to walk, run and idle and retimed to start at zero.
+
 These files are licensed under the Creative Commons Attribution-Share Alike 3.0
 (CC-by-sa) license, available at http://creativecommons.org/licenses/by-sa/3.0/
 

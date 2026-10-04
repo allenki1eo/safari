@@ -137,26 +137,26 @@ function spots(p, color, count, size, target = p.body, spread) {
 }
 
 /**
- * The savanna's animals. Lion, lioness, elephant, giraffe, zebra, wildebeest and rhino are
- * textured 0 A.D. models (wildlife.js, CC-BY-SA); the code-built rigs in fauna.js stand in
- * while they load and play the species 0 A.D. doesn't have.
+ * The savanna's animals: textured 0 A.D. models (wildlife.js, CC-BY-SA). The hyena, cheetah
+ * and buffalo are 0 A.D.'s wolf, tiger and bull in new coats. The code-built rigs in fauna.js
+ * stand in while the models load.
  */
 export const Animals = {
   elephant: (opts = {}) => makeWildAnimal('elephant', () => makeAnimal('elephant', opts), opts),
   giraffe: () => makeWildAnimal('giraffe', () => makeAnimal('giraffe')),
   zebra: () => makeWildAnimal('zebra', () => makeAnimal('zebra')),
-  cheetah: () => makeAnimal('cheetah'),
+  cheetah: () => makeWildAnimal('cheetah', () => makeAnimal('cheetah')),
   // prides are mostly lionesses; Mfalme the ally is always the maned king
   lion: ({ king = false } = {}) => makeWildAnimal(king || Math.random() < 0.4 ? 'lion' : 'lioness', () => makeAnimal('lion')),
   hyena(boss = false) {
-    const a = makeAnimal('hyena', { boss });
+    const a = makeWildAnimal('hyena', () => makeAnimal('hyena', { boss }), { boss });
     if (boss) a.root.scale.setScalar(1.12);
     return a;
   },
   rhino: () => makeWildAnimal('rhino', () => makeAnimal('rhino')),
   wildebeest: () => makeWildAnimal('wildebeest', () => makeAnimal('wildebeest')),
-  buffalo: () => makeAnimal('buffalo'),
-  hippo: () => makeAnimal('hippo'),
+  buffalo: () => makeWildAnimal('buffalo', () => makeAnimal('buffalo')),
+  hippo: () => makeWildAnimal('hippo', () => makeAnimal('hippo')),
 };
 
 /* ==========================================================================

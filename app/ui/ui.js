@@ -1193,7 +1193,7 @@ export class UI {
           <input class="name-input" maxlength="16" placeholder="e.g. Zuri" value="${esc(save.name)}" />
           <div class="stack"><button class="btn" data-act="close" data-click>Done</button></div>
           <p class="muted" style="text-align:center;font-size:12px;margin:16px 0 0">Swipe to move · Arrow keys / WASD on desktop</p>
-          <p class="muted credits" style="text-align:center;font-size:11px;margin:10px 0 0;line-height:1.5">Runners: Quaternius (CC0). Lion, elephant, giraffe, zebra, wildebeest &amp; rhino: © Wildfire Games, from <a href="https://play0ad.com" target="_blank" rel="noopener">0 A.D.</a>, <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener">CC BY-SA 3.0</a>.</p>
+          <p class="muted credits" style="text-align:center;font-size:11px;margin:10px 0 0;line-height:1.5">Runners: Quaternius (CC0). Animals: © Wildfire Games, from <a href="https://play0ad.com" target="_blank" rel="noopener">0 A.D.</a>, <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener">CC BY-SA 3.0</a>.</p>
         </div>
       </div>`);
     el.addEventListener('click', (e) => {
