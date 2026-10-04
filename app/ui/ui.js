@@ -1,8 +1,8 @@
-import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO, OUTFITS, outfitId, HUNT_WORDS } from '../data/content.js';
+import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO, OUTFITS, outfitId, HUNT_WORDS, BOOSTS } from '../data/content.js';
 import { REGIONS, COUNTRIES } from '../data/regions.js';
 import { save, persist, ensureMissions, checkMissions, claimMissionSet, multiplier, claimDaily } from '../data/save.js';
 import { audio } from '../game/audio.js';
-import { whatsAppHref } from './share.js';
+import { challengeUrl, makeCard, shareText, whatsAppHref } from './share.js';
 import { fetchBoard, leaveDecision, postScore, renderRows, runnerName, scoreSavePlan } from './leaderboard.js';
 import { darDay, ghostFrom, huntWord, parseShareLink, routeForLink } from '../data/daily.js';
 import { install } from './install.js';
@@ -92,6 +92,7 @@ export class UI {
     game.on('hud', (g) => this.updateHud(g));
     game.on('seed', () => this.bumpSeeds());
     game.on('power', (e) => this.onPower(e));
+    game.on('boost', (e) => this.onBoost(e));
     game.on('chapter', (c) => this.onChapter(c));
     game.on('tutorial', (t) => this.tip(t));
     game.on('shout', (s) => this.shout(s));
@@ -337,6 +338,7 @@ export class UI {
       shield: sb,
     };
     this.powerEls = {};
+    this.boostEls = {};
     this.last = {};
     this.overlay(el);
     const today = save.hunt?.day === darDay();
@@ -378,6 +380,11 @@ export class UI {
       el.style.setProperty('--p', p.toFixed(3));
       el.classList.toggle('ending', left < 1.5);
     }
+    for (const [id, el] of Object.entries(this.boostEls)) {
+      const left = g.boosts[id] ?? 0;
+      el.style.setProperty('--p', Math.max(0, left / BOOSTS[id].dur).toFixed(3));
+      el.classList.toggle('ending', left < 1.5);
+    }
     if (g.shield > 0) E.shield.style.setProperty('--p', (g.shield / 30).toFixed(3));
     const ghost = g.ghostRun;
     if (E.ghost) {
@@ -416,6 +423,20 @@ export class UI {
     } else {
       this.powerEls[id]?.remove();
       delete this.powerEls[id];
+    }
+  }
+
+  /** A timed powerup's chip sits with the allies' chips and drains as it runs out. */
+  onBoost({ id, on }) {
+    if (!this.hud) return;
+    if (on && !this.boostEls[id]) {
+      const b = BOOSTS[id];
+      const el = $(`<div class="power boost" style="--c:${b.color}" title="${esc(b.name)}"><span>${b.emoji}</span></div>`);
+      this.hudEls.powers.appendChild(el);
+      this.boostEls[id] = el;
+    } else if (!on) {
+      this.boostEls[id]?.remove();
+      delete this.boostEls[id];
     }
   }
 
@@ -709,6 +730,7 @@ export class UI {
       }
     });
     this.overlay(el);
+    this.cardFor(run); // draw the score card now, so the share can happen inside the tap
     this.recordFinishedRun(el, run);
     if (ms.every((m) => m.done)) setTimeout(() => this.missionSetComplete(), 900);
   }
@@ -736,12 +758,37 @@ export class UI {
     el.textContent = failed ? "Today's rank didn't save" : 'Today — off the board';
   }
 
-  shareOnWhatsApp(run) {
-    const href = whatsAppHref({
-      ...run,
-      name: save.name || run.name,
-      runner: run.runner || save.runner,
-    });
+  /** The run's score card as a PNG file, drawn once per score and rank and kept ready. */
+  cardFor(run) {
+    const key = `${run.score}|${run.distance}|${run.rank ?? ''}`;
+    if (this.card?.key !== key) {
+      const card = { key, file: null };
+      card.ready = makeCard(run)
+        .then((blob) => (card.file = blob ? new File([blob], 'kimbia-score.png', { type: 'image/png' }) : null))
+        .catch(() => null);
+      this.card = card;
+    }
+    return this.card;
+  }
+
+  /**
+   * Shares the score card image with the challenge link. Phones that can share files open the
+   * share sheet (WhatsApp is right there); anything else falls back to a WhatsApp text link.
+   */
+  async shareOnWhatsApp(run) {
+    const r = { ...run, name: save.name || run.name, runner: run.runner || save.runner };
+    const card = this.cardFor(r);
+    // usually ready already; waiting briefly keeps us inside the tap that allows sharing
+    const file = card.file ?? (await Promise.race([card.ready, new Promise((ok) => setTimeout(ok, 900))]));
+    if (file && navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], text: `${shareText(r)} ${challengeUrl(r)}`, title: 'KIMBIA!' });
+        return;
+      } catch (e) {
+        if (e?.name === 'AbortError') return; // closed the sheet
+      }
+    }
+    const href = whatsAppHref(r);
     const opened = window.open(href, '_blank', 'noopener,noreferrer');
     if (!opened) {
       navigator.clipboard?.writeText(href).then(
@@ -810,7 +857,10 @@ export class UI {
         this.postedRunId = this.game.runId;
         this.postedEntry = data.entry;
         this.lastTop = data.top;
-        if (data.daily?.rank) run.rank = data.daily.rank;
+        if (data.daily?.rank) {
+          run.rank = data.daily.rank;
+          this.cardFor(run); // redraw with today's rank on it
+        }
         if (root.isConnected) {
           this.paintBoard(root, data.top, data.entry, '', run);
           this.paintDailyRank(root, data.daily);

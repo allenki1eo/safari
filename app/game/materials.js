@@ -321,6 +321,15 @@ export function mesh(geo, material, sx = 1, sy = 1, sz = 1, x = 0, y = 0, z = 0)
   return m;
 }
 
+/**
+ * Rotates one part and returns it, for `g.add(turn(mesh(...), 'x', a))`. (Chaining
+ * `g.add(m).rotation` instead turns the whole group, since add() returns the parent.)
+ */
+export function turn(m, axis, angle) {
+  m.rotation[axis] = angle;
+  return m;
+}
+
 /** Soft round blob shadow texture. */
 let shadowTex;
 export function shadowTexture() {

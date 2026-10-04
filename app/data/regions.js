@@ -136,8 +136,9 @@ export const REGIONS = [
       ['fishrack', 0.9], ['hut', 0.8], ['bush', 1.2], ['flowers', 1.4], ['ngalawa', 1.4], ['seaweed', 0.8], ['lighthouse', 0.12],
     ],
     herd: [['dolphin', 'idle', 3], ['crab', 'idle', 2]],
-    blocks: ['cart', 'canoe'], style: { log: 'palm', gate: 'net', rock: 'rock' },
-    trucks: false, specials: { market: 3 },
+    blocks: ['cart', 'canoe'], style: { log: 'palm', gate: 'net', rock: 'rock', fall: 'coconut' },
+    // a beach, not the bush: no lions or wildebeest; coconuts, scooters and the market instead
+    wild: false, trucks: false, specials: { market: 2.4, coconuts: 2.2, boda: 2 },
     music: { transpose: 2, tempo: 120, scale: 'taarab' },
   },
   {

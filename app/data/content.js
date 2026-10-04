@@ -168,4 +168,16 @@ export const HUNT_WORDS = [
 /** Seeds paid per letter of a finished word, plus a shield charm. */
 export const HUNT_PER_LETTER = 150;
 
+/**
+ * Trail powerups: glowing gems that turn up in the prize-box slots (and now and then inside a
+ * box). `dur` 0 means instant.
+ */
+export const BOOSTS = {
+  gold: { id: 'gold', name: 'Dhahabu', emoji: '🌟', color: '#ffc940', dur: 12, line: 'Golden seeds: every seed is worth 3' },
+  score: { id: 'score', name: 'Pointi ×2', emoji: '⚡', color: '#7ad7ff', dur: 15, line: 'Every step scores double' },
+  slow: { id: 'slow', name: 'Pole Pole', emoji: '🐢', color: '#7bd389', dur: 8, line: 'The chase slows right down' },
+  wind: { id: 'wind', name: 'Kimbunga', emoji: '🌪️', color: '#c9b8ff', dur: 0, line: 'A whirlwind sweeps the trail ahead' },
+};
+export const BOOST_IDS = Object.keys(BOOSTS);
+
 export const SHOUTS = ['Hakuna shida!', 'Safi sana!', 'Pole pole? Never!', 'Kimbia!', 'Poa!', 'Hatari!', 'Mambo poa!'];
