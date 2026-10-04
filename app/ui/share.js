@@ -1,5 +1,6 @@
 import { REGIONS, COUNTRIES } from '../data/regions.js';
 import { save } from '../data/save.js';
+import { t } from '../i18n.js';
 import { challengeUrl as liveChallengeUrl, whatsAppHref, shareText } from '../data/daily.js';
 
 export { whatsAppHref, shareText };
@@ -87,7 +88,7 @@ export async function makeCard(run) {
   g.restore();
   g.font = '38px "Lilita One", sans-serif';
   g.fillStyle = '#fff4de';
-  g.fillText('SPIRIT OF THE SERENGETI', W / 2, 290);
+  g.fillText(t('SPIRIT OF THE SERENGETI'), W / 2, 290);
 
   // score plate
   roundRect(g, 110, 360, W - 220, 400, 48);
@@ -95,14 +96,14 @@ export async function makeCard(run) {
   g.fill();
   g.font = '800 40px Nunito, sans-serif';
   g.fillStyle = '#ffe08a';
-  g.fillText(run.caught ? 'I OUTRAN FISI FOR' : 'I RAN', W / 2, 440);
+  g.fillText(run.caught ? t('I OUTRAN FISI FOR') : t('I RAN'), W / 2, 440);
   g.font = '170px "Lilita One", sans-serif';
   g.fillStyle = '#ffffff';
   g.fillText(`${run.distance.toLocaleString()}m`, W / 2, 610);
   g.font = '800 44px Nunito, sans-serif';
   g.fillStyle = '#ffc940';
-  g.fillText(run.rank ? `Today #${run.rank}` : `★ ${run.score.toLocaleString()} points`, W / 2, 690);
-  const miss = run.nearMiss?.line ? `${run.nearMiss.line} · ${run.nearMiss.shout}` : 'Clean run';
+  g.fillText(run.rank ? t('Today #{n}', { n: run.rank }) : t('★ {n} points', { n: run.score.toLocaleString() }), W / 2, 690);
+  const miss = run.nearMiss?.line ? `${run.nearMiss.line} · ${run.nearMiss.shout}` : t('Clean run');
   g.font = '800 32px Nunito, sans-serif';
   g.fillStyle = 'rgba(255,244,222,0.8)';
   g.fillText(miss, W / 2, 740);
@@ -110,10 +111,10 @@ export async function makeCard(run) {
   // call to action
   g.font = '72px "Lilita One", sans-serif';
   g.fillStyle = '#ffc940';
-  g.fillText('Can you beat me?', W / 2, H - 140);
+  g.fillText(t('Can you beat me?'), W / 2, H - 140);
   g.font = '800 34px Nunito, sans-serif';
   g.fillStyle = 'rgba(255,244,222,0.85)';
-  g.fillText('Play free ▸ safari-blush.vercel.app', W / 2, H - 70);
+  g.fillText(t('Play free ▸ safari-blush.vercel.app'), W / 2, H - 70);
 
   return new Promise((r) => c.toBlob(r, 'image/png'));
 }

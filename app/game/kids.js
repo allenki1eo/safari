@@ -4,6 +4,7 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { G, bakeRigid, basic, bend, mat, mesh } from './materials.js';
 import { PAT, PATTERN_GLSL } from './rigkit.js';
+import { track } from './loading.js';
 
 /**
  * The runners as fully modelled, motion-captured-style characters: Quaternius Universal Base
@@ -23,13 +24,13 @@ function load(name) {
   if (!files.has(name)) {
     loader ??= new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
     const entry = { gltf: null };
-    entry.promise = loader
+    entry.promise = track(loader
       .loadAsync(`${BASE}${name}.glb`)
       .then((g) => (entry.gltf = g))
       .catch((err) => {
         console.warn(`[kids] ${name} unavailable, keeping the hand-built runner`, err);
         return null;
-      });
+      }));
     files.set(name, entry);
   }
   return files.get(name);

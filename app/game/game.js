@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { curve, bend, bakeRigid, finishProp, time as timeU } from './materials.js';
+import { curve, bend, bakeRigid, finishProp, time as timeU, runnerShadowTexture } from './materials.js';
 import { Look, detectQuality } from './look.js';
 import { Animals, makeEagle, makeHornbill, makeTruck, makeRamp, makeTotem, makePrizeBox, makeLetterToken, makeBoostGem } from './models.js';
 import { makeRunner } from './people.js';
@@ -10,6 +10,7 @@ import {
 } from './regionModels.js';
 import { World, Particles, LANE_W } from './world.js';
 import { audio } from './audio.js';
+import { t } from '../i18n.js';
 import { makeChunk, KINDS, TRUCK_LEN, JUMP_V, GRAVITY } from './patterns.js';
 import { RUNNERS, ALLIES, ALLY_IDS, TUTORIAL, SHOUTS, outfitId, HUNT_WORDS, HUNT_PER_LETTER, BOOSTS, BOOST_IDS } from '../data/content.js';
 import { REGIONS, regionIndexAt, regionAt } from '../data/regions.js';
@@ -60,6 +61,18 @@ export class Game {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.pixelRatio = dpr;
+    // Some phone GPUs can't build the High-quality shaders (shadows and the post pipeline add a
+    // lot): rather than leave the ground missing or black, drop to Low and carry on.
+    this.renderer.debug.onShaderError = (gl, program, vs, fs) => {
+      console.error('[kimbia] shader failed to build', gl.getProgramInfoLog(program), gl.getShaderInfoLog(fs), gl.getShaderInfoLog(vs));
+      if (this.look?.quality === 'high' && !this.shaderFallback) {
+        this.shaderFallback = true;
+        setTimeout(() => {
+          this.look.set('low');
+          this.emit('quality');
+        }, 0);
+      }
+    };
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(62, 1, 0.1, 2000);
@@ -67,6 +80,7 @@ export class Game {
 
     this.world = new World(this.scene);
     this.fx = new Particles(this.scene);
+    this.fx.camera = this.camera;
     this.look = new Look(this.renderer, this.scene, this.camera, this.world, detectQuality(save.quality));
 
     this.obstacles = [];
@@ -267,6 +281,7 @@ export class Game {
     this.state = 'running';
     this.camMode = 'run';
     this.chaseT = 3.2; // Fisi's pack gives chase as the run begins
+    this.introChase = true; // fanned out to the sides, so the runner stays in view
     audio.setIntensity(1);
     audio.muffle(false);
     setTimeout(() => this.state === 'running' && audio.cackle(), 400);
@@ -329,7 +344,7 @@ export class Game {
     this.fx.sparkle(this.p.x, 1.2, 0, 0x7fe0ff, 24);
     audio.smash();
     this.emit('shield', { on: false, broke: true });
-    this.emit('shout', { text: 'Ngao saved you!', sub: 'Shield broken' });
+    this.emit('shout', { text: t('Ngao saved you!'), sub: t('Shield broken') });
   }
 
   /* ------------------------------------------------------------- input */
@@ -619,7 +634,7 @@ export class Game {
     const o = {
       kind, lane, x, wz, len: k.len, y0: k.y0, y1: k.y1, top, ramp: k.ramp, mesh: m, anim,
       moving: opts.moving ?? 0, cross: opts.cross, dead: false, passed: false, zPrev: false,
-      warned: false, rockY: k.fall ? 18 : 0,
+      warned: false, rockY: kind === 'coconut' ? 6.5 : k.fall ? 18 : 0,
     };
     if (k.fall) m.userData.rock.position.y = o.rockY;
     // oncoming vehicles face the runner
@@ -654,6 +669,9 @@ export class Game {
       }
       rock.position.y = o.rockY;
       rock.rotation.x += dt * (o.rockY > 0 ? 6 : 0);
+      o.rockY0 ??= o.rockY > 0 ? o.rockY : 1;
+      const near = 1 - o.rockY / o.rockY0;
+      o.mesh.userData.shadow?.scale.setScalar(0.35 + 0.65 * near);
       ring.visible = o.rockY > 0;
       ring.scale.setScalar(1 + Math.sin(this.time * 14) * 0.12);
     }
@@ -708,7 +726,7 @@ export class Game {
         o.passed = true;
         if (!o.specialMiss && Math.abs(p.x - ox) < 2.8 && Math.abs(p.x - ox) > 1.5 && p.laneT < 0.45 && KINDS[o.kind].pass === 'hard') {
           this.stats.nearMiss++;
-          this.emit('shout', { text: 'Close call!', sub: pick(SHOUTS) });
+          this.emit('shout', { text: t('Close call!'), sub: pick(SHOUTS) });
           this.score += 50 * multiplier();
           this.slowmo = 0.22;
           audio.whoosh();
@@ -809,8 +827,9 @@ export class Game {
     if (!edge) {
       this.stumbleT = 7;
       this.chaseT = 7;
+      this.introChase = false;
       setTimeout(() => this.state === 'running' && audio.cackle(), 150);
-      this.emit('shout', { text: 'Stumbled!', sub: 'Fisi is right behind you!', warn: true });
+      this.emit('shout', { text: t('Stumbled!'), sub: t('Fisi is right behind you!'), warn: true });
     }
   }
 
@@ -887,7 +906,7 @@ export class Game {
     this.ghost.update(dt, this.speed, 'run');
     if (!this.ghostPassed && ahead < -0.4) {
       this.ghostPassed = true;
-      this.emit('shout', { text: 'Passed!', sub: run.name });
+      this.emit('shout', { text: t('Passed!'), sub: run.name });
     }
   }
 
@@ -1062,18 +1081,18 @@ export class Game {
         this.stats.seeds = this.seeds;
         this.emit('seed', this.seeds);
         out = prize.n >= 1000
-          ? { emoji: '💰', title: 'JACKPOT!', sub: `+${prize.n.toLocaleString()} seeds`, big: true }
-          : { emoji: '🌾', title: `+${prize.n} seeds`, sub: 'Zawadi!' };
+          ? { emoji: '💰', title: t('JACKPOT!'), sub: t('+{n} seeds', { n: prize.n.toLocaleString() }), big: true }
+          : { emoji: '🌾', title: t('+{n} seeds', { n: prize.n }), sub: 'Zawadi!' };
         break;
       case 'charm':
         save.charms = (save.charms ?? 0) + 1;
         persist();
         this.emit('shield', { on: this.shield > 0 });
-        out = { emoji: '🛡️', title: 'Ngao charm!', sub: 'One more shield for the road' };
+        out = { emoji: '🛡️', title: t('Ngao charm!'), sub: t('One more shield for the road') };
         break;
       case 'ally': {
         const id = ALLY_IDS[Math.floor(Math.random() * ALLY_IDS.length)];
-        out = { emoji: ALLIES[id].emoji, title: `${ALLIES[id].name} joins you!`, sub: ALLIES[id].power };
+        out = { emoji: ALLIES[id].emoji, title: t('{name} joins you!', { name: ALLIES[id].name }), sub: ALLIES[id].power };
         this.activate(id);
         break;
       }
@@ -1084,11 +1103,11 @@ export class Game {
       }
       case 'double':
         this.seedBoost = 15;
-        out = { emoji: '✨', title: 'Double seeds!', sub: 'Every seed counts twice for 15s' };
+        out = { emoji: '✨', title: t('Double seeds!'), sub: t('Every seed counts twice for 15s') };
         break;
       default:
         this.score += prize.n * m;
-        out = { emoji: '⭐', title: `+${(prize.n * m).toLocaleString()} points`, sub: 'Zawadi!' };
+        out = { emoji: '⭐', title: t('+{n} points', { n: (prize.n * m).toLocaleString() }), sub: 'Zawadi!' };
     }
     audio.powerup();
     audio.chime();
@@ -1113,6 +1132,13 @@ export class Game {
       this.emit('boost', { id, on: true });
     }
     this.emit('prize', { emoji: def.emoji, title: def.name, sub: def.line });
+    // the first time a player finds each one, say what it does
+    save.boostsSeen ??= [];
+    if (!save.boostsSeen.includes(id)) {
+      save.boostsSeen.push(id);
+      persist();
+      this.emit('boostIntro', { id });
+    }
   }
 
   /** Kimbunga: a whirlwind runs ahead and flings everything in the next stretch aside. */
@@ -1154,7 +1180,7 @@ export class Game {
     const done = save.hunt.got >= word.length;
     this.emit('letter', { got: save.hunt.got, word, done });
     if (!done) {
-      this.emit('shout', { text: b.letter, sub: `${word.slice(0, save.hunt.got)}… word hunt` });
+      this.emit('shout', { text: b.letter, sub: t('{w}… word hunt', { w: word.slice(0, save.hunt.got) }) });
       return;
     }
     const prize = word.length * HUNT_PER_LETTER;
@@ -1169,7 +1195,7 @@ export class Game {
     this.emit('seed', this.seeds);
     this.emit('shield', { on: this.shield > 0 });
     audio.powerup();
-    this.emit('prize', { emoji: '🏆', title: `${word}!`, sub: `${line} · +${prize} seeds & a shield`, big: true });
+    this.emit('prize', { emoji: '🏆', title: `${word}!`, sub: t('{line} · +{n} seeds & a shield', { line, n: prize }), big: true });
     this.emit('hunt', { word: this.huntWord().word, got: 0, delay: 3000 });
   }
 
@@ -1248,7 +1274,7 @@ export class Game {
     const step = COMBO_STEPS.find(([n]) => n === this.combo);
     if (step) {
       this.score += step[1] * multiplier();
-      this.emit('shout', { text: `Combo ×${this.combo}!`, sub: `+${(step[1] * multiplier()).toLocaleString()}` });
+      this.emit('shout', { text: t('Combo ×{n}!', { n: this.combo }), sub: `+${(step[1] * multiplier()).toLocaleString()}` });
       audio.chime();
     }
     this.emit('combo', this.combo);
@@ -1346,10 +1372,42 @@ export class Game {
     // lean into lane changes
     r.root.rotation.z = (LANES[p.lane] - p.x) * -0.12;
     r.root.rotation.y = 0;
-    r.shadow.position.y = 0.03 - p.y - yOff + (p.ground || 0);
-    r.shadow.visible = !pw.tai && !pw.tembo;
+    this.placeRunnerShadow(r, pose, yOff);
     const blink = p.invuln > 0 && !pw.tai && !pw.tembo && Math.floor(this.time * 14) % 2 === 0;
     r.root.visible = !blink;
+  }
+
+  /**
+   * The runner's shadow stays on the ground under them: it shrinks, softens and slides away
+   * from the sun as they jump, stretches out behind them in a slide, and grows into Tembo's
+   * shadow on a ride. When Tai carries them it's a faint smudge far below.
+   */
+  placeRunnerShadow(r, pose, yOff) {
+    const p = this.p;
+    const s = r.shadow;
+    if (!s.userData.own) {
+      s.material = s.material.clone(); // its own opacity and a darker blob, apart from the others
+      s.material.map = runnerShadowTexture();
+      s.userData.own = true;
+    }
+    const ground = p.ground || 0;
+    const h = Math.max(0, p.y - ground) + (pose === 'fly' ? 6 : 0);
+    const lift = Math.min(h, 6);
+    const shrink = 1 / (1 + lift * 0.28);
+    const slide = pose === 'slide';
+    const ride = pose === 'ride';
+    const w = (ride ? 2.4 : slide ? 1.1 : 0.9) * shrink;
+    const d = (ride ? 3.6 : slide ? 2.0 : 0.9) * shrink;
+    s.scale.set(w, d, 1);
+    // cast away from the sun, further the higher they are
+    const sun = this.world.sunDir; // towards the sun
+    const k = Math.min(0.6, 0.25 / Math.max(0.2, sun.y)); // low sun, longer reach (kept modest)
+    const ox = Math.max(-1.2, Math.min(1.2, -sun.x * lift * k));
+    const oz = Math.max(-1.6, Math.min(1.6, -sun.z * lift * k));
+    s.position.set(ox, 0.03 - p.y - yOff + ground, (slide ? 0.55 : 0) + oz);
+    const base = this.look?.quality === 'high' ? 0.55 : 1;
+    s.material.opacity = base * (pose === 'fly' ? 0.25 : 1 - Math.min(0.7, lift * 0.15));
+    s.visible = true;
   }
 
   updateAllies(dt) {
@@ -1406,12 +1464,22 @@ export class Game {
   updateChasers(dt) {
     const p = this.p;
     const dying = this.state === 'dying';
-    const target = dying ? 1.3 : this.chaseT > 0 ? 1.15 : 18;
+    if (this.chaseT <= 0) this.introChase = false;
+    // the opening chase fans the pack out wide and a little back, clear of the camera's view of
+    // the runner; after a stumble they close right in behind, which is meant to feel like a threat
+    const intro = this.introChase && !dying;
+    const target = dying ? 1.3 : intro ? 2.6 : this.chaseT > 0 ? 1.15 : 18;
     this.chaseDist = damp(this.chaseDist, target, dying ? 2.5 : this.chaseT > 0 ? 2.5 : 0.8, dt);
+    const side = p.x > 0.5 ? -1 : 1; // the open side of the trail
+    const fan = [side * 2.0, -side * 1.85, side * 1.3];
     this.chasers.forEach((c, i) => {
-      const lagX = dying ? p.x + c.offset * 0.9 : p.x + c.offset * (this.chaseT > 0 ? 0.55 : 1);
+      const lagX = dying
+        ? p.x + c.offset * 0.9
+        : intro
+          ? p.x + fan[i]
+          : p.x + c.offset * (this.chaseT > 0 ? 0.55 : 1);
       c.root.position.x = damp(c.root.position.x, lagX, 4 - c.lag * 1.5, dt);
-      c.root.position.z = this.chaseDist + c.lag;
+      c.root.position.z = this.chaseDist + c.lag + (intro && i === 2 ? 1.6 : 0);
       c.root.position.y = Math.max(0, p.y > 2.2 && !dying ? 0 : 0);
       c.root.visible = c.root.position.z < 16;
       if (c.root.visible) c.update(dt, dying && this.deathT > 0.8 ? 0.15 : this.speed / 16, dying && this.deathT > 1 ? 'idle' : 'run');

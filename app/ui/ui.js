@@ -6,6 +6,8 @@ import { challengeUrl, makeCard, shareText, whatsAppHref } from './share.js';
 import { fetchBoard, leaveDecision, postScore, renderRows, runnerName, scoreSavePlan } from './leaderboard.js';
 import { darDay, ghostFrom, huntWord, parseShareLink, routeForLink } from '../data/daily.js';
 import { install } from './install.js';
+import { onLoading } from '../game/loading.js';
+import { t, missionText, shareMessage, lang, LANGS, setLang } from '../i18n.js';
 
 const $ = (html) => {
   const t = document.createElement('template');
@@ -93,6 +95,10 @@ export class UI {
     game.on('seed', () => this.bumpSeeds());
     game.on('power', (e) => this.onPower(e));
     game.on('boost', (e) => this.onBoost(e));
+    game.on('boostIntro', ({ id }) => {
+      const b = BOOSTS[id];
+      this.later(() => this.speech(b.emoji, t('New powerup · {name}', { name: b.name }), b.intro, b.color), 1400);
+    });
     game.on('chapter', (c) => this.onChapter(c));
     game.on('tutorial', (t) => this.tip(t));
     game.on('shout', (s) => this.shout(s));
@@ -106,7 +112,7 @@ export class UI {
     game.on('letter', (e) => this.paintHunt(e.word, e.got));
     // the next word in today's chain takes over once the prize card has had its moment
     game.on('hunt', (e) => setTimeout(() => this.paintHunt(e.word, e.got, true), e.delay));
-    game.on('quality', () => this.toast('✨', 'Switched to Low graphics to keep things smooth — change it in Settings.'));
+    game.on('quality', () => this.toast('✨', t('Switched to Low graphics to keep things smooth — change it in Settings.')));
   }
 
   /* ---------------------------------------------------------- plumbing */
@@ -146,35 +152,36 @@ export class UI {
         <div class="title-top">
           <div class="chips">
             <div class="chip"><span class="seed"></span><span>${fmt(save.seeds)}</span></div>
-            <div class="chip">✖️ ${multiplier()} <span class="muted" style="font-size:12px">MULTIPLIER</span></div>
+            <div class="chip">✖️ ${multiplier()} <span class="muted" style="font-size:12px">${t('MULTIPLIER')}</span></div>
           </div>
           <div class="title-actions">
-            ${install.offered ? `<button class="install-pill" data-act="install" data-click aria-label="Install Kimbia! on this device">${ICON.install}<span>Install</span></button>` : ''}
-            <button class="icon-btn" data-act="board" data-click aria-label="Leaderboard" title="Leaderboard">🏆</button>
-            <button class="icon-btn" data-act="settings" data-click aria-label="Settings">${ICON.gear}</button>
+            ${install.offered ? `<button class="install-pill" data-act="install" data-click aria-label="${t('Install Kimbia! on this device')}">${ICON.install}<span>${t('Install')}</span></button>` : ''}
+            <button class="icon-btn" data-act="board" data-click aria-label="${t('Leaderboard')}" title="${t('Leaderboard')}">🏆</button>
+            <button class="icon-btn" data-act="settings" data-click aria-label="${t('Settings')}">${ICON.gear}</button>
           </div>
         </div>
         <div class="logo">
           <h1>KIMBIA!</h1>
-          <div class="sub">SPIRIT OF THE SERENGETI</div>
+          <div class="sub">${t('SPIRIT OF THE SERENGETI')}</div>
         </div>
         <div class="title-bottom">
           ${this.challenge ? `<div class="challenge"><span style="font-size:28px">🔥</span><div>${this.challenge.sameDay === false
-            ? `<b>${esc(this.challenge.name)}</b> ran that on an earlier route. Today's trail is a new one.`
-            : `<b>${esc(this.challenge.name)}</b> challenges you to beat <b>${fmt(this.challenge.score)}</b> on today's route!`}</div></div>` : ''}
-          ${this.ghostRun ? `<div class="best-line">${esc(this.ghostRun.name)} is a faint runner ahead — pass them.</div>` : ''}
-          ${save.best ? `<div class="best-line">Best run <b>${fmt(save.best)}</b> pts · <b>${fmt(save.bestDistance)}m</b></div>` : ''}
+            ? t("{name} ran that on an earlier route. Today's trail is a new one.", { name: `<b>${esc(this.challenge.name)}</b>` })
+            : t("{name} challenges you to beat {score} on today's route!", { name: `<b>${esc(this.challenge.name)}</b>`, score: `<b>${fmt(this.challenge.score)}</b>` })}</div></div>` : ''}
+          ${this.ghostRun ? `<div class="best-line">${t('{name} is a faint runner ahead — pass them.', { name: esc(this.ghostRun.name) })}</div>` : ''}
+          ${save.best ? `<div class="best-line">${t('Best run {score} pts · {dist}m', { score: `<b>${fmt(save.best)}</b>`, dist: `<b>${fmt(save.bestDistance)}` })}</b></div>` : ''}
           <button class="start-chip" data-act="journey" data-click>
             <span class="flag">${COUNTRIES[start.country].flag}</span>
-            <span><small>Starting at</small><b>${esc(start.name)}</b></span>
-            <span class="go">🗺️ Change</span>
+            <span><small>${t('Starting at')}</small><b>${esc(start.name)}</b></span>
+            <span class="go">🗺️ ${t('Change')}</span>
           </button>
-          <button class="btn big play-btn" data-act="play" data-click>▶ RUN!</button>
+          <div class="herd-loading" hidden><span class="label">${t('🐾 The herd is on its way…')}</span><i><b></b></i></div>
+          <button class="btn big play-btn" data-act="play" data-click>${t('▶ RUN!')}</button>
           <div class="nav-row">
-            <button class="nav-btn" data-act="runners" data-click><span class="ico">🧒🏾</span>Runners${canAfford ? '<i class="badge-dot"></i>' : ''}</button>
-            <button class="nav-btn" data-act="allies" data-click><span class="ico">🐘</span>Allies</button>
-            <button class="nav-btn" data-act="missions" data-click><span class="ico">🎯</span>Missions${missionsReady ? '<i class="badge-dot"></i>' : ''}</button>
-            <button class="nav-btn" data-act="journey" data-click><span class="ico">🗺️</span>Journey${(save.regionMax ?? 0) > (save.mapSeen ?? 0) ? '<i class="badge-dot"></i>' : ''}</button>
+            <button class="nav-btn" data-act="runners" data-click><span class="ico">🧒🏾</span>${t('Runners')}${canAfford ? '<i class="badge-dot"></i>' : ''}</button>
+            <button class="nav-btn" data-act="allies" data-click><span class="ico">🐘</span>${t('Allies')}</button>
+            <button class="nav-btn" data-act="missions" data-click><span class="ico">🎯</span>${t('Missions')}${missionsReady ? '<i class="badge-dot"></i>' : ''}</button>
+            <button class="nav-btn" data-act="journey" data-click><span class="ico">🗺️</span>${t('Journey')}${(save.regionMax ?? 0) > (save.mapSeen ?? 0) ? '<i class="badge-dot"></i>' : ''}</button>
           </div>
         </div>
       </div>`);
@@ -200,6 +207,21 @@ export class UI {
       if (ev === 'installed' || ev === 'accepted') pill?.remove();
     });
     if (install.how === 'prompt') el.querySelector('.install-pill')?.classList.add('ready');
+    // the models download in the background; show them arriving (a run can start any time)
+    this.offLoading?.();
+    const bar = el.querySelector('.herd-loading');
+    let settled = true; // already all here when the screen opened: no bar at all
+    this.offLoading = onLoading(({ done, total, ready }) => {
+      if (!total || (ready && settled)) return;
+      settled = false;
+      bar.hidden = false;
+      bar.querySelector('b').style.width = `${Math.round((done / total) * 100)}%`;
+      bar.classList.toggle('done', ready);
+      if (ready) {
+        bar.querySelector('.label').textContent = t('🐾 The herd is here');
+        setTimeout(() => (bar.hidden = true), 2000);
+      }
+    });
     if (save.introSeen) setTimeout(() => this.daily(), 600);
   }
 
@@ -219,9 +241,9 @@ export class UI {
           <div class="speaker"><span class="e"></span><span class="n"></span></div>
           <div class="line"></div>
           <div class="controls">
-            <button class="skip" data-act="skip">Skip story</button>
+            <button class="skip" data-act="skip">${t('Skip story')}</button>
             <div class="progress">${INTRO.map(() => '<i></i>').join('')}</div>
-            <button class="btn" data-act="next" data-click style="min-height:50px;font-size:20px">Next ›</button>
+            <button class="btn" data-act="next" data-click style="min-height:50px;font-size:20px">${t('Next ›')}</button>
           </div>
         </div>
       </div>`);
@@ -233,7 +255,7 @@ export class UI {
       el.querySelector('.speaker .e').textContent = p.emoji;
       el.querySelector('.speaker .n').textContent = p.speaker;
       el.querySelectorAll('.progress i').forEach((d, k) => d.classList.toggle('on', k <= i));
-      el.querySelector('[data-act=next]').textContent = i === INTRO.length - 1 ? 'Run! ›' : 'Next ›';
+      el.querySelector('[data-act=next]').textContent = i === INTRO.length - 1 ? t('Run! ›') : t('Next ›');
       clearInterval(typing);
       let n = 0;
       line.textContent = '';
@@ -305,22 +327,22 @@ export class UI {
           <div class="hud-right">
             <div class="row">
               <div class="chip seeds-chip"><span class="seed lg"></span><span class="n">0</span><b class="x2" hidden>×2</b></div>
-              <button class="icon-btn" data-act="pause" aria-label="Pause" style="width:46px;height:46px">${ICON.pause}</button>
+              <button class="icon-btn" data-act="pause" aria-label="${t('Pause')}" style="width:46px;height:46px">${ICON.pause}</button>
             </div>
             <div class="dist">0m</div>
           </div>
         </div>
-        <div class="hunt" aria-label="Word hunt"></div>
+        <div class="hunt" aria-label="${t('Word hunt')}"></div>
         <div class="combo"></div>
         <div class="powers"></div>
         <div class="warns"></div>
-        <button class="shield-btn" data-act="shield" aria-label="Use Ngao shield"><span class="i">🛡️</span><b class="n">${save.charms ?? 0}</b><i class="ring"></i></button>
+        <button class="shield-btn" data-act="shield" aria-label="${t('Use Ngao shield')}"><span class="i">🛡️</span><b class="n">${save.charms ?? 0}</b><i class="ring"></i></button>
       </div>`);
     el.querySelector('[data-act=pause]').addEventListener('click', () => this.game.pause());
     const sb = el.querySelector('[data-act=shield]');
     sb.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
-      if (!this.game.useShield()) this.toast('🛡️', (save.charms ?? 0) > 0 ? 'Shield already up!' : 'No Ngao charms — get more in Allies');
+      if (!this.game.useShield()) this.toast('🛡️', (save.charms ?? 0) > 0 ? t('Shield already up!') : t('No Ngao charms — get more in Allies'));
     });
     sb.classList.toggle('empty', (save.charms ?? 0) <= 0);
     this.hud = el;
@@ -393,12 +415,12 @@ export class UI {
         const dist = Math.min(ghost.distance, (ghost.distance / ghost.duration) * g.runTime);
         const ahead = Math.round(dist - g.D);
         E.ghost.hidden = false;
-        E.ghost.textContent = ahead >= 0 ? `${ghost.name} · ${fmt(ahead)}m ahead` : `Passed ${ghost.name}`;
+        E.ghost.textContent = ahead >= 0 ? t('{name} · {m}m ahead', { name: ghost.name, m: fmt(ahead) }) : t('Passed {name}', { name: ghost.name });
       }
     }
     // missions — checked a few times per second
     if ((this.missionTick += 1) % 20 === 0) {
-      for (const done of checkMissions(g.stats)) this.toast('🎯', `<b>Mission complete!</b><br>${esc(done.text)}`);
+      for (const done of checkMissions(g.stats)) this.toast('🎯', `<b>${t('Mission complete!')}</b><br>${esc(missionText(done))}`);
     }
   }
 
@@ -419,7 +441,7 @@ export class UI {
         this.hudEls.powers.appendChild(el);
         this.powerEls[id] = el;
       }
-      this.speech(a.emoji, `${a.name} the ${a.species}`, line, a.color);
+      this.speech(a.emoji, t('{name} the {species}', { name: a.name, species: a.species }), line, a.color);
     } else {
       this.powerEls[id]?.remove();
       delete this.powerEls[id];
@@ -431,7 +453,7 @@ export class UI {
     if (!this.hud) return;
     if (on && !this.boostEls[id]) {
       const b = BOOSTS[id];
-      const el = $(`<div class="power boost" style="--c:${b.color}" title="${esc(b.name)}"><span>${b.emoji}</span></div>`);
+      const el = $(`<div class="power boost" style="--c:${b.color}" title="${esc(b.name)}"><span>${b.emoji}</span>${b.tag ? `<b class="tag">${esc(b.tag)}</b>` : ''}</div>`);
       this.hudEls.powers.appendChild(el);
       this.boostEls[id] = el;
     } else if (!on) {
@@ -454,15 +476,15 @@ export class UI {
     const country = COUNTRIES[c.country];
     const el = $(`
       <div class="banner">
-        <div class="kicker">${country.flag} ${esc(country.name)}${c.lap ? ` · Legend lap ${c.lap + 1}` : ''}</div>
+        <div class="kicker">${country.flag} ${esc(country.name)}${c.lap ? ` · ${t('Legend lap {n}', { n: c.lap + 1 })}` : ''}</div>
         <h2>${esc(c.name)}</h2>
         <div class="place">${esc(c.title)}</div>
-        ${c.unlocked ? '<div class="unlocked">✨ New region unlocked</div>' : ''}
+        ${c.unlocked ? `<div class="unlocked">${t('✨ New region unlocked')}</div>` : ''}
       </div>`);
     this.hud.appendChild(el);
     setTimeout(() => el.remove(), 3700);
     this.later(() => this.speech(c.emoji, c.speaker, c.line), c.index === 0 && !c.lap ? 3800 : 2600);
-    if (c.unlocked) this.toast(country.flag, `<b>${esc(c.name)}</b> unlocked — start your next run here from the Journey map!`, 3400);
+    if (c.unlocked) this.toast(country.flag, t('{name} unlocked — start your next run here from the Journey map!', { name: `<b>${esc(c.name)}</b>` }), 3400);
   }
 
   onWarn({ lane, icon }) {
@@ -481,7 +503,7 @@ export class UI {
       el.classList.remove('on');
       return;
     }
-    el.innerHTML = `<b>×${n}</b> combo`;
+    el.innerHTML = `<b>×${n}</b> ${t('combo')}`;
     el.classList.add('on');
     el.classList.remove('pulse');
     void el.offsetWidth;
@@ -498,8 +520,8 @@ export class UI {
   }
 
   onLap({ lap }) {
-    this.shout({ text: 'Journey complete!', sub: `Legend lap ${lap + 1} · +${fmt(5000 * multiplier())}` });
-    this.toast('🏆', '<b>You crossed three countries!</b> The song grows stronger — keep running.', 3600);
+    this.shout({ text: t('Journey complete!'), sub: `${t('Legend lap {n}', { n: lap + 1 })} · +${fmt(5000 * multiplier())}` });
+    this.toast('🏆', t('<b>You crossed three countries!</b> The song grows stronger — keep running.'), 3600);
   }
 
   flash(color) {
@@ -524,7 +546,7 @@ export class UI {
       row.dataset.word = word;
       row.innerHTML = [...word].map((c) => `<i>${c}</i>`).join('');
       row.classList.toggle('long', word.length > 8);
-      row.setAttribute('aria-label', `Word hunt: ${word}`);
+      row.setAttribute('aria-label', t('Word hunt: {word}', { word }));
     }
     row.querySelectorAll('i').forEach((el, i) => el.classList.toggle('on', i < got));
     row.classList.toggle('done', got >= word.length);
@@ -561,16 +583,16 @@ export class UI {
     const el = $(`
       <div class="screen modal-wrap scrim-full">
         <div class="panel modal">
-          <h2>Paused</h2>
-          <div class="muted">Fisi is waiting… catch your breath.</div>
+          <h2>${t('Paused')}</h2>
+          <div class="muted">${t('Fisi is waiting… catch your breath.')}</div>
           <div class="mission-mini" style="margin-top:16px">
-            ${ms.map((m) => `<div><span class="tick ${m.done ? 'done' : ''}">${m.done ? '✓' : ''}</span>${esc(m.text)}</div>`).join('')}
+            ${ms.map((m) => `<div><span class="tick ${m.done ? 'done' : ''}">${m.done ? '✓' : ''}</span>${esc(missionText(m))}</div>`).join('')}
           </div>
           <div class="stack">
-            <button class="btn" data-act="resume" data-click>▶ Keep running</button>
+            <button class="btn" data-act="resume" data-click>${t('▶ Keep running')}</button>
             <div class="row2">
-              <button class="btn ghost" data-act="sound" data-click>${save.music ? '🔊 Music' : '🔇 Music'}</button>
-              <button class="btn ghost" data-act="home" data-click>🏠 Home</button>
+              <button class="btn ghost" data-act="sound" data-click>${save.music ? t('🔊 Music') : t('🔇 Music')}</button>
+              <button class="btn ghost" data-act="home" data-click>${t('🏠 Home')}</button>
             </div>
           </div>
         </div>
@@ -584,7 +606,7 @@ export class UI {
         save.music = !save.music;
         audio.setMusic(save.music);
         persist();
-        e.target.closest('button').textContent = save.music ? '🔊 Music' : '🔇 Music';
+        e.target.closest('button').textContent = save.music ? t('🔊 Music') : t('🔇 Music');
       } else if (act === 'home') {
         el.remove();
         this.bankRun(this.game.summary());
@@ -626,11 +648,11 @@ export class UI {
       <div class="screen over scrim-full">
         <div class="panel card">
           <div style="font-size:64px">🐘</div>
-          <h2 class="h-display" style="font-size:32px;color:var(--sun-2)">Second wind?</h2>
-          <p class="muted" style="margin:6px 0 18px">Bibi Tembo can scare Fisi away — for a few golden seeds.</p>
+          <h2 class="h-display" style="font-size:32px;color:var(--sun-2)">${t('Second wind?')}</h2>
+          <p class="muted" style="margin:6px 0 18px">${t('Bibi Tembo can scare Fisi away — for a few golden seeds.')}</p>
           <div class="stack" style="display:flex;flex-direction:column;gap:12px">
-            <button class="btn flame big revive" data-act="revive" data-click>Revive · ${fmt(cost)} <span class="seed"></span><i class="bar"></i></button>
-            <button class="btn ghost" data-act="skip" data-click>No thanks</button>
+            <button class="btn flame big revive" data-act="revive" data-click>${t('Revive')} · ${fmt(cost)} <span class="seed"></span><i class="bar"></i></button>
+            <button class="btn ghost" data-act="skip" data-click>${t('No thanks')}</button>
           </div>
         </div>
       </div>`);
@@ -660,7 +682,7 @@ export class UI {
 
   countdownRevive() {
     this.game.revive();
-    this.speech('🐘', 'Bibi Tembo', 'Shoo, Fisi! Off you go, little one — run!', '#ffb347');
+    this.speech('🐘', 'Bibi Tembo', t('Shoo, Fisi! Off you go, little one — run!'), '#ffb347');
   }
 
   /** Banks a finished run into the save exactly once. */
@@ -689,30 +711,30 @@ export class UI {
     const el = $(`
       <div class="screen over scrim-full">
         <div class="panel card">
-          <div class="caught">${run.caught ? '🐾 Fisi caught you!' : '💥 Ouch!'}</div>
+          <div class="caught">${run.caught ? t('🐾 Fisi caught you!') : t('💥 Ouch!')}</div>
           ${this.shareCardHtml(run)}
           <div class="big-score">${fmt(run.score)}</div>
-          ${newBest ? '<div class="new-best">★ NEW BEST ★</div>' : `<div class="muted">Best ${fmt(save.best)}</div>`}
-          ${beatChallenge ? `<div class="challenge" style="margin-top:12px;justify-content:center">🏆 You beat <b>&nbsp;${esc(this.challenge.name)}</b>!</div>` : ''}
+          ${newBest ? `<div class="new-best">${t('★ NEW BEST ★')}</div>` : `<div class="muted">${t('Best {n}', { n: fmt(save.best) })}</div>`}
+          ${beatChallenge ? `<div class="challenge" style="margin-top:12px;justify-content:center">🏆 ${t('You beat')} <b>&nbsp;${esc(this.challenge.name)}</b>!</div>` : ''}
           <div class="stat-grid">
-            <div class="stat"><b><span class="seed"></span>${fmt(run.seeds)}</b><span>Seeds</span></div>
-            <div class="stat"><b>${fmt(run.distance)}m</b><span>Distance</span></div>
-            <div class="stat"><b>${run.stats.allies}</b><span>Allies</span></div>
+            <div class="stat"><b><span class="seed"></span>${fmt(run.seeds)}</b><span>${t('Seeds')}</span></div>
+            <div class="stat"><b>${fmt(run.distance)}m</b><span>${t('Distance')}</span></div>
+            <div class="stat"><b>${run.stats.allies}</b><span>${t('Allies')}</span></div>
             <div class="stat"><b>🎁 ${run.stats.boxes ?? 0}</b><span>Zawadi</span></div>
           </div>
           <div class="lb">
-            <div class="lb-head"><b>Savanna board</b><span class="muted">Top runs</span></div>
-            <div class="lb-slot"><p class="muted">Saving your run…</p></div>
+            <div class="lb-head"><b>${t('Savanna board')}</b><span class="muted">${t('Top runs')}</span></div>
+            <div class="lb-slot"><p class="muted">${t('Saving your run…')}</p></div>
           </div>
-          <div class="story-unlock"><span class="e">${COUNTRIES[reg.country].flag}</span><div><b>${esc(reg.name)} · ${esc(reg.title)}</b><br><span class="muted">${next ? `Next: ${COUNTRIES[next.country].flag} ${esc(next.name)}` : 'You crossed all three countries!'}</span></div></div>
+          <div class="story-unlock"><span class="e">${COUNTRIES[reg.country].flag}</span><div><b>${esc(reg.name)} · ${esc(reg.title)}</b><br><span class="muted">${next ? t('Next: {place}', { place: `${COUNTRIES[next.country].flag} ${esc(next.name)}` }) : t('You crossed all three countries!')}</span></div></div>
           <div class="mission-mini">
-            ${ms.map((m) => `<div><span class="tick ${m.done ? 'done' : ''}">${m.done ? '✓' : ''}</span>${esc(m.text)}</div>`).join('')}
+            ${ms.map((m) => `<div><span class="tick ${m.done ? 'done' : ''}">${m.done ? '✓' : ''}</span>${esc(missionText(m))}</div>`).join('')}
           </div>
           <div style="display:flex;flex-direction:column;gap:12px">
-            <button class="btn big" type="button" data-act="again">↻ Run again</button>
+            <button class="btn big" type="button" data-act="again">${t('↻ Run again')}</button>
             <div class="row2">
               <button class="btn teal" type="button" data-act="share">${ICON.share.replace('<svg', '<svg width="22" height="22"')} WhatsApp</button>
-              <button class="btn ghost" type="button" data-act="home">🏠 Home</button>
+              <button class="btn ghost" type="button" data-act="home">${t('🏠 Home')}</button>
             </div>
           </div>
         </div>
@@ -738,12 +760,12 @@ export class UI {
   shareCardHtml(run) {
     const miss = run.nearMiss?.line
       ? `${esc(run.nearMiss.line)} · ${esc(run.nearMiss.shout)}`
-      : 'Clean run · no close call';
+      : t('Clean run · no close call');
     return `
       <div class="share-card">
-        <div class="share-kicker">Today's route</div>
+        <div class="share-kicker">${t("Today's route")}</div>
         <div class="share-dist">${fmt(run.distance)}m</div>
-        <div class="share-rank" data-share-rank>Today <span class="muted">…</span></div>
+        <div class="share-rank" data-share-rank>${t('Today')} <span class="muted">…</span></div>
         <div class="share-miss">${miss}</div>
       </div>`;
   }
@@ -752,10 +774,10 @@ export class UI {
     const el = root.querySelector('[data-share-rank]');
     if (!el) return;
     if (daily?.rank) {
-      el.innerHTML = `Today <b>#${fmt(daily.rank)}</b>`;
+      el.innerHTML = `${t('Today')} <b>#${fmt(daily.rank)}</b>`;
       return;
     }
-    el.textContent = failed ? "Today's rank didn't save" : 'Today — off the board';
+    el.textContent = failed ? t("Today's rank didn't save") : t('Today — off the board');
   }
 
   /** The run's score card as a PNG file, drawn once per score and rank and kept ready. */
@@ -782,7 +804,7 @@ export class UI {
     const file = card.file ?? (await Promise.race([card.ready, new Promise((ok) => setTimeout(ok, 900))]));
     if (file && navigator.canShare?.({ files: [file] })) {
       try {
-        await navigator.share({ files: [file], text: `${shareText(r)} ${challengeUrl(r)}`, title: 'KIMBIA!' });
+        await navigator.share({ files: [file], text: `${shareMessage(r, shareText(r))} ${challengeUrl(r)}`, title: 'KIMBIA!' });
         return;
       } catch (e) {
         if (e?.name === 'AbortError') return; // closed the sheet
@@ -792,7 +814,7 @@ export class UI {
     const opened = window.open(href, '_blank', 'noopener,noreferrer');
     if (!opened) {
       navigator.clipboard?.writeText(href).then(
-        () => this.toast('🔗', 'WhatsApp link copied — send it to a friend!'),
+        () => this.toast('🔗', t('WhatsApp link copied — send it to a friend!')),
         () => this.toast('📲', href),
       );
     }
@@ -815,7 +837,7 @@ export class UI {
     try {
       top = (await fetchBoard()).top || [];
     } catch (err) {
-      error = err.message || 'The board is quiet right now.';
+      error = err.message || t('The board is quiet right now.');
     }
     if (!root.isConnected || this.postedRunId === this.game.runId) return;
     this.lastTop = top;
@@ -832,7 +854,7 @@ export class UI {
     if (this._submitTask) return this._submitTask;
     const slot = root.querySelector('.lb-slot');
     if (slot && !slot.querySelector('.lb-list') && !slot.querySelector('[data-lb-name]')) {
-      slot.innerHTML = '<p class="muted">Saving your run…</p>';
+      slot.innerHTML = `<p class="muted">${t('Saving your run…')}</p>`;
     }
     let finish;
     const task = new Promise((resolve) => {
@@ -873,8 +895,8 @@ export class UI {
           try { top = (await fetchBoard()).top || top; } catch { /* keep the card usable */ }
           this.lastTop = top;
           const message = err.code === 'NAME_TAKEN'
-            ? `“${name}” is taken. Pick another name.`
-            : (err.message || 'Could not save your score');
+            ? t('“{name}” is taken. Pick another name.', { name })
+            : (err.message || t('Could not save your score'));
           this.paintBoard(root, top, null, message, run, true);
           this.paintDailyRank(root, null, true);
           root.querySelector('[data-lb-name]')?.focus();
@@ -904,7 +926,7 @@ export class UI {
       typedName: typed,
     });
     if (decision.action === 'ask') {
-      this.paintBoard(root, this.lastTop, null, 'Add your name so this run is saved.', run, true);
+      this.paintBoard(root, this.lastTop, null, t('Add your name so this run is saved.'), run, true);
       root.querySelector('[data-lb-name]')?.focus();
       return;
     }
@@ -923,24 +945,24 @@ export class UI {
     const preview = (top || []).slice(0, 5);
     let head = '';
     if (entry) {
-      const rank = entry.rank ? `You're <b>#${fmt(entry.rank)}</b> on the savanna board` : 'Finish a run with points to make the board';
-      const note = entry.improved ? '🎉 New personal best!' : `Your best: <b>${fmt(entry.score)}</b>`;
+      const rank = entry.rank ? t("You're <b>#{n}</b> on the savanna board", { n: fmt(entry.rank) }) : t('Finish a run with points to make the board');
+      const note = entry.improved ? t('🎉 New personal best!') : t('Your best: <b>{n}</b>', { n: fmt(entry.score) });
       head = `<div class="lb-placed">${rank}<span class="lb-note">${note}</span></div>`;
     } else if (needName) {
       const draft = slot.querySelector('[data-lb-name]')?.value ?? save.name;
       head = `
-        <p class="lb-ask">Pick your runner name. It's yours for good, and your best run will post by itself after every game.</p>
+        <p class="lb-ask">${t("Pick your runner name. It's yours for good, and your best run will post by itself after every game.")}</p>
         <form class="lb-form">
-          <input class="name-input" maxlength="16" data-lb-name placeholder="Your name" value="${esc(draft)}" autocomplete="nickname" enterkeyhint="done" />
-          <button class="btn teal wide" type="submit" data-act="post">Save score</button>
+          <input class="name-input" maxlength="16" data-lb-name placeholder="${t('Your name')}" value="${esc(draft)}" autocomplete="nickname" enterkeyhint="done" />
+          <button class="btn teal wide" type="submit" data-act="post">${t('Save score')}</button>
         </form>`;
     }
     const msg = `<p class="lb-msg">${esc(error)}</p>`;
     const youId = save.playerId ?? null;
     const list = preview.length
       ? renderRows(preview, { youId, youName: '' })
-      : (error ? '' : '<p class="muted lb-empty">No scores yet. Be the first name on the board.</p>');
-    slot.innerHTML = `${head}${msg}${list}<button class="lb-more" type="button" data-act="board">Full board ›</button>`;
+      : (error ? '' : `<p class="muted lb-empty">${t('No scores yet. Be the first name on the board.')}</p>`);
+    slot.innerHTML = `${head}${msg}${list}<button class="lb-more" type="button" data-act="board">${t('Full board ›')}</button>`;
     slot.querySelector('form')?.addEventListener('submit', (e) => {
       e.preventDefault();
       this.postRun(root, run);
@@ -953,7 +975,7 @@ export class UI {
     const decision = leaveDecision({ alreadySaved: false, savedName: '', typedName: input?.value ?? '' });
     if (decision.action !== 'save') {
       const msg = root.querySelector('.lb-msg');
-      if (msg) msg.textContent = 'Add your name so this run is saved.';
+      if (msg) msg.textContent = t('Add your name so this run is saved.');
       input?.focus();
       return;
     }
@@ -965,14 +987,14 @@ export class UI {
     const el = $(`
       <div class="screen scrim-full lb-screen">
         <div class="sheet-head">
-          <button class="icon-btn" data-act="back" data-click aria-label="Back">${ICON.back}</button>
-          <h2>Leaderboard</h2>
+          <button class="icon-btn" data-act="back" data-click aria-label="${t('Back')}">${ICON.back}</button>
+          <h2>${t('Leaderboard')}</h2>
           <div class="chip">🏆</div>
         </div>
         <div class="sheet-body">
           <div class="lb-tabs">
-            <button type="button" data-board="all" class="on">All-time</button>
-            <button type="button" data-board="daily">Today</button>
+            <button type="button" data-board="all" class="on">${t('All-time')}</button>
+            <button type="button" data-board="daily">${t('Today')}</button>
           </div>
           <div class="lb-rows"></div>
         </div>
@@ -1001,7 +1023,7 @@ export class UI {
 
   async fillBoard(body, board = 'all') {
     const daily = board === 'daily';
-    body.innerHTML = `<p class="muted">${daily ? "Loading today's route…" : 'Loading the savanna board…'}</p>`;
+    body.innerHTML = `<p class="muted">${daily ? t("Loading today's route…") : t('Loading the savanna board…')}</p>`;
     try {
       if (this._submitTask) await this._submitTask;
       const data = await fetchBoard(daily ? 'daily' : undefined);
@@ -1009,19 +1031,19 @@ export class UI {
       const youId = save.playerId ?? null;
       const top = data.top || [];
       const intro = daily
-        ? `<p class="muted" style="margin:0 4px">Today's route · ${esc(data.day || '')} · resets at midnight in Dar es Salaam.</p>`
-        : '<p class="muted" style="margin:0 4px">One best run per runner, ranked by score.</p>';
+        ? `<p class="muted" style="margin:0 4px">${t("Today's route · {day} · resets at midnight in Dar es Salaam.", { day: esc(data.day || '') })}</p>`
+        : `<p class="muted" style="margin:0 4px">${t('One best run per runner, ranked by score.')}</p>`;
       const empty = daily
-        ? '<div class="panel lb-empty-card"><div class="e">🌅</div><p>No scores on today\'s route yet. Finish a run and it lands here.</p></div>'
-        : '<div class="panel lb-empty-card"><div class="e">🌱</div><p>No scores yet. Finish a run and put your name on the board.</p></div>';
+        ? `<div class="panel lb-empty-card"><div class="e">🌅</div><p>${t("No scores on today's route yet. Finish a run and it lands here.")}</p></div>`
+        : `<div class="panel lb-empty-card"><div class="e">🌱</div><p>${t('No scores yet. Finish a run and put your name on the board.')}</p></div>`;
       body.innerHTML = top.length ? `${intro}${renderRows(top, { youId, youName: '' })}` : empty;
     } catch (err) {
       if (!body.isConnected) return;
       body.innerHTML = `
         <div class="panel lb-empty-card">
           <div class="e">🌫️</div>
-          <p>${esc(err.message || 'Could not load the board')}</p>
-          <button class="btn" data-act="retry" data-click style="margin-top:14px">Try again</button>
+          <p>${esc(err.message || t('Could not load the board'))}</p>
+          <button class="btn" data-act="retry" data-click style="margin-top:14px">${t('Try again')}</button>
         </div>`;
     }
   }
@@ -1029,7 +1051,7 @@ export class UI {
   missionSetComplete() {
     if (!claimMissionSet()) return;
     audio.buy();
-    this.toast('🎉', `<b>Mission set complete!</b><br>Multiplier is now ×${multiplier()} · +${fmt(250 * save.missionLevel)} seeds`, 3600);
+    this.toast('🎉', `<b>${t('Mission set complete!')}</b><br>${t('Multiplier is now ×{m} · +{s} seeds', { m: multiplier(), s: fmt(250 * save.missionLevel) })}`, 3600);
   }
 
   /* ------------------------------------------------------------ sheets */
@@ -1037,7 +1059,7 @@ export class UI {
     const el = $(`
       <div class="screen scrim-full">
         <div class="sheet-head">
-          <button class="icon-btn" data-act="back" data-click aria-label="Back">${ICON.back}</button>
+          <button class="icon-btn" data-act="back" data-click aria-label="${t('Back')}">${ICON.back}</button>
           <h2>${title}</h2>
           <div class="chip"><span class="seed"></span><span class="bank">${fmt(save.seeds)}</span></div>
         </div>
@@ -1062,32 +1084,32 @@ export class UI {
           <div class="panel list-card" style="--c:${a.color};animation-delay:${i * 0.05}s">
             <div class="art">${a.emoji}</div>
             <div class="info">
-              <h3>${a.name} <span class="muted" style="font-family:var(--body);font-size:13px">the ${a.species}</span></h3>
+              <h3>${a.name} <span class="muted" style="font-family:var(--body);font-size:13px">${lang === 'sw' ? a.species : `the ${a.species}`}</span></h3>
               <div style="font-size:13px;color:${a.color}">${a.power} · ${dur.toFixed(1)}s</div>
               <p>${a.desc}</p>
               <div class="pips">${Array.from({ length: 5 }, (_, k) => `<i class="${k < lvl ? 'on' : ''}"></i>`).join('')}</div>
             </div>
-            ${lvl < 5 ? `<button class="btn buy" data-up="${id}" ${save.seeds < cost ? 'disabled' : ''}><span class="seed"></span>${fmt(cost)}</button>` : '<div class="chip">MAX</div>'}
+            ${lvl < 5 ? `<button class="btn buy" data-up="${id}" ${save.seeds < cost ? 'disabled' : ''}><span class="seed"></span>${fmt(cost)}</button>` : `<div class="chip">${t('MAX')}</div>`}
           </div>`;
       }).join('');
       const charm = `
         <div class="panel list-card" style="--c:#7fe0ff">
           <div class="art">🛡️</div>
           <div class="info">
-            <h3>Ngao Shield <span class="muted" style="font-family:var(--body);font-size:13px">× ${save.charms ?? 0} owned</span></h3>
-            <div style="font-size:13px;color:#7fe0ff">Tap 🛡️ while running · 30s</div>
-            <p>A Maasai-style shield charm that absorbs one crash and keeps your run alive.</p>
+            <h3>${t('Ngao Shield')} <span class="muted" style="font-family:var(--body);font-size:13px">${t('× {n} owned', { n: save.charms ?? 0 })}</span></h3>
+            <div style="font-size:13px;color:#7fe0ff">${t('Tap 🛡️ while running · 30s')}</div>
+            <p>${t('A Maasai-style shield charm that absorbs one crash and keeps your run alive.')}</p>
           </div>
           <button class="btn buy" data-charm ${save.seeds < 300 ? 'disabled' : ''}><span class="seed"></span>300</button>
         </div>`;
-      const el = this.sheet('Animal Allies', `<p class="muted" style="margin:0 4px">Grab glowing totems on the trail to call an ally. Upgrade them to make their help last longer.</p>${charm}${body}`);
+      const el = this.sheet(t('Animal Allies'), `<p class="muted" style="margin:0 4px">${t('Grab glowing totems on the trail to call an ally. Upgrade them to make their help last longer.')}</p>${charm}${body}`);
       el.addEventListener('click', (e) => {
         if (e.target.closest('[data-charm]') && save.seeds >= 300) {
           save.seeds -= 300;
           save.charms = (save.charms ?? 0) + 1;
           persist();
           audio.buy();
-          this.toast('🛡️', `Ngao shield ready! You have <b>${save.charms}</b>.`);
+          this.toast('🛡️', t('Ngao shield ready! You have <b>{n}</b>.', { n: save.charms }));
           return render();
         }
         const id = e.target.closest('[data-up]')?.dataset.up;
@@ -1099,7 +1121,7 @@ export class UI {
         save.upgrades[id] = lvl + 1;
         persist();
         audio.buy();
-        this.toast(ALLIES[id].emoji, `<b>${ALLIES[id].name}</b> upgraded to level ${lvl + 1}!`);
+        this.toast(ALLIES[id].emoji, t('<b>{name}</b> upgraded to level {n}!', { name: ALLIES[id].name, n: lvl + 1 }));
         render();
       });
     };
@@ -1109,13 +1131,13 @@ export class UI {
   missions() {
     const ms = ensureMissions();
     const ready = ms.every((m) => m.done);
-    const el = this.sheet('Missions', `
+    const el = this.sheet(t('Missions'), `
       <div class="panel mult-hero">
         <div class="x">×${multiplier()}</div>
-        <div><b style="font-size:18px">Score multiplier</b><div class="muted" style="font-size:14px">Complete all three missions to raise it by one and earn bonus seeds.</div></div>
+        <div><b style="font-size:18px">${t('Score multiplier')}</b><div class="muted" style="font-size:14px">${t('Complete all three missions to raise it by one and earn bonus seeds.')}</div></div>
       </div>
-      ${ms.map((m, i) => `<div class="panel mission ${m.done ? 'done' : ''}" style="animation:rise .4s ${i * 0.06}s ease both"><span class="tick ${m.done ? 'done' : ''}">${m.done ? '✓' : '🎯'}</span><div class="txt">${esc(m.text)}</div></div>`).join('')}
-      ${ready ? '<button class="btn big" data-act="claim" data-click>🎉 Claim reward</button>' : ''}
+      ${ms.map((m, i) => `<div class="panel mission ${m.done ? 'done' : ''}" style="animation:rise .4s ${i * 0.06}s ease both"><span class="tick ${m.done ? 'done' : ''}">${m.done ? '✓' : '🎯'}</span><div class="txt">${esc(missionText(m))}</div></div>`).join('')}
+      ${ready ? `<button class="btn big" data-act="claim" data-click>${t('🎉 Claim reward')}</button>` : ''}
     `);
     el.querySelector('[data-act=claim]')?.addEventListener('click', () => {
       this.missionSetComplete();
@@ -1130,9 +1152,9 @@ export class UI {
     const sel = Math.min(save.startRegion ?? 0, max);
     let html = `
       <div class="journey-head panel">
-        <div><b>${max + 1}</b> / ${REGIONS.length} regions discovered</div>
+        <div>${t('<b>{n}</b> / {total} regions discovered', { n: max + 1, total: REGIONS.length })}</div>
         <div class="journey-bar"><i style="width:${((max + 1) / REGIONS.length) * 100}%"></i></div>
-        <button class="btn ghost wide" data-act="intro" data-click style="min-height:46px;font-size:17px">📖 Replay the prologue</button>
+        <button class="btn ghost wide" data-act="intro" data-click style="min-height:46px;font-size:17px">${t('📖 Replay the prologue')}</button>
       </div>`;
     let lastCountry = null;
     REGIONS.forEach((r, i) => {
@@ -1146,15 +1168,15 @@ export class UI {
         <div class="panel region-card ${open ? '' : 'locked'} ${i === sel ? 'selected' : ''}" style="animation-delay:${i * 0.04}s">
           <div class="node">${open ? r.emoji : '🔒'}</div>
           <div class="info">
-            <div class="num">${i === 0 ? 'START' : `${(r.at / 1000).toFixed(1)} km`} · ${esc(r.title)}</div>
+            <div class="num">${i === 0 ? t('START') : `${(r.at / 1000).toFixed(1)} km`} · ${esc(r.title)}</div>
             <h3>${open ? esc(r.name) : '???'}</h3>
-            <p>${open ? esc(r.blurb) : 'Keep running to discover this place.'}</p>
+            <p>${open ? esc(r.blurb) : t('Keep running to discover this place.')}</p>
             ${open ? `<blockquote>“${esc(r.line)}” <span class="muted">— ${esc(r.speaker)}</span></blockquote>` : ''}
-            ${open ? `<button class="btn ${i === sel ? 'ghost' : 'teal'} start-here" data-start="${i}" ${i === sel ? 'disabled' : ''}>${i === sel ? '✓ Starting here' : 'Start runs here'}</button>` : ''}
+            ${open ? `<button class="btn ${i === sel ? 'ghost' : 'teal'} start-here" data-start="${i}" ${i === sel ? 'disabled' : ''}>${i === sel ? t('✓ Starting here') : t('Start runs here')}</button>` : ''}
           </div>
         </div>`;
     });
-    const el = this.sheet('The Journey', html);
+    const el = this.sheet(t('The Journey'), html);
     el.addEventListener('click', (e) => {
       if (e.target.closest('[data-act=intro]')) return this.intro(() => this.journey());
       const st = e.target.closest('[data-start]');
@@ -1178,8 +1200,8 @@ export class UI {
       const el = $(`
         <div class="screen select scrim-bottom">
           <div class="sheet-head">
-            <button class="icon-btn" data-act="back" data-click aria-label="Back">${ICON.back}</button>
-            <h2>Runners</h2>
+            <button class="icon-btn" data-act="back" data-click aria-label="${t('Back')}">${ICON.back}</button>
+            <h2>${t('Runners')}</h2>
             <div class="chip"><span class="seed"></span><span>${fmt(save.seeds)}</span></div>
           </div>
           <div class="panel select-card">
@@ -1188,15 +1210,15 @@ export class UI {
             <h2>${esc(r.name)}</h2>
             <p>${esc(r.bio)}</p>
             <div class="outfit-line">${esc(outfit.line)}</div>
-            <div class="outfits" role="listbox" aria-label="Outfit">
+            <div class="outfits" role="listbox" aria-label="${t('Outfit')}">
               ${OUTFITS.map((o) => `<button type="button" class="${o.id === outfit.id ? 'on' : ''}" data-outfit="${o.id}" aria-label="${esc(o.line)}">${esc(o.name)}</button>`).join('')}
             </div>
             <div class="select-nav">
-              <button class="arrow" data-act="prev" aria-label="Previous">‹</button>
+              <button class="arrow" data-act="prev" aria-label="${t('Previous')}">‹</button>
               ${owned
-                ? `<button class="btn ${selected ? 'ghost' : ''}" data-act="pick" data-click ${selected ? 'disabled' : ''}>${selected ? '✓ Selected' : 'Select'}</button>`
-                : `<button class="btn flame" data-act="buy" data-click ${save.seeds < r.cost ? 'disabled' : ''}>Unlock · ${fmt(r.cost)} <span class="seed"></span></button>`}
-              <button class="arrow" data-act="next" aria-label="Next">›</button>
+                ? `<button class="btn ${selected ? 'ghost' : ''}" data-act="pick" data-click ${selected ? 'disabled' : ''}>${selected ? t('✓ Selected') : t('Select')}</button>`
+                : `<button class="btn flame" data-act="buy" data-click ${save.seeds < r.cost ? 'disabled' : ''}>${t('Unlock · {cost}', { cost: fmt(r.cost) })} <span class="seed"></span></button>`}
+              <button class="arrow" data-act="next" aria-label="${t('Next')}">›</button>
             </div>
           </div>
         </div>`);
@@ -1217,7 +1239,7 @@ export class UI {
           save.runner = r.id;
           persist();
           audio.buy();
-          this.toast(r.emoji, `<b>${esc(r.name)}</b> joins the run!`);
+          this.toast(r.emoji, t('<b>{name}</b> joins the run!', { name: esc(r.name) }));
           return render();
         }
         if (act === 'pick') {
@@ -1255,35 +1277,35 @@ export class UI {
     audio.click();
     if (install.how === 'prompt') {
       const outcome = await install.prompt();
-      if (outcome === 'accepted') this.toast('📲', 'Kimbia! is on your home screen. Karibu tena!');
+      if (outcome === 'accepted') this.toast('📲', t('Kimbia! is on your home screen. Karibu tena!'));
       if (outcome !== 'unavailable') return;
     }
     const step = (n, html) => `<li><b>${n}</b><span>${html}</span></li>`;
     const steps = {
       ios: [
-        step(1, `Tap <b>Share</b> <span class="key">${ICON.share}</span> in Safari's toolbar`),
-        step(2, 'Scroll down and tap <b>Add to Home Screen</b>'),
-        step(3, 'Tap <b>Add</b>. Kimbia! opens full screen, even offline'),
+        step(1, t("Tap <b>Share</b> {icon} in Safari's toolbar", { icon: `<span class="key">${ICON.share}</span>` })),
+        step(2, t('Scroll down and tap <b>Add to Home Screen</b>')),
+        step(3, t('Tap <b>Add</b>. Kimbia! opens full screen, even offline')),
       ],
       inapp: [
-        step(1, 'Tap the <b>⋮</b> or <b>•••</b> menu in this app'),
-        step(2, 'Choose <b>Open in browser</b> (Chrome or Safari)'),
-        step(3, 'Tap <b>Install</b> on the Kimbia! home screen there'),
+        step(1, t('Tap the <b>⋮</b> or <b>•••</b> menu in this app')),
+        step(2, t('Choose <b>Open in browser</b> (Chrome or Safari)')),
+        step(3, t('Tap <b>Install</b> on the Kimbia! home screen there')),
       ],
       menu: [
-        step(1, 'Open your browser menu <b>⋮</b>'),
-        step(2, 'Tap <b>Install app</b> or <b>Add to Home screen</b>'),
-        step(3, 'Confirm. Kimbia! opens full screen, even offline'),
+        step(1, t('Open your browser menu <b>⋮</b>')),
+        step(2, t('Tap <b>Install app</b> or <b>Add to Home screen</b>')),
+        step(3, t('Confirm. Kimbia! opens full screen, even offline')),
       ],
     }[install.how] ?? [];
     const el = $(`
       <div class="screen modal-wrap scrim-full">
         <div class="panel modal install-card">
           <div class="install-icon"><img src="/icons/icon-192.png" alt="" width="72" height="72" /></div>
-          <h2>Install Kimbia!</h2>
-          <p class="muted">Play from your home screen: full screen, quicker to open, and it works offline.</p>
+          <h2>${t('Install Kimbia!')}</h2>
+          <p class="muted">${t('Play from your home screen: full screen, quicker to open, and it works offline.')}</p>
           <ol class="install-steps">${steps.join('')}</ol>
-          <div class="stack"><button class="btn" data-act="close" data-click>Got it</button></div>
+          <div class="stack"><button class="btn" data-act="close" data-click>${t('Got it')}</button></div>
         </div>
       </div>`);
     el.addEventListener('click', (e) => {
@@ -1293,25 +1315,28 @@ export class UI {
   }
 
   settings() {
-    const row = (key, label) => `<div class="toggle-row"><span>${label}</span><button class="switch ${save[key] ? 'on' : ''}" data-key="${key}" aria-label="${label}"></button></div>`;
+    const row = (key, en) => { const label = t(en); return `<div class="toggle-row"><span>${label}</span><button class="switch ${save[key] ? 'on' : ''}" data-key="${key}" aria-label="${label}"></button></div>`; };
     const el = $(`
       <div class="screen modal-wrap scrim-full">
         <div class="panel modal" style="text-align:left">
-          <h2 style="text-align:center">Settings</h2>
+          <h2 style="text-align:center">${t('Settings')}</h2>
           ${row('music', '🎵 Music')}
           ${row('sound', '🔊 Sound effects')}
           ${row('haptics', '📳 Vibration')}
-          <div class="toggle-row"><span>✨ Graphics</span><div class="seg" role="group">${['auto', 'high', 'low'].map((q) => `<button class="${(save.quality ?? 'auto') === q ? 'on' : ''}" data-q="${q}">${q[0].toUpperCase() + q.slice(1)}</button>`).join('')}</div></div>
-          ${install.offered ? `<div class="toggle-row"><span>📲 Play from your home screen</span><button class="btn small" data-act="install" data-click>Install</button></div>` : ''}
-          <div style="margin:18px 0 6px" class="muted">Your runner name (shown on challenges)</div>
-          <input class="name-input" maxlength="16" placeholder="e.g. Zuri" value="${esc(save.name)}" />
-          <div class="stack"><button class="btn" data-act="close" data-click>Done</button></div>
-          <p class="muted" style="text-align:center;font-size:12px;margin:16px 0 0">Swipe to move · Arrow keys / WASD on desktop</p>
-          <p class="muted credits" style="text-align:center;font-size:11px;margin:10px 0 0;line-height:1.5">Runners: Quaternius (CC0). Animals: © Wildfire Games, from <a href="https://play0ad.com" target="_blank" rel="noopener">0 A.D.</a>, <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener">CC BY-SA 3.0</a>.</p>
+          <div class="toggle-row"><span>${t('✨ Graphics')}</span><div class="seg" role="group">${['auto', 'high', 'low'].map((q) => `<button class="${(save.quality ?? 'auto') === q ? 'on' : ''}" data-q="${q}">${t(q[0].toUpperCase() + q.slice(1))}</button>`).join('')}</div></div>
+          <div class="toggle-row"><span>${t('🌍 Language')}</span><div class="seg" role="group">${Object.entries(LANGS).map(([k, n]) => `<button class="${lang === k ? 'on' : ''}" data-lang="${k}">${n}</button>`).join('')}</div></div>
+          ${install.offered ? `<div class="toggle-row"><span>${t('📲 Play from your home screen')}</span><button class="btn small" data-act="install" data-click>${t('Install')}</button></div>` : ''}
+          <div style="margin:18px 0 6px" class="muted">${t('Your runner name (shown on challenges)')}</div>
+          <input class="name-input" maxlength="16" placeholder="${t('e.g. Zuri')}" value="${esc(save.name)}" />
+          <div class="stack"><button class="btn" data-act="close" data-click>${t('Done')}</button></div>
+          <p class="muted" style="text-align:center;font-size:12px;margin:16px 0 0">${t('Swipe to move · Arrow keys / WASD on desktop')}</p>
+          <p class="muted credits" style="text-align:center;font-size:11px;margin:10px 0 0;line-height:1.5">${t('Runners: Quaternius (CC0). Animals: © Wildfire Games, from')} <a href="https://play0ad.com" target="_blank" rel="noopener">0 A.D.</a>, <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener">CC BY-SA 3.0</a>.</p>
         </div>
       </div>`);
     el.addEventListener('click', (e) => {
       if (e.target.closest('[data-act=install]')) return this.installApp();
+      const lb = e.target.closest('[data-lang]');
+      if (lb) return setLang(lb.dataset.lang);
       const qb = e.target.closest('[data-q]');
       if (qb) {
         this.game.setQuality(qb.dataset.q);
@@ -1345,14 +1370,14 @@ export class UI {
       save.name = data.entry.name;
       save.playerId = data.entry.id;
       persist();
-      this.toast('✅', `You're now <b>${esc(save.name)}</b> on the leaderboard.`);
+      this.toast('✅', t("You're now <b>{name}</b> on the leaderboard.", { name: esc(save.name) }));
     } catch (err) {
-      if (err.code === 'NAME_TAKEN') this.toast('🙅', `<b>${esc(name)}</b> is already taken. Try another name.`, 3200);
+      if (err.code === 'NAME_TAKEN') this.toast('🙅', t('<b>{name}</b> is already taken. Try another name.', { name: esc(name) }), 3200);
       else if (err.status === 503) {
         // no leaderboard configured (e.g. local dev): keep the name locally
         save.name = name;
         persist();
-      } else this.toast('📡', 'Couldn\'t reach the leaderboard. Your name wasn\'t changed.');
+      } else this.toast('📡', t("Couldn't reach the leaderboard. Your name wasn't changed."));
       if (save.name !== name) save.name = previous;
     }
   }
@@ -1364,10 +1389,10 @@ export class UI {
       <div class="screen modal-wrap scrim-full">
         <div class="panel modal">
           <div style="font-size:56px">🌅</div>
-          <h2>Jambo! Day ${d.streak}</h2>
-          <div class="muted">The savanna rewards those who return.</div>
+          <h2>${t('Jambo! Day {n}', { n: d.streak })}</h2>
+          <div class="muted">${t('The savanna rewards those who return.')}</div>
           <div class="daily-days">
-            ${Array.from({ length: 7 }, (_, i) => `<div class="${i < d.streak ? 'on' : ''}"><span>Day ${i + 1}</span><b>${i === 6 ? '🎁' : 50 * (i + 1)}</b></div>`).join('')}
+            ${Array.from({ length: 7 }, (_, i) => `<div class="${i < d.streak ? 'on' : ''}"><span>${t('Day {n}', { n: i + 1 })}</span><b>${i === 6 ? '🎁' : 50 * (i + 1)}</b></div>`).join('')}
           </div>
           <div style="display:flex;align-items:center;justify-content:center;gap:10px;font-family:var(--display);font-size:34px;color:var(--sun-2)"><span class="seed lg"></span>+${fmt(d.reward)}</div>
           <div class="stack"><button class="btn big" data-act="ok" data-click>Asante!</button></div>

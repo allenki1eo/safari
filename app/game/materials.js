@@ -349,6 +349,23 @@ export function shadowTexture() {
 
 let shadowMat;
 /** Blob shadows soften when real shadow maps are on, so the two don't double up. */
+let runnerShadowTex;
+/** A darker, crisper blob for the runner, so their shadow reads on pale sand and snow. */
+export function runnerShadowTexture() {
+  if (runnerShadowTex) return runnerShadowTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(32, 32, 2, 32, 32, 31);
+  grd.addColorStop(0, 'rgba(25,14,4,0.82)');
+  grd.addColorStop(0.55, 'rgba(25,14,4,0.5)');
+  grd.addColorStop(1, 'rgba(25,14,4,0)');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 64, 64);
+  runnerShadowTex = new THREE.CanvasTexture(c);
+  return runnerShadowTex;
+}
+
 export function setBlobStrength(v) {
   shadowMat ??= basic(0xffffff, { map: shadowTexture(), transparent: true, depthWrite: false });
   shadowMat.opacity = v;
