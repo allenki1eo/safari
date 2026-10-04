@@ -52,7 +52,7 @@ After Bwindi the run loops into a *legend lap*. Regions you reach unlock on the 
 - **Six unlockable runners** (Zuri, Juma, Neema, Baraka, Amani, Kito) and ally upgrades.
 - **Daily rewards** with a 7-day streak.
 - **Challenge sharing**: the game renders a score card image and a link (`/?c=<score>&n=<name>`) that greets your friend with *"Allen challenges you to beat 12,000!"*
-- **Global leaderboard**: after a run, post your name and score. Rank is decided on the server. Open the board from the trophy on the title screen, or from the game-over card.
+- **Global leaderboard**: a finished run is saved to the board. A name already stored on the device is used immediately; otherwise the game-over card asks for one and saves when you confirm. Run again and Home will not drop that score. Rank is decided on the server. Open the board from the trophy on the title screen, or from the game-over card.
 - **Ngao shield charms**: buy them with seeds and tap 🛡️ mid-run to survive one crash.
 - **Seed combos, slow-motion close calls**, and music that builds as you speed up.
 - **Installable PWA** that works offline. The score API is network-only; the rest of the game still plays offline.

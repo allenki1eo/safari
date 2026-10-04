@@ -1,7 +1,36 @@
 import { RUNNERS } from '../data/content.js';
 import { save, persist } from '../data/save.js';
 
+export const NAME_MAX = 16;
+
 const EMOJI = Object.fromEntries(RUNNERS.map((runner) => [runner.id, runner.emoji]));
+
+/** Same cleaning rules as the server: trim, collapse spaces, 1–16 characters. */
+export function runnerName(raw) {
+  if (typeof raw !== 'string') return '';
+  const name = raw.normalize('NFKC').replace(/[\u0000-\u001F\u007F]/g, '').trim().replace(/\s+/g, ' ');
+  const length = [...name].length;
+  if (length < 1 || length > NAME_MAX) return '';
+  return name;
+}
+
+/** A name already on the device is posted immediately. Otherwise the card must ask. */
+export function scoreSavePlan(savedName) {
+  const name = runnerName(savedName);
+  if (name) return { action: 'save', name };
+  return { action: 'ask' };
+}
+
+/**
+ * Run again / Home must not throw away an unsaved finish.
+ * Returns ask (stay and prompt), save (post this name, then leave), or leave.
+ */
+export function leaveDecision({ alreadySaved, savedName, typedName }) {
+  if (alreadySaved) return { action: 'leave' };
+  const name = runnerName(typedName) || runnerName(savedName);
+  if (!name) return { action: 'ask' };
+  return { action: 'save', name };
+}
 
 const esc = (value) => String(value).replace(/[&<>"']/g, (c) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
