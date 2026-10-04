@@ -60,7 +60,8 @@ After Bwindi the run loops into a *legend lap*. Regions you reach unlock on the 
 ## Tech
 
 - [three.js](https://threejs.org) and vanilla ES modules, bundled with [Vite](https://vitejs.dev). About 175 KB gzipped in total.
-- **Rigged characters, built in code.** The six runners are East African kids with lifelike proportions, smooth-shaded skin and detailed faces (almond eyes, broad noses, full lips, coily hair), each with their own hair (afro puffs, box braids, a high-top, a kitambaa headwrap) and clothes (kitenge, kanga, a Maasai shuka and beaded collar, a football kit). The savanna animals are rigged too: lion, cheetah, Fisi's hyena pack, zebra, wildebeest, buffalo, giraffe, elephant and rhino. Each one is a single skinned mesh with keyframed animation clips: running, jumping, a baseball slide, riding, flying, waving, stumbling and falling for the runners, and walks, gallops, bounding sprints, grazing and tail swishes for the animals. Coat and fabric patterns (stripes, spots, giraffe patches, kitenge zigzags, shuka checks) are painted by a shader. No model files are downloaded (`app/game/rigkit.js`, `people.js`, `fauna.js`).
+- **Runners:** fully modelled characters from Quaternius's CC0 [Universal Base Characters](https://quaternius.itch.io/universal-base-characters), animated with the CC0 [Universal Animation Library](https://quaternius.itch.io/universal-animation-library) (sprint, jump, slide, roll, sit, stumble, fall). Each runner is dressed in code (`app/game/kids.js`): a skin tone, an outfit painted onto the body with kitenge, kanga, shuka and jersey patterns, hair, and their kit (headwrap, sweatband, bucket hat, beaded collar, braids, shoes). `scripts/build-kids.mjs` compresses everything to about 1.3 MB for a run. The hand-built runner in `people.js` stands in until the files arrive.
+- **Rigged animals, built in code:** lion, cheetah, Fisi's hyena pack, zebra, wildebeest, buffalo, giraffe, elephant and rhino, each a single skinned mesh with generated walk, gallop, bound and graze cycles, and shader-painted coats (`app/game/rigkit.js`, `fauna.js`).
 - **No model, texture or audio files.** Trees, trucks and the remaining animals are built from low-poly primitives in `app/game/models.js`. Music (kalimba, djembe, shaker) and sound effects are synthesized with WebAudio in `app/game/audio.js`.
 - A curved-world vertex shader gives the rolling horizon (`app/game/materials.js`).
 - Static meshes are merged into vertex-coloured batches at build time, keeping each frame around 150–250 draw calls on phones. Pixel ratio adapts automatically if the frame rate drops.
@@ -72,7 +73,8 @@ app/
   game/world.js      sky, day/night cycle, ground, scenery, herds, particles
   game/models.js     procedural low-poly characters, animals, props
   game/rigkit.js     toolkit for skinned characters: shapes, bones, patterns, keyframed clips
-  game/people.js     the six runners: bodies, faces, hair, clothes and their animations
+  game/kids.js       the runners: loading the modelled characters, dressing them, their clips
+  game/people.js     hand-built stand-in runners (used while the models load)
   game/fauna.js      rigged savanna animals and their gaits
   game/materials.js  curved-world shader, material cache, mesh baking
   game/audio.js      procedural soundtrack + SFX
@@ -90,7 +92,8 @@ server/              libSQL access, validation, and the Vite dev/preview middlew
 migrations/          SQL schema for the scores table
 tests/               vitest suites (pattern fairness, regions, save data)
 static/              PWA manifest, service worker, icons, fonts, og image
-scripts/             database init
+static/models/       the runners' character models and clips (CC0, Quaternius)
+scripts/             database init, character build
 ```
 
 ## Develop

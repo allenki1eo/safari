@@ -33,7 +33,7 @@ export const PAT = {
   stripesX: 10, // vertical pinstripes
 };
 
-const PATTERN_GLSL = /* glsl */ `
+export const PATTERN_GLSL = /* glsl */ `
   float hash3(vec3 c) { return fract(sin(dot(c, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
   float patternMask(vec3 p, float type) {
     if (type < 0.5) return 0.0;

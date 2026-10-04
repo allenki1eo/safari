@@ -3,6 +3,7 @@ import { curve, bend, bakeRigid, finishProp, time as timeU } from './materials.j
 import { Look, detectQuality } from './look.js';
 import { Animals, makeEagle, makeHornbill, makeTruck, makeRamp, makeTotem, makePrizeBox, makeLetterToken } from './models.js';
 import { makeRunner } from './people.js';
+import { makeKidRunner, preloadKids } from './kids.js';
 import {
   RegionAnimals, makeLogStyled, makeGateStyled, makeBoulderStyled, makeMoundStyled, makeCart, makeRockfall, makeBeachedCanoe,
 } from './regionModels.js';
@@ -69,6 +70,7 @@ export class Game {
     this.obstacles = [];
     this.coins = [];
     this.totems = [];
+    preloadKids(save.runner);
     this.buildCoins();
     this.buildAllies();
     this.buildChasers();
@@ -128,7 +130,7 @@ export class Game {
   setRunner(id) {
     const def = RUNNERS.find((r) => r.id === id) ?? RUNNERS[0];
     if (this.runner) this.scene.remove(this.runner.root);
-    this.runner = makeRunner(def);
+    this.runner = makeKidRunner(def, makeRunner(def));
     castShadows(this.runner.root);
     this.scene.add(this.runner.root);
     this.runnerId = def.id;
