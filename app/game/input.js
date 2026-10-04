@@ -33,6 +33,7 @@ export function bindInput(target, onAction) {
     start(t.clientX, t.clientY);
   }, { passive: true });
   target.addEventListener('touchmove', (e) => {
+    if (e.target.closest?.('.sheet-body, .over .card, input, textarea')) return;
     const t = e.changedTouches[0];
     move(t.clientX, t.clientY);
     e.preventDefault();
@@ -51,6 +52,8 @@ export function bindInput(target, onAction) {
     Escape: 'pause', KeyP: 'pause',
   };
   window.addEventListener('keydown', (e) => {
+    const tag = e.target?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target?.isContentEditable) return;
     const a = keys[e.code];
     if (!a || e.repeat) return;
     e.preventDefault();

@@ -7,9 +7,11 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "db:init": "node scripts/init-db.mjs",
+    "test": "vitest run && node --test server/leaderboard.test.js"
   },
   "dependencies": {
+    "@libsql/client": "^0.15.15",
     "three": "^0.170.0"
   },
   "devDependencies": {

@@ -52,10 +52,10 @@ After Bwindi the run loops into a *legend lap*. Regions you reach unlock on the 
 - **Six unlockable runners** (Zuri, Juma, Neema, Baraka, Amani, Kito) and ally upgrades.
 - **Daily rewards** with a 7-day streak.
 - **Challenge sharing**: the game renders a score card image and a link (`/?c=<score>&n=<name>`) that greets your friend with *"Allen challenges you to beat 12,000!"*
-- **Global leaderboard**: weekly and all-time boards (see below).
+- **Global leaderboard**: after a run, post your name and score. Rank is decided on the server. Open the board from the trophy on the title screen, or from the game-over card.
 - **Ngao shield charms**: buy them with seeds and tap 🛡️ mid-run to survive one crash.
 - **Seed combos, slow-motion close calls**, and music that builds as you speed up.
-- **Installable PWA** that works offline.
+- **Installable PWA** that works offline. The score API is network-only; the rest of the game still plays offline.
 
 ## Tech
 
@@ -79,9 +79,12 @@ app/
   game/regionModels.js  flora, fauna and hazards beyond the Serengeti
   data/save.js       local progress, missions, daily reward
   ui/ui.js           all screens (title, intro, HUD, game over, shop…)
+  ui/leaderboard.js  fetch + render the global board (no database credentials)
   ui/share.js        share-card renderer + Web Share
-api/leaderboard.js   serverless leaderboard (Supabase)
-tests/               vitest suites
+api/scores.js        Vercel function: GET the top 20, POST a score
+server/              libSQL access, validation, and the Vite dev/preview middleware
+migrations/          SQL schema for the scores table
+tests/               vitest suites (pattern fairness, regions, save data)
 static/              PWA manifest, service worker, icons, fonts, og image
 ```
 
@@ -89,36 +92,22 @@ static/              PWA manifest, service worker, icons, fonts, og image
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
-npm test         # fairness, data and API tests (vitest)
-npm run build    # outputs dist/
+cp .env.example .env   # then fill in Turso credentials
+npm run db:init        # create the scores table
+npm run dev            # http://localhost:5173  (also serves /api/scores)
+npm test               # vitest suites + leaderboard server tests
+npm run build          # outputs dist/
 ```
+
+For a local database without Turso Cloud, set `TURSO_DATABASE_URL=file:data/kimbia.db` and leave the token empty. Cloud databases use a `libsql://` URL and require `TURSO_AUTH_TOKEN`.
 
 `tests/patterns.test.js` generates thousands of obstacle chunks for every region and fails if any of them blocks all three lanes. CI (`.github/workflows/ci.yml`) runs the tests and the build on every pull request.
 
-## Leaderboard setup (optional)
+## Leaderboard
 
-`api/leaderboard.js` is a Vercel function that sits in front of Supabase, checks submitted scores for plausibility and rate-limits submissions. Until it's configured, the game shows "coming soon".
+Scores live in [Turso](https://turso.tech) (libSQL). The browser only calls `/api/scores`. `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are read on the server — do not prefix them with `VITE_`, or Vite will ship them to the client.
 
-1. In Supabase, create the table. Anyone can read scores, and only the server function can write:
-
-   ```sql
-   create table if not exists safari_leaderboard (
-     id bigint generated always as identity primary key,
-     player_name text not null check (char_length(player_name) between 2 and 16),
-     score integer not null check (score >= 0),
-     distance integer not null default 0,
-     coins integer not null default 0,
-     character_id text,
-     created_at timestamptz not null default now()
-   );
-   create index if not exists safari_leaderboard_score on safari_leaderboard (score desc);
-   alter table safari_leaderboard enable row level security;
-   create policy "read scores" on safari_leaderboard for select using (true);
-   -- no insert policy: writes go through api/leaderboard.js with the service-role key
-   ```
-
-2. In Vercel → Project → Settings → Environment Variables, add `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (keep it server-only and never prefix it with `VITE_`), then redeploy.
+`npm run db:init` runs `migrations/001_scores.sql`. The API also applies that file on first use (`CREATE TABLE IF NOT EXISTS`), so a new database is ready as soon as the env vars are set. The board returns the top 20 rows ordered by score, then by earlier submission. Rank is computed in SQL and any rank sent by the client is ignored. Names are 1–16 characters. Score, distance, seeds, and allies must be non-negative integers.
 
 ## Analytics
 
@@ -126,8 +115,4 @@ Vercel Web Analytics is wired into `index.html`. Turn it on in the Vercel dashbo
 
 ## Deploy to Vercel
 
-The repo includes `vercel.json` (Vite framework, `dist` output, long-lived caching for hashed assets).
-Import the repository in Vercel, or run `npx vercel --prod`. The game needs no environment variables; the leaderboard is optional (see above).
-
-> The `src/` and `public/` folders hold the previous React prototype and its ~580 MB of unused
-> assets. The new game doesn't use them (`publicDir` is `static/`), so they can be deleted.
+The repo includes `vercel.json` (Vite framework, `dist` output, `/api/scores` as a Node function, long-lived caching for hashed assets). Import the repository in Vercel and set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` for Production and Preview. Then run `npm run db:init` once with those same values, or open the game and post a score so the API creates the table.

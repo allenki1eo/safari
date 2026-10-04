@@ -19,6 +19,8 @@ self.addEventListener('fetch', (e) => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (url.origin !== location.origin) return;
+  // Scores are live data. Never cache the API, and never fall back to the app shell for it.
+  if (url.pathname.startsWith('/api/')) return;
 
   if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/icons/') || url.pathname.startsWith('/fonts/')) {
     e.respondWith(

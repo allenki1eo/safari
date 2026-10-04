@@ -1,9 +1,9 @@
 import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO } from '../data/content.js';
 import { REGIONS, COUNTRIES } from '../data/regions.js';
-import { fetchBoard, submitScore } from '../data/leaderboard.js';
 import { save, persist, ensureMissions, checkMissions, claimMissionSet, multiplier, claimDaily } from '../data/save.js';
 import { audio } from '../game/audio.js';
 import { shareRun } from './share.js';
+import { fetchBoard, postScore, renderRows } from './leaderboard.js';
 
 const $ = (html) => {
   const t = document.createElement('template');
@@ -76,6 +76,9 @@ export class UI {
     this.challenge = this.params.get('c') ? { score: parseInt(this.params.get('c'), 10) || 0, name: (this.params.get('n') || 'A friend').slice(0, 16) } : null;
     this.missionTick = 0;
     this.selIdx = Math.max(0, RUNNERS.findIndex((r) => r.id === save.runner));
+    this.boardYouId = null;
+    this.postedRunId = null;
+    this.postedEntry = null;
 
     game.on('hud', (g) => this.updateHud(g));
     game.on('seed', () => this.bumpSeeds());
@@ -131,8 +134,8 @@ export class UI {
             <div class="chip"><span class="seed"></span><span>${fmt(save.seeds)}</span></div>
             <div class="chip">✖️ ${multiplier()} <span class="muted" style="font-size:12px">MULTIPLIER</span></div>
           </div>
-          <div class="top-actions">
-            <button class="icon-btn" data-act="board" data-click aria-label="Leaderboard">${ICON.trophy}</button>
+          <div class="title-actions">
+            <button class="icon-btn" data-act="board" data-click aria-label="Leaderboard" title="Leaderboard">🏆</button>
             <button class="icon-btn" data-act="settings" data-click aria-label="Settings">${ICON.gear}</button>
           </div>
         </div>
@@ -167,7 +170,7 @@ export class UI {
       else if (act === 'allies') this.allies();
       else if (act === 'missions') this.missions();
       else if (act === 'journey') this.journey();
-      else if (act === 'board') this.leaderboard();
+      else if (act === 'board') this.showBoard();
     });
     this.show(el);
     if (save.introSeen) setTimeout(() => this.daily(), 600);
@@ -587,8 +590,11 @@ export class UI {
             <div class="stat"><b>${fmt(run.distance)}m</b><span>Distance</span></div>
             <div class="stat"><b>${run.stats.allies}</b><span>Allies</span></div>
           </div>
+          <div class="lb">
+            <div class="lb-head"><b>Savanna board</b><span class="muted">Top runs</span></div>
+            <div class="lb-slot"><p class="muted">Loading the board…</p></div>
+          </div>
           <div class="story-unlock"><span class="e">${COUNTRIES[reg.country].flag}</span><div><b>${esc(reg.name)} · ${esc(reg.title)}</b><br><span class="muted">${next ? `Next: ${COUNTRIES[next.country].flag} ${esc(next.name)}` : 'You crossed all three countries!'}</span></div></div>
-          <div class="board-slot"></div>
           <div class="mission-mini">
             ${ms.map((m) => `<div><span class="tick ${m.done ? 'done' : ''}">${m.done ? '✓' : ''}</span>${esc(m.text)}</div>`).join('')}
           </div>
@@ -613,39 +619,135 @@ export class UI {
         const r = await shareRun(run);
         if (r === 'copied') this.toast('🔗', 'Challenge link copied — send it to a friend!');
         else if (r === 'downloaded') this.toast('🖼️', 'Score card saved!');
+      } else if (act === 'post') {
+        this.postRun(el, run);
+      } else if (act === 'board') {
+        this.showBoard();
       }
     });
     this.overlay(el);
-    this.boardSlot(el.querySelector('.board-slot'), run);
+    this.loadBoard(el, run);
     if (ms.every((m) => m.done)) setTimeout(() => this.missionSetComplete(), 900);
   }
 
-  /** Posts the run to the weekly leaderboard (asking for a name the first time). */
-  async boardSlot(slot, run) {
-    if (run.score < 300 || this.submittedRun === this.game.runId) return;
-    const send = async () => {
-      this.submittedRun = this.game.runId;
-      slot.innerHTML = '<div class="board-line muted">Posting to the leaderboard…</div>';
-      const r = await submitScore({ name: save.name, score: run.score, distance: run.distance, seeds: run.seeds, runner: save.runner, duration: run.duration });
-      if (r.ok && r.rank) slot.innerHTML = `<div class="board-line">🏆 You're <b>#${fmt(r.rank)}</b> this week <button class="link" data-board>See board ›</button></div>`;
-      else if (r.ok) slot.innerHTML = '<div class="board-line">🏆 Score posted!</div>';
-      else slot.innerHTML = r.status === 503 ? '' : '<div class="board-line muted">Leaderboard is offline right now.</div>';
-      slot.querySelector('[data-board]')?.addEventListener('click', () => this.leaderboard());
-    };
-    if (save.name) return send();
+  async loadBoard(root, run) {
+    let top = [];
+    let error = '';
+    try {
+      top = (await fetchBoard()).top || [];
+    } catch (err) {
+      error = err.message || 'The board is quiet right now.';
+    }
+    if (!root.isConnected) return;
+    const entry = this.postedRunId === this.game.runId ? this.postedEntry : null;
+    this.paintBoard(root, top, entry, error, run);
+  }
+
+  paintBoard(root, top, entry, error, run) {
+    const slot = root.querySelector('.lb-slot');
+    if (!slot) return;
+    const youName = (entry?.name || save.name || '').trim();
+    const preview = (top || []).slice(0, 5);
+    const placed = entry
+      ? `<div class="lb-placed">You're <b>#${fmt(entry.rank)}</b> on the savanna board</div>`
+      : `<div class="lb-form">
+          <input class="name-input" maxlength="16" data-lb-name placeholder="Your name" value="${esc(save.name)}" autocomplete="nickname" />
+          <button class="btn teal" data-act="post" data-click>Post</button>
+        </div>
+        <p class="lb-msg">${esc(error)}</p>`;
+    const list = error
+      ? ''
+      : (preview.length
+        ? renderRows(preview, { youId: entry?.id ?? this.boardYouId, youName })
+        : '<p class="muted lb-empty">No scores yet. Be the first name on the board.</p>');
     slot.innerHTML = `
-      <form class="name-form">
-        <input class="name-input" maxlength="16" placeholder="Your name for the leaderboard" />
-        <button class="btn teal" type="submit">Post</button>
-      </form>`;
-    slot.querySelector('form').addEventListener('submit', (e) => {
+      ${placed}
+      ${list}
+      <button class="lb-more" data-act="board" data-click>Full board ›</button>`;
+    slot.querySelector('[data-lb-name]')?.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
       e.preventDefault();
-      const v = slot.querySelector('input').value.trim().slice(0, 16);
-      if (v.length < 2) return this.toast('✍️', 'Names need at least 2 letters');
-      save.name = v;
-      persist();
-      send();
+      this.postRun(root, run);
     });
+  }
+
+  async postRun(root, run) {
+    if (this.posting || this.postedRunId === this.game.runId) return;
+    const input = root.querySelector('[data-lb-name]');
+    const button = root.querySelector('[data-act=post]');
+    const msg = root.querySelector('.lb-msg');
+    if (!input || !button) return;
+    this.posting = true;
+    button.disabled = true;
+    button.textContent = '…';
+    try {
+      const data = await postScore({
+        name: input.value,
+        score: run.score,
+        distance: run.distance,
+        seeds: run.seeds,
+        allies: run.stats?.allies ?? 0,
+        chapter: run.chapter ?? 0,
+        runner: save.runner,
+      });
+      save.name = data.entry.name;
+      persist();
+      this.postedRunId = this.game.runId;
+      this.postedEntry = data.entry;
+      this.boardYouId = data.entry.id;
+      this.paintBoard(root, data.top, data.entry, '', run);
+      audio.buy();
+    } catch (err) {
+      button.disabled = false;
+      button.textContent = 'Post';
+      if (msg) msg.textContent = err.message || 'Could not post your score';
+    } finally {
+      this.posting = false;
+    }
+  }
+
+  showBoard() {
+    this.root.querySelector('.lb-screen')?.remove();
+    const el = $(`
+      <div class="screen scrim-full lb-screen">
+        <div class="sheet-head">
+          <button class="icon-btn" data-act="back" data-click aria-label="Back">${ICON.back}</button>
+          <h2>Leaderboard</h2>
+          <div class="chip">🏆</div>
+        </div>
+        <div class="sheet-body"></div>
+      </div>`);
+    const body = el.querySelector('.sheet-body');
+    const close = () => el.remove();
+    el.querySelector('[data-act=back]').addEventListener('click', close);
+    el.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('[data-click]')) audio.click();
+    });
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('[data-act=retry]')) this.fillBoard(body);
+    });
+    this.overlay(el);
+    this.fillBoard(body);
+  }
+
+  async fillBoard(body) {
+    body.innerHTML = '<p class="muted">Loading the savanna board…</p>';
+    try {
+      const { top } = await fetchBoard();
+      if (!body.isConnected) return;
+      const youName = (this.postedEntry?.name || save.name || '').trim();
+      body.innerHTML = top?.length
+        ? `<p class="muted" style="margin:0 4px">Fastest runners on the Serengeti, ranked by score.</p>${renderRows(top, { youId: this.boardYouId, youName })}`
+        : '<div class="panel lb-empty-card"><div class="e">🌱</div><p>No scores yet. Finish a run and put your name on the board.</p></div>';
+    } catch (err) {
+      if (!body.isConnected) return;
+      body.innerHTML = `
+        <div class="panel lb-empty-card">
+          <div class="e">🌫️</div>
+          <p>${esc(err.message || 'Could not load the board')}</p>
+          <button class="btn" data-act="retry" data-click style="margin-top:14px">Try again</button>
+        </div>`;
+    }
   }
 
   missionSetComplete() {
@@ -787,35 +889,6 @@ export class UI {
         this.title();
       }
     });
-  }
-
-  async leaderboard(period = 'week') {
-    const el = this.sheet('Leaderboard', `
-      <div class="tabs">
-        <button class="tab ${period === 'week' ? 'on' : ''}" data-period="week">This week</button>
-        <button class="tab ${period === 'all' ? 'on' : ''}" data-period="all">All time</button>
-      </div>
-      <div class="board"><div class="muted board-empty">Loading…</div></div>`);
-    el.addEventListener('click', (e) => {
-      const t = e.target.closest('[data-period]');
-      if (t && t.dataset.period !== period) this.leaderboard(t.dataset.period);
-    });
-    const { status, entries } = await fetchBoard(period);
-    const board = el.querySelector('.board');
-    if (!board) return;
-    if (status !== 'ok' || !entries.length) {
-      const msg = status === 'soon' ? '🏗️ The global leaderboard is coming soon!' : status === 'ok' ? '🌅 No runs yet this week — be the first!' : '📡 Can\'t reach the leaderboard right now.';
-      board.innerHTML = `<div class="board-empty">${msg}</div>`;
-      return;
-    }
-    const me = (save.name || '').toLowerCase();
-    const medal = ['🥇', '🥈', '🥉'];
-    board.innerHTML = entries.map((r, i) => `
-      <div class="board-row ${r.name.toLowerCase() === me ? 'me' : ''}" style="animation-delay:${Math.min(i, 12) * 0.03}s">
-        <span class="rank">${medal[i] ?? i + 1}</span>
-        <span class="who">${RUNNERS.find((x) => x.id === r.runner)?.emoji ?? '🏃🏾'} ${esc(r.name)}</span>
-        <span class="pts">${fmt(r.score)}<small>${fmt(r.distance)}m</small></span>
-      </div>`).join('');
   }
 
   runners() {

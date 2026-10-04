@@ -1,10 +1,12 @@
 import { defineConfig } from 'vite';
+import { leaderboardPlugin } from './server/dev-api.js';
 
 export default defineConfig({
-  // `static/` holds the PWA files; the legacy `public/` folder is intentionally not shipped.
+  // PWA manifest, service worker, icons, and fonts live in static/.
   publicDir: 'static',
-  // inline config stops Vite from loading the legacy tailwind postcss.config.js
-  css: { postcss: {} },
+  plugins: [leaderboardPlugin()],
+  // vitest covers tests/; the leaderboard server keeps its own node:test suite
+  test: { include: ['tests/**/*.test.js'] },
   build: {
     target: 'es2020',
     chunkSizeWarningLimit: 900,

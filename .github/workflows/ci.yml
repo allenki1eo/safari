@@ -15,6 +15,9 @@ jobs:
           sparse-checkout: |
             app
             api
+            server
+            migrations
+            scripts
             static
             tests
             index.html
