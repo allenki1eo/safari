@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { G, mat, basic, mesh, taper, blobShadow, bakeRigid } from './materials.js';
-import { quad, spots, makeTermiteMound } from './models.js';
+import { Animals, quad, spots, makeTermiteMound } from './models.js';
 
 /* Low-poly art for the journey beyond the Serengeti. */
 
@@ -293,29 +293,8 @@ export function makeFlowers(scale = 1) {
 
 /* ============================================================= fauna */
 export const RegionAnimals = {
-  buffalo() {
-    return quad({
-      color: 0x2f2a27, belly: 0x3a3430, legColor: 0x2a2522,
-      bodyLen: 1.9, bodyH: 1.15, bodyW: 0.95, legLen: 0.75, legT: 0.17,
-      neckLen: 0.35, neckW: 0.45, neckAngle: -1.15, neckY: 0.15,
-      headSize: 0.72, headTilt: 1.45, muzzle: 0x1f1b19, earColor: 0x2a2522,
-      tailLen: 0.6, tailTuft: 0x111111, stride: 0.72, gait: 10, hoof: 0x151210,
-      extra(p) {
-        const horn = mat(0x4a443e);
-        p.head.add(mesh(G.ico1, horn, 0.34, 0.1, 0.18, 0, 0.32, 0.05));
-        for (const x of [-1, 1]) {
-          const h = mesh(G.cone, horn, 0.09, 0.62, 0.09, x * 0.48, 0.25, 0.05);
-          h.rotation.z = -x * 2.1;
-          p.head.add(h);
-          const t = mesh(G.cone, horn, 0.06, 0.3, 0.06, x * 0.72, 0.42, 0.05);
-          t.rotation.z = -x * 0.3;
-          p.head.add(t);
-        }
-        p.head.add(mesh(G.sphere, basic(0xff4a2a), 0.05, 0.04, 0.04, -0.3, 0.1, -0.34));
-        p.head.add(mesh(G.sphere, basic(0xff4a2a), 0.05, 0.04, 0.04, 0.3, 0.1, -0.34));
-      },
-    });
-  },
+  buffalo: () => Animals.buffalo(),
+
 
   flamingo() {
     const g = new Group();

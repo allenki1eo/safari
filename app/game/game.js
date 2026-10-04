@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { curve, bend, bakeRigid, finishProp, time as timeU } from './materials.js';
 import { Look, detectQuality } from './look.js';
-import { makeRunner, Animals, makeEagle, makeHornbill, makeTruck, makeRamp, makeTotem } from './models.js';
+import { Animals, makeEagle, makeHornbill, makeTruck, makeRamp, makeTotem } from './models.js';
+import { makeRunner } from './people.js';
 import {
   RegionAnimals, makeLogStyled, makeGateStyled, makeBoulderStyled, makeMoundStyled, makeCart, makeRockfall,
 } from './regionModels.js';
@@ -121,7 +122,7 @@ export class Game {
 
   buildAllies() {
     this.allyModels = {
-      tembo: Animals.elephant(),
+      tembo: Animals.elephant({ saddle: true }),
       tai: makeEagle(),
       duma: Animals.cheetah(),
       twiga: Animals.giraffe(),
@@ -741,6 +742,7 @@ export class Game {
       p.laneT = 9;
     }
     this.shake = 0.35;
+    this.runner.hit?.();
     audio.bump();
     this.haptic(40);
     if (this.chaseT > 0 && this.stumbleT > 0 && !edge) {
