@@ -72,6 +72,3 @@ npm run build    # outputs dist/
 
 The repo includes `vercel.json` (Vite framework, `dist` output, long-lived caching for hashed assets).
 Import the repository in Vercel, or run `npx vercel --prod`. No environment variables are needed.
-
-> The `src/` and `public/` folders hold the previous React prototype and its ~580 MB of unused
-> assets. The new game doesn't use them (`publicDir` is `static/`), so they can be deleted.
