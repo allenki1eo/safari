@@ -9,7 +9,7 @@ import {
 import { World, Particles, LANE_W } from './world.js';
 import { audio } from './audio.js';
 import { makeChunk, KINDS, TRUCK_LEN, JUMP_V, GRAVITY } from './patterns.js';
-import { RUNNERS, ALLIES, ALLY_IDS, TUTORIAL, SHOUTS } from '../data/content.js';
+import { RUNNERS, ALLIES, ALLY_IDS, TUTORIAL, SHOUTS, outfitId } from '../data/content.js';
 import { REGIONS, regionIndexAt, regionAt } from '../data/regions.js';
 import { save, persist, multiplier } from '../data/save.js';
 import {
@@ -113,11 +113,13 @@ export class Game {
   /* -------------------------------------------------------- characters */
   setRunner(id) {
     const def = RUNNERS.find((r) => r.id === id) ?? RUNNERS[0];
+    const outfit = outfitId(save.outfit);
     if (this.runner) this.scene.remove(this.runner.root);
-    this.runner = makeRunner(def);
+    this.runner = makeRunner(def, outfit);
     castShadows(this.runner.root);
     this.scene.add(this.runner.root);
     this.runnerId = def.id;
+    this.outfitId = outfit;
   }
 
   buildAllies() {
@@ -794,10 +796,11 @@ export class Game {
   }
 
   ensureGhost(runnerId) {
-    if (this.ghost && this.ghostRunnerId === runnerId) return;
+    const outfit = outfitId(save.outfit);
+    if (this.ghost && this.ghostRunnerId === runnerId && this.ghostOutfit === outfit) return;
     if (this.ghost) this.scene.remove(this.ghost.root);
     const def = RUNNERS.find((r) => r.id === runnerId) ?? RUNNERS[0];
-    const ghost = makeRunner(def);
+    const ghost = makeRunner(def, outfit);
     ghost.root.traverse((node) => {
       if (!node.isMesh) return;
       const material = node.material.clone();
@@ -812,6 +815,7 @@ export class Game {
     this.scene.add(ghost.root);
     this.ghost = ghost;
     this.ghostRunnerId = def.id;
+    this.ghostOutfit = outfit;
   }
 
   updateGhost(dt) {
@@ -1227,8 +1231,9 @@ export class Game {
       tl.set(-1.0, 1.75, -8);
       k = 2;
     } else if (this.camMode === 'select') {
-      tp.set(0.5, 1.45, -4.6);
-      tl.set(0, 1.25, 0);
+      // the outfit card sits on the bottom of the phone, so frame the face and chest above it
+      tp.set(0.2, 1.15, -2.55);
+      tl.set(0, 1.48, 0);
       k = 4;
     } else {
       const fly = this.powers.tai ? Math.min(1, p.y / 7.5) : 0;
@@ -1255,7 +1260,7 @@ export class Game {
       cam.position.y += rand(-s, s);
     }
     cam.lookAt(this.camLook);
-    const fovTarget = this.baseFov + (this.camMode === 'run' && this.state === 'running' ? Math.min(8, (this.speed - 15) * 0.3) + (this.powers.duma ? 8 : 0) : this.camMode === 'select' ? -8 : 0);
+    const fovTarget = this.baseFov + (this.camMode === 'run' && this.state === 'running' ? Math.min(8, (this.speed - 15) * 0.3) + (this.powers.duma ? 8 : 0) : 0);
     if (Math.abs(cam.fov - fovTarget) > 0.05) {
       cam.fov = damp(cam.fov, fovTarget, 3, dt);
       cam.updateProjectionMatrix();

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import {
-  Animator, PAT, SkinBuilder, TAU, box, cone, ellipsoid, limb, ramp, sampleClip, tube,
+  Animator, PAT, SkinBuilder, TAU, box, cone, ellipsoid, limb, ramp, rigMaterial, sampleClip, tube,
 } from './rigkit.js';
 
 /**
@@ -62,8 +62,14 @@ function quadSkeleton(d) {
     for (const front of [true, false]) {
       const id = `${front ? 'f' : 'h'}${side}`;
       const top = new THREE.Vector3(sx * d.w * 0.3, (front ? yC : yP) - d.girth * 0.12, front ? zC - 0.02 : zP + 0.02);
-      const knee = new THREE.Vector3(top.x, top.y * 0.52, top.z + (front ? 0.02 : -0.05));
-      const fet = new THREE.Vector3(top.x, Math.max(0.12, d.legR * 1.4), top.z + (front ? 0 : 0.02));
+      // real joint angles: the front leg's elbow and knee, the hind leg's stifle forward and hock back
+      // front carpus angles forward, hind stifle forward and hock back
+      const knee = front
+        ? new THREE.Vector3(top.x, top.y * 0.58, top.z - 0.045)
+        : new THREE.Vector3(top.x, top.y * 0.62, top.z - L * 0.08);
+      const fet = front
+        ? new THREE.Vector3(top.x, Math.max(0.14, top.y * 0.28), top.z + 0.02)
+        : new THREE.Vector3(top.x, Math.max(0.16, top.y * 0.34), top.z + L * 0.085);
       spec.push([`${id}0`, front ? 'chest' : 'pelvis', top.toArray()]);
       spec.push([`${id}1`, `${id}0`, knee.toArray()]);
       spec.push([`${id}2`, `${id}1`, fet.toArray()]);
@@ -79,7 +85,8 @@ function buildQuad(d) {
   d.extraBones?.(k.spec, k);
   const b = new SkinBuilder(k.spec);
   const col = d.color;
-  const coat = d.coat; // pattern on the body
+  const shade = new THREE.Color(col).multiplyScalar(0.72).getHex();
+  const coat = d.coat ?? { type: PAT.hide, color: shade, scale: 5.5 };
   const L = d.len;
 
   // torso: rings from the chest (front) to the haunches (back), blended over three bones
@@ -96,7 +103,7 @@ function buildQuad(d) {
       c: col, pat: coat,
       w: [['chest', wC], ['spine', Math.max(0.001, 1 - wC - wP)], ['pelvis', wP]],
     };
-  }), 12, { up: [0, 1, 0] }), {});
+  }), 16, { up: [0, 1, 0] }), {});
   if (d.underside) {
     b.add(tube(prof.slice(1, -1).map(([u, r]) => {
       const z = zF + (zB - zF) * u;
@@ -127,13 +134,13 @@ function buildQuad(d) {
       { p: [top.x * 0.85, top.y + d.girth * 0.18, top.z], rx: r * thick, ry: r * thick * 1.3, c: col, pat: coat, w: `${id}0` },
       { p: top.toArray(), rx: r * thick * 0.9, ry: r * thick * 1.15, c: col, pat: coat, w: `${id}0` },
       { p: [knee.x, (top.y + knee.y) / 2, (top.z + knee.z) / 2], rx: r * 1.15, ry: r * 1.25, c: legCol, pat: legPat, w: `${id}0` },
-      { p: knee.toArray(), rx: r * 0.95, ry: r, c: legCol, pat: legPat, w: [[`${id}0`, 0.5], [`${id}1`, 0.5]] },
+      { p: knee.toArray(), rx: r * 1.22, ry: r * 1.05, c: legCol, pat: legPat, w: [[`${id}0`, 0.5], [`${id}1`, 0.5]] },
       { p: [fet.x, (knee.y + fet.y) / 2, (knee.z + fet.z) / 2], rx: r * 0.72, ry: r * 0.75, c: legCol, pat: legPat, w: `${id}1` },
       { p: fet.toArray(), rx: r * 0.75, ry: r * 0.8, c: legCol, pat: legPat, w: [[`${id}1`, 0.5], [`${id}2`, 0.5]] },
       { p: [fet.x, d.paws ? 0.05 : 0.07, fet.z - (d.paws ? 0.04 : 0)], rx: r * (d.paws ? 1.05 : 0.82), ry: r * (d.paws ? 1.2 : 0.85), c: d.hoof ?? legCol, w: `${id}2` },
       { p: [fet.x, 0.0, fet.z - (d.paws ? 0.06 : 0)], rx: r * (d.paws ? 1.0 : 0.9), ry: r * (d.paws ? 1.25 : 0.9), c: d.hoof ?? legCol, w: `${id}2` },
     ];
-    b.add(tube(rings, 8, { up: [0, 0, -1] }), {});
+    b.add(tube(rings, 12, { up: [0, 0, -1] }), {});
   }
 
   // tail
@@ -145,11 +152,14 @@ function buildQuad(d) {
   b.add(tube(tRings, 6, { up: [0, 0, 1] }), {});
   if (d.tuft) {
     const end = k.t0.clone().addScaledVector(k.tdir, d.tailLen);
-    b.add(ellipsoid(end.toArray(), [d.tailR * 1.8, d.tuft, d.tailR * 1.8], [6, 5]), { color: d.tuftColor ?? 0x1a1410, bone: 'tail2' });
+    const tip = end.clone().addScaledVector(k.tdir, d.tuft * 0.5);
+    b.add(tube([
+      { p: end.toArray(), rx: d.tailR * 0.9 }, { p: end.clone().addScaledVector(k.tdir, d.tuft * 0.2).toArray(), rx: d.tailR * 1.35 }, { p: tip.toArray(), rx: d.tailR * 0.5 },
+    ].map((r) => ({ ...r, c: d.tuftColor ?? 0x1a1410, w: 'tail2' })), 6, { up: [0, 0, 1] }), {});
   }
 
   d.dress?.(b, k, d);
-  const m = b.build();
+  const m = b.build({ material: rigMaterial({ smooth: true, standard: true, roughness: 0.72 }) });
   return { mesh: m, builder: b, k };
 }
 
@@ -160,18 +170,32 @@ function head(b, k, d, { len, w, h, pitch, color, muzzle, muzzleLen = 0.4, nose,
   const centre = H.clone().addScaledVector(dir, len * 0.35);
   const rot = [-(Math.PI / 2 - pitch), 0, 0];
   // skull and face: an egg along the head direction, then a muzzle
-  b.add(ellipsoid(centre.toArray(), [w / 2, len * 0.42, h / 2], [10, 8], { rot }), { color, bone: 'head', pat: coat });
+  b.add(ellipsoid(centre.toArray(), [w / 2, len * 0.42, h / 2], [16, 12], { rot }), { color, bone: 'head', pat: coat });
   const mz = H.clone().addScaledVector(dir, len * (0.55 + muzzleLen * 0.3));
-  b.add(ellipsoid(mz.toArray(), [w * 0.36, len * muzzleLen * 0.55, h * 0.36], [8, 6], { rot }), { color: muzzle ?? color, bone: 'head' });
+  b.add(ellipsoid(mz.toArray(), [w * 0.36, len * muzzleLen * 0.55, h * 0.36], [12, 8], { rot }), { color: muzzle ?? color, bone: 'head' });
   if (nose) {
     const np = H.clone().addScaledVector(dir, len * (0.62 + muzzleLen * 0.55));
-    b.add(ellipsoid(np.toArray(), [w * 0.2, w * 0.12, w * 0.14], [6, 4]), { color: nose, bone: 'head' });
+    b.add(ellipsoid(np.toArray(), [w * 0.18, w * 0.11, w * 0.13], [8, 6]), { color: nose, bone: 'head' });
+    for (const sx of [-1, 1]) {
+      b.add(ellipsoid([np.x + sx * w * 0.08, np.y - w * 0.02, np.z - w * 0.04], [w * 0.035, w * 0.025, w * 0.03], [6, 4]), { color: 0x120c08, bone: 'head' });
+    }
   }
+  // a closed mouth under the muzzle, so the face isn't a smooth egg
+  const mouth = mz.clone().addScaledVector(dir, len * muzzleLen * 0.15);
+  mouth.y -= h * 0.08;
+  b.add(ellipsoid(mouth.toArray(), [w * 0.22, h * 0.035, w * 0.08], [8, 4]), { color: 0x2a1812, bone: 'head' });
   for (const sx of [-1, 1]) {
-    const e = centre.clone().addScaledVector(dir, -len * 0.08);
-    e.x += sx * w * 0.42;
-    e.y += h * 0.16;
-    b.add(ellipsoid(e.toArray(), [w * 0.07, w * 0.075, w * 0.07], [6, 5]), { color: glowEyes ? 0xffe14d : eyes, bone: 'head', glow: glowEyes ? 2 : 0 });
+    // proud of the skull, or the white sits inside the head and never draws
+    const e = centre.clone().addScaledVector(dir, len * 0.4);
+    e.x += sx * w * 0.3;
+    e.y += h * 0.18;
+    e.addScaledVector(dir, w * 0.12);
+    const p = e.toArray();
+    b.add(ellipsoid(p, [w * 0.09, w * 0.075, w * 0.055], [10, 8]), { color: 0xf4efe6, bone: 'head' });
+    const iris = e.clone().addScaledVector(dir, w * 0.05);
+    b.add(ellipsoid(iris.toArray(), [w * 0.045, w * 0.045, w * 0.03], [8, 6]), { color: glowEyes ? 0xffe14d : eyes, bone: 'head', glow: glowEyes ? 1.5 : 0 });
+    const pupil = e.clone().addScaledVector(dir, w * 0.08);
+    b.add(ellipsoid(pupil.toArray(), [w * 0.022, w * 0.022, w * 0.015], [6, 4]), { color: 0x0c0806, bone: 'head' });
   }
   return { centre, dir, mz };
 }
@@ -216,12 +240,12 @@ const SPECIES = {
   wildebeest: {
     len: 1.7, h: 1.45, w: 0.64, girth: 0.86, legR: 0.07, slope: 0.18, hump: 0.08,
     neckLen: 0.55, neckAngle: 0.55, neckSegs: 2, neckR0: 0.26, neckR1: 0.16, headW: 0.26, headH: 0.28,
-    tailLen: 0.7, tailR: 0.04, tuft: 0.28, tuftColor: 0x141210, color: 0x5d5852, legColor: 0x4a4540, hoof: 0x1a1816,
-    coat: { type: PAT.stripesZ, color: 0x45403b, scale: 9 },
+    tailLen: 0.7, tailR: 0.04, tuft: 0.28, tuftColor: 0x141210, color: 0xa09888, legColor: 0x7a7268, hoof: 0x2a2622,
+    coat: { type: PAT.stripesZ, color: 0x4a453e, scale: 9 },
     gait: 'gallop', walkAmp: 0.38, runAmp: 0.78, graze: true,
     dress(b, k, d) {
-      const hd = head(b, k, d, { len: 0.62, w: 0.26, h: 0.3, pitch: 1.25, color: 0x4f4a45, muzzle: 0x1f1c1a, muzzleLen: 0.48 });
-      ears(b, k, d, { w: 0.08, h: 0.16, color: 0x4f4a45, tilt: 0.9 });
+      const hd = head(b, k, d, { len: 0.62, w: 0.26, h: 0.3, pitch: 1.25, color: 0x8a8278, muzzle: 0x2a2420, muzzleLen: 0.48 });
+      ears(b, k, d, { w: 0.08, h: 0.16, color: 0x8a8278, tilt: 0.9 });
       // cow-like horns curving out and up
       for (const sx of [-1, 1]) {
         const base = k.headP.clone();
@@ -229,7 +253,7 @@ const SPECIES = {
         base.y += 0.08;
         b.add(tube([
           { p: base.toArray(), rx: 0.04 }, { p: [sx * 0.24, base.y + 0.02, base.z + 0.02], rx: 0.032 }, { p: [sx * 0.3, base.y + 0.16, base.z - 0.02], rx: 0.016 },
-        ].map((r) => ({ ...r, c: 0x2b2723, w: 'head' })), 6), {});
+        ].map((r) => ({ ...r, c: 0xc8bba6, w: 'head' })), 6), {});
       }
       // beard and mane
       for (let i = 0; i < 3; i++) {
@@ -244,21 +268,23 @@ const SPECIES = {
   buffalo: {
     len: 2.0, h: 1.55, w: 0.95, girth: 1.08, legR: 0.09, slope: 0.08, hump: 0.08,
     neckLen: 0.35, neckAngle: 0.25, neckSegs: 1, neckR0: 0.4, neckR1: 0.3, headW: 0.4, headH: 0.38,
-    tailLen: 0.7, tailR: 0.045, tuft: 0.22, color: 0x2f2926, legColor: 0x2a2522, hoof: 0x141110,
+    tailLen: 0.7, tailR: 0.045, tuft: 0.22, color: 0x8a6850, legColor: 0x6e5344, hoof: 0x3a2e26,
+    coat: { type: PAT.hide, color: 0xc4a07a, scale: 3.2 },
     gait: 'gallop', walkAmp: 0.32, runAmp: 0.62, graze: true,
     dress(b, k, d) {
-      head(b, k, d, { len: 0.6, w: 0.4, h: 0.42, pitch: 1.2, color: 0x2a2522, muzzle: 0x1a1614, muzzleLen: 0.42, glowEyes: false });
-      ears(b, k, d, { w: 0.14, h: 0.2, color: 0x2a2522, round: true, tilt: 1.4 });
+      head(b, k, d, { len: 0.6, w: 0.4, h: 0.42, pitch: 1.2, color: 0x7a5a48, muzzle: 0x8a6a54, muzzleLen: 0.42, nose: 0x2a1c16, glowEyes: false });
+      ears(b, k, d, { w: 0.14, h: 0.2, color: 0x7a5a48, round: true, tilt: 1.4 });
       // the boss: a heavy horn base, horns sweeping down then up
       const hp = k.headP;
-      b.add(ellipsoid([0, hp.y + 0.14, hp.z - 0.02], [0.24, 0.07, 0.14], [8, 5]), { color: 0x544c44, bone: 'head' });
+      const horn = 0xd4c4a4;
+      b.add(ellipsoid([0, hp.y + 0.14, hp.z - 0.02], [0.24, 0.07, 0.14], [8, 5]), { color: horn, bone: 'head' });
       for (const sx of [-1, 1]) {
         b.add(tube([
           { p: [sx * 0.15, hp.y + 0.14, hp.z - 0.02], rx: 0.075 },
           { p: [sx * 0.38, hp.y + 0.02, hp.z + 0.02], rx: 0.055 },
           { p: [sx * 0.5, hp.y + 0.1, hp.z - 0.02], rx: 0.04 },
           { p: [sx * 0.5, hp.y + 0.3, hp.z - 0.08], rx: 0.012 },
-        ].map((r) => ({ ...r, c: 0x544c44, w: 'head' })), 6), {});
+        ].map((r) => ({ ...r, c: horn, w: 'head' })), 6), {});
       }
     },
   },
@@ -303,6 +329,7 @@ const SPECIES = {
     neckLen: 0.32, neckAngle: 0.5, neckSegs: 1, neckR0: 0.28, neckR1: 0.24, headW: 0.42, headH: 0.42,
     tailLen: 0.95, tailR: 0.04, tailAngle: 1.05, tuft: 0.13, tuftColor: 0x5a2e10,
     color: 0xcf9446, legColor: 0xd29a50, hoof: 0xc58a3e, underside: 0xe7c08a,
+    coat: { type: PAT.hide, color: 0x9a6830, scale: 6.5 },
     gait: 'bound', walkAmp: 0.42, runAmp: 0.8,
     dress(b, k, d) {
       head(b, k, d, { len: 0.5, w: 0.42, h: 0.42, pitch: 0.5, color: 0xcf9446, muzzle: 0xe8c48e, muzzleLen: 0.35, nose: 0x5a2e22 });
@@ -371,6 +398,8 @@ const SPECIES = {
     neckLen: 0.35, neckAngle: 0.3, neckSegs: 1, neckR0: 0.62, neckR1: 0.55, headW: 1.0, headH: 1.0,
     tailLen: 0.8, tailR: 0.05, tuft: 0.16, tuftColor: 0x2a2522,
     color: 0x8e8a87, legColor: 0x85817d, hoof: 0xd9d1c5,
+    coat: { type: PAT.hide, color: 0x6a6662, scale: 2.8 },
+    legCoat: { type: PAT.hide, color: 0x5c5854, scale: 3.4 },
     gait: 'amble', walkAmp: 0.22, runAmp: 0.34,
     extraBones(spec, k) {
       // the trunk is a chain of its own
@@ -420,6 +449,7 @@ const SPECIES = {
     neckLen: 0.3, neckAngle: 0.1, neckSegs: 1, neckR0: 0.45, neckR1: 0.38, headW: 0.5, headH: 0.5,
     tailLen: 0.4, tailR: 0.04, tuft: 0.08, tuftColor: 0x333333,
     color: 0x86807a, legColor: 0x7e7872, hoof: 0x55504a,
+    coat: { type: PAT.hide, color: 0x5a554e, scale: 2.4 },
     gait: 'gallop', walkAmp: 0.28, runAmp: 0.55,
     dress(b, k, d) {
       const hd = head(b, k, d, { len: 0.85, w: 0.5, h: 0.48, pitch: 0.75, color: 0x86807a, muzzle: 0x7d7771, muzzleLen: 0.4, eyes: 0x1a1410 });
@@ -427,6 +457,32 @@ const SPECIES = {
       const tip = hd.mz.clone();
       b.add(cone([0, tip.y + 0.32, tip.z - 0.02], 0.13, 0.62, 6, [-0.35, 0, 0]), { color: 0xe6dccb, bone: 'head' });
       b.add(cone([0, tip.y + 0.3, tip.z + 0.3], 0.09, 0.34, 6, [-0.2, 0, 0]), { color: 0xe6dccb, bone: 'head' });
+    },
+  },
+
+  hippo: {
+    len: 2.15, h: 1.28, w: 1.28, girth: 1.18, legR: 0.17, slope: 0.05, thighF: 1.35, thighH: 1.45,
+    neckLen: 0.2, neckAngle: 0.18, neckSegs: 1, neckR0: 0.42, neckR1: 0.5, headW: 0.9, headH: 0.55,
+    tailLen: 0.28, tailR: 0.07, tuft: 0.08, tuftColor: 0x5a4850,
+    color: 0x8a7380, legColor: 0x7a6570, hoof: 0x645058,
+    coat: { type: PAT.hide, color: 0x5c4a52, scale: 3.2 },
+    gait: 'amble', walkAmp: 0.16, runAmp: 0.26, graze: false,
+    profile: [[0, 0.72], [0.14, 1], [0.38, 1.08], [0.62, 1.02], [0.84, 0.88], [1, 0.42]],
+    dress(b, k, d) {
+      const hp = k.headP;
+      const hide = { type: PAT.hide, color: 0x5c4a52, scale: 4 };
+      // a barrel head and a broad snout; the nostrils sit on top, the way a hippo breathes
+      b.add(ellipsoid([0, hp.y + 0.04, hp.z - 0.12], [0.5, 0.4, 0.44], [16, 12]), { color: 0x8a7380, bone: 'head', pat: hide });
+      b.add(ellipsoid([0, hp.y - 0.06, hp.z - 0.52], [0.44, 0.3, 0.4], [14, 10]), { color: 0x9a8490, bone: 'head', pat: hide });
+      b.add(ellipsoid([0, hp.y - 0.2, hp.z - 0.7], [0.3, 0.035, 0.1], [10, 4]), { color: 0x4a3038, bone: 'head' });
+      for (const sx of [-1, 1]) {
+        b.add(ellipsoid([sx * 0.24, hp.y + 0.24, hp.z - 0.32], [0.075, 0.055, 0.05], [8, 6]), { color: 0xf4efe6, bone: 'head' });
+        b.add(ellipsoid([sx * 0.24, hp.y + 0.24, hp.z - 0.36], [0.038, 0.038, 0.02], [6, 5]), { color: 0x3a2418, bone: 'head' });
+        b.add(ellipsoid([sx * 0.24, hp.y + 0.24, hp.z - 0.38], [0.016, 0.016, 0.01], [5, 4]), { color: 0x0c0806, bone: 'head' });
+        b.add(ellipsoid([sx * 0.1, hp.y + 0.16, hp.z - 0.86], [0.055, 0.04, 0.045], [8, 5]), { color: 0x241612, bone: 'head' });
+        b.add(ellipsoid([sx * 0.46, hp.y + 0.28, hp.z - 0.02], [0.07, 0.11, 0.045], [8, 6], { rot: [0.1, 0, sx * 0.5] }), { color: 0x7a6570, bone: sx < 0 ? 'earL' : 'earR' });
+      }
+      void d;
     },
   },
 };
