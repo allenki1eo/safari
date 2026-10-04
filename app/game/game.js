@@ -1,17 +1,17 @@
 import * as THREE from 'three';
 import { curve, bend, bakeRigid, finishProp, time as timeU } from './materials.js';
 import { Look, detectQuality } from './look.js';
-import { Animals, makeEagle, makeHornbill, makeTruck, makeRamp, makeTotem, makePrizeBox, makeLetterToken } from './models.js';
+import { Animals, makeEagle, makeHornbill, makeTruck, makeRamp, makeTotem, makePrizeBox, makeLetterToken, makeBoostGem } from './models.js';
 import { makeRunner } from './people.js';
 import { makeKidRunner, preloadKids } from './kids.js';
 import { preloadWildlife } from './wildlife.js';
 import {
-  RegionAnimals, makeLogStyled, makeGateStyled, makeBoulderStyled, makeMoundStyled, makeCart, makeRockfall, makeBeachedCanoe,
+  RegionAnimals, makeLogStyled, makeGateStyled, makeBoulderStyled, makeMoundStyled, makeCart, makeRockfall, makeBeachedCanoe, makeScooter,
 } from './regionModels.js';
 import { World, Particles, LANE_W } from './world.js';
 import { audio } from './audio.js';
 import { makeChunk, KINDS, TRUCK_LEN, JUMP_V, GRAVITY } from './patterns.js';
-import { RUNNERS, ALLIES, ALLY_IDS, TUTORIAL, SHOUTS, outfitId, HUNT_WORDS, HUNT_PER_LETTER } from '../data/content.js';
+import { RUNNERS, ALLIES, ALLY_IDS, TUTORIAL, SHOUTS, outfitId, HUNT_WORDS, HUNT_PER_LETTER, BOOSTS, BOOST_IDS } from '../data/content.js';
 import { REGIONS, regionIndexAt, regionAt } from '../data/regions.js';
 import { save, persist, multiplier } from '../data/save.js';
 import {
@@ -32,12 +32,13 @@ const PRIZES = [
   { w: 13, id: 'ally' },
   { w: 12, id: 'double' },
   { w: 8, id: 'score', n: 2500 },
+  { w: 10, id: 'boost' },
 ];
 const PRIZE_WEIGHT = PRIZES.reduce((s, p) => s + p.w, 0);
 const JUMP_BUFFER = 0.16; // a jump pressed this long before landing still happens
 const COYOTE = 0.1; // and one pressed this long after running off a roof
 const COMBO_STEPS = [[10, 50], [25, 150], [50, 400], [100, 1000], [200, 2500]];
-const WARN_ICONS = { rhino: '🦏', buffalo: '🐃', wildebeest: '🦬', rockfall: '🪨', crossing: '🐘', truck: '🚚' };
+const WARN_ICONS = { rhino: '🦏', buffalo: '🐃', wildebeest: '🦬', rockfall: '🪨', coconut: '🥥', crossing: '🐘', truck: '🚚', scooter: '🛵', lion: '🦁' };
 const rand = (a, b) => a + Math.random() * (b - a);
 const randi = (n) => (Math.random() * n) | 0;
 const pick = (a) => a[randi(a.length)];
@@ -71,6 +72,7 @@ export class Game {
     this.obstacles = [];
     this.coins = [];
     this.totems = [];
+    this.boosts = {};
     preloadKids(save.runner);
     preloadWildlife();
     this.buildCoins();
@@ -214,6 +216,7 @@ export class Game {
     this.totems = [];
     this.boxes = [];
     this.seedBoost = 0;
+    this.endBoosts();
     this.jumpBuffer = 0;
     this.coyote = 0;
     this.coins = [];
@@ -223,7 +226,7 @@ export class Game {
     this.seeds = 0;
     this.combo = 0;
     this.comboT = 0;
-    this.stats = { seeds: 0, distance: 0, jumps: 0, slides: 0, allies: 0, score: 0, roofs: 0, smash: 0, nearMiss: 0, regions: 0, bestCombo: 0, boxes: 0, words: 0 };
+    this.stats = { seeds: 0, distance: 0, jumps: 0, slides: 0, allies: 0, score: 0, roofs: 0, smash: 0, nearMiss: 0, regions: 0, bestCombo: 0, boxes: 0, words: 0, boosts: 0 };
     this.shield = 0;
     this.lap = 0;
     this.runTime = 0;
@@ -451,13 +454,13 @@ export class Game {
 
     // ---- speed & distance
     const base = 15 + 21 * (1 - Math.exp(-this.D / 4200));
-    const target = base * (pw.duma ? 1.75 : 1) * (pw.tai ? 1.25 : 1);
+    const target = base * (pw.duma ? 1.75 : 1) * (pw.tai ? 1.25 : 1) * (this.boosts.slow ? 0.7 : 1);
     this.speed = damp(this.speed, target, 3, dt);
     const step = this.speed * dt;
     this.D += step;
     this.runTime += dt;
     this.stats.distance = Math.floor(this.D);
-    const mult = multiplier() * (pw.simba ? 2 : 1);
+    const mult = multiplier() * (pw.simba ? 2 : 1) * (this.boosts.score ? 2 : 1);
     this.score += step * mult;
     this.stats.score = Math.floor(this.score);
 
@@ -468,6 +471,12 @@ export class Game {
     }
     if (p.invuln > 0) p.invuln -= dt;
     if (this.seedBoost > 0) this.seedBoost -= dt;
+    for (const k of Object.keys(this.boosts)) {
+      if ((this.boosts[k] -= dt) <= 0) {
+        delete this.boosts[k];
+        this.emit('boost', { id: k, on: false });
+      }
+    }
     if (this.chaseT > 0) this.chaseT -= dt;
     if (this.comboT > 0) this.comboT -= dt;
     else if (this.combo) {
@@ -572,6 +581,8 @@ export class Game {
       case 'cart': m = makeCart(); break;
       case 'canoe': m = makeBeachedCanoe(); break;
       case 'rockfall': m = makeRockfall(style.rock); break;
+      case 'coconut': m = makeRockfall('coconut'); break;
+      case 'scooter': m = makeScooter(); break;
       case 'ramp': m = makeRamp(k.len, k.ramp); break;
       case 'truck': {
         const t = makeTruck(TRUCK_LEN, !!opts.moving);
@@ -593,7 +604,7 @@ export class Game {
       }
     }
     if (anim) m = anim.root;
-    else if (kind !== 'rockfall' && kind !== 'water') finishProp(bakeRigid(m, true));
+    else if (!k.fall && kind !== 'water') finishProp(bakeRigid(m, true));
     castShadows(m);
     // animals in the lane face the runner (the models face down the track, -z), so chargers
     // run head first rather than backwards
@@ -608,9 +619,11 @@ export class Game {
     const o = {
       kind, lane, x, wz, len: k.len, y0: k.y0, y1: k.y1, top, ramp: k.ramp, mesh: m, anim,
       moving: opts.moving ?? 0, cross: opts.cross, dead: false, passed: false, zPrev: false,
-      warned: false, rockY: kind === 'rockfall' ? 18 : 0,
+      warned: false, rockY: k.fall ? 18 : 0,
     };
-    if (kind === 'rockfall') m.userData.rock.position.y = o.rockY;
+    if (k.fall) m.userData.rock.position.y = o.rockY;
+    // oncoming vehicles face the runner
+    if (kind === 'scooter') m.rotation.y = Math.PI;
     this.obstacles.push(o);
     return o;
   }
@@ -619,7 +632,7 @@ export class Game {
   updateHazard(o, dt) {
     const dz = o.wz - this.D;
     const closing = this.speed + (o.moving || 0);
-    if (!o.warned && (o.moving || o.kind === 'rockfall' || o.kind === 'crossing') && dz > 0 && dz / closing < 2.3) {
+    if (!o.warned && (o.moving || KINDS[o.kind].fall || o.kind === 'crossing') && dz > 0 && dz / closing < 2.3) {
       o.warned = true;
       const lane = o.kind === 'crossing' ? (o.cross.dir > 0 ? 0 : 2) : o.lane;
       this.emit('warn', { lane, icon: WARN_ICONS[o.kind] ?? '⚠️' });
@@ -627,7 +640,7 @@ export class Game {
     if (o.moving && dz > -4 && dz < 90 && Math.random() < dt * 22) {
       this.fx.emit(o.x + rand(-0.8, 0.8), 0.2, this.D - o.wz - o.len / 2, { vx: rand(-1, 1), vy: rand(0.6, 1.6), vz: rand(-1, 1), life: rand(0.6, 1.1), size: rand(0.25, 0.5), color: this.world.dustColor(), grow: 1.2 });
     }
-    if (o.kind === 'rockfall') {
+    if (KINDS[o.kind].fall) {
       const rock = o.mesh.userData.rock;
       const ring = o.mesh.userData.warn;
       if (dz < this.speed * 1.05 && o.rockY > 0) {
@@ -635,7 +648,7 @@ export class Game {
         o.rockY = Math.max(0, o.rockY + o.rockVy * dt);
         if (o.rockY === 0) {
           this.shake = Math.max(this.shake, 0.35);
-          this.fx.debris(o.x, 0.3, this.D - o.wz, [0xf4f7fb, 0x8c8e96], 10);
+          this.fx.debris(o.x, 0.3, this.D - o.wz, o.kind === 'coconut' ? [0x6b4a2a, 0x9bbf5a] : [0xf4f7fb, 0x8c8e96], 10);
           audio.land();
         }
       }
@@ -681,7 +694,7 @@ export class Game {
         continue;
       }
       if (o.flying || (o.kind === 'ramp' && pw.tai)) continue;
-      if (o.kind === 'rockfall' && o.rockY > 2) {
+      if (KINDS[o.kind].fall && o.rockY > 2) {
         o.zPrev = false;
         continue;
       }
@@ -1017,6 +1030,16 @@ export class Game {
       return;
     }
     if (wz <= this.nextBoxAt) return; // the slot was asked for a letter that can't sit here
+    // about a third of the slots carry a powerup gem instead of a box
+    if (Math.random() < 0.35) {
+      const id = BOOST_IDS[Math.floor(Math.random() * BOOST_IDS.length)];
+      const g = makeBoostGem(BOOSTS[id].emoji, BOOSTS[id].color);
+      g.position.set(LANES[lane], y, 0);
+      this.scene.add(g);
+      this.boxes.push({ lane, wz, y, mesh: g, boost: id });
+      this.nextBoxAt = wz + 220 + rngAt(this.day, 6, wz)() * 180;
+      return;
+    }
     const m = makePrizeBox();
     m.position.set(LANES[lane], y, 0);
     this.scene.add(m);
@@ -1054,6 +1077,11 @@ export class Game {
         this.activate(id);
         break;
       }
+      case 'boost': {
+        const id = BOOST_IDS[Math.floor(Math.random() * BOOST_IDS.length)];
+        this.collectBoost(id, b);
+        return;
+      }
       case 'double':
         this.seedBoost = 15;
         out = { emoji: '✨', title: 'Double seeds!', sub: 'Every seed counts twice for 15s' };
@@ -1069,6 +1097,44 @@ export class Game {
     this.fx.sparkle(LANES[b.lane], b.y + 1.2, z, 0xffd34d, 18);
     this.fx.debris(LANES[b.lane], b.y + 1.1, z, [0xc0392b, 0xf4d35e, 0x1b998b], 14);
     this.emit('prize', out);
+  }
+
+  /** Picks up a powerup: a timed boost, or the Kimbunga whirlwind that clears the trail. */
+  collectBoost(id, b) {
+    const def = BOOSTS[id];
+    this.stats.boosts++;
+    audio.powerup();
+    this.haptic(30);
+    const z = this.D - b.wz;
+    this.fx.sparkle(LANES[b.lane], b.y + 1.2, z, new THREE.Color(def.color).getHex(), 22);
+    if (id === 'wind') this.kimbunga();
+    else {
+      this.boosts[id] = def.dur;
+      this.emit('boost', { id, on: true });
+    }
+    this.emit('prize', { emoji: def.emoji, title: def.name, sub: def.line });
+  }
+
+  /** Kimbunga: a whirlwind runs ahead and flings everything in the next stretch aside. */
+  kimbunga() {
+    let n = 0;
+    for (const o of this.obstacles) {
+      const dz = o.wz - this.D;
+      if (o.flying || o.dead || dz < -1 || dz > 75 || o.kind === 'ramp' || o.kind === 'water') continue;
+      this.smash(o);
+      n++;
+    }
+    audio.whoosh();
+    this.shake = Math.max(this.shake, 0.6);
+    for (let i = 0; i < 40; i++) {
+      this.fx.emit(rand(-5, 5), rand(0.3, 3.5), rand(-60, -4), { vx: rand(-6, 6), vy: rand(2, 6), vz: rand(10, 30), life: rand(0.5, 1.1), size: rand(0.2, 0.5), color: this.world.dustColor(), grow: 1.4 });
+    }
+    return n;
+  }
+
+  endBoosts() {
+    for (const k of Object.keys(this.boosts ?? {})) this.emit('boost', { id: k, on: false });
+    this.boosts = {};
   }
 
   /** The word being hunted: today's chain, after the words already spelled. */
@@ -1166,18 +1232,19 @@ export class Game {
         this.scene.remove(b.mesh);
         this.boxes.splice(i, 1);
         if (b.letter) this.collectLetter(b);
+        else if (b.boost) this.collectBoost(b.boost, b);
         else this.openBox(b);
       }
     }
   }
 
   collectSeed(c) {
-    this.seeds += this.seedBoost > 0 ? 2 : 1;
+    this.seeds += (this.seedBoost > 0 ? 2 : 1) * (this.boosts.gold ? 3 : 1);
     this.stats.seeds = this.seeds;
     this.combo++;
     this.comboT = 0.9;
     this.stats.bestCombo = Math.max(this.stats.bestCombo, this.combo);
-    this.score += 5 * multiplier() * (this.powers.simba ? 2 : 1);
+    this.score += 5 * multiplier() * (this.powers.simba ? 2 : 1) * (this.boosts.score ? 2 : 1);
     const step = COMBO_STEPS.find(([n]) => n === this.combo);
     if (step) {
       this.score += step[1] * multiplier();

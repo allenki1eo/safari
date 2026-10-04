@@ -41,7 +41,7 @@ Every run is a chase across East Africa. Each region has its own ground, plants,
 | 🇹🇿 | Mount Kilimanjaro | Rockfalls · snow, giant groundsels |
 | 🇹🇿 | Ruaha | Charging lions · painted wild dogs at dusk by the Great Ruaha River |
 | 🇹🇿 | Selous · Nyerere | Napping crocodiles · the Rufiji River |
-| 🇹🇿 | Zanzibar | Spice-market carts and fishing nets · dhows on turquoise water |
+| 🇹🇿 | Zanzibar | Falling coconuts, boda-boda scooters, spice-market carts and fishing nets · no big game on the beach |
 | 🇰🇪 | Maasai Mara | Wildebeest stampedes |
 | 🇰🇪 | Amboseli | Elephants crossing beneath Kilimanjaro |
 | 🇺🇬 | Bwindi Forest | Mountain gorillas in misty rainforest |
@@ -57,6 +57,8 @@ After Bwindi the run loops into a *legend lap*. Regions you reach unlock on the 
 - **Challenge sharing**: the game renders a score card image and a link (`/?c=<score>&n=<name>`) that greets your friend with *"Allen challenges you to beat 12,000!"*
 - **Global leaderboard**: a finished run is saved to the board. A name already stored on the device is used immediately; otherwise the game-over card asks for one and saves when you confirm. Run again and Home will not drop that score. Rank is decided on the server. Open the board from the trophy on the title screen, or from the game-over card.
 - **Ngao shield charms**: buy them with seeds and tap 🛡️ mid-run to survive one crash.
+- **Powerups** in glowing gems on the trail (and sometimes in a Zawadi box): 🌟 Dhahabu golden seeds worth 3, ⚡ Pointi ×2 double points, 🐢 Pole Pole slows the chase, and 🌪️ Kimbunga, a whirlwind that sweeps the next stretch clear.
+- **Score cards**: the WhatsApp button shares an image of your run with the challenge link (the phone's share sheet where it can share files; a WhatsApp text link elsewhere).
 - **Seed combos, slow-motion close calls**, and music that builds as you speed up.
 - **Installable PWA** that works offline. An Install button on the title screen (and in Settings) uses the browser's own prompt where there is one, and shows step-by-step help on iPhone and in in-app browsers like WhatsApp (`app/ui/install.js`). The score API is network-only; the rest of the game still plays offline.
 

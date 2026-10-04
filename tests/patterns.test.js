@@ -133,3 +133,17 @@ describe('obstacle patterns', () => {
     expect(i).toBe(5);
   });
 });
+
+describe('the Zanzibar coast', () => {
+  it('has no big game, but coconuts, scooters and the market', () => {
+    const region = REGIONS.find((r) => r.id === 'zanzibar');
+    const rng = mulberry32(7);
+    const kinds = new Set();
+    for (let n = 0; n < 1500; n++) {
+      const { ops } = makeChunk({ z: 600, D: 2000, speed: 28, region, rng });
+      for (const op of ops) if (op[0] === 'obs') kinds.add(op[1]);
+    }
+    for (const wild of ['lion', 'wildebeest', 'rhino', 'buffalo', 'crossing', 'truck']) expect(kinds.has(wild), wild).toBe(false);
+    for (const coast of ['coconut', 'scooter', 'cart']) expect(kinds.has(coast), coast).toBe(true);
+  });
+});

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { G, mat, basic, bend, mesh, taper, blobShadow, bakeRigid } from './materials.js';
+import { G, mat, basic, bend, mesh, turn, taper, blobShadow, bakeRigid } from './materials.js';
 import { Animals, quad, spots, makeTermiteMound } from './models.js';
 import { makeWildAnimal } from './wildlife.js';
 
@@ -172,7 +172,7 @@ export function makePapyrus(scale = 1) {
     const s = mesh(G.cyl6, stalk, 0.03, h, 0.03, x, h / 2, z);
     s.rotation.set(rand(-0.15, 0.15), 0, rand(-0.15, 0.15));
     g.add(s);
-    g.add(mesh(G.cone, head, 0.32, 0.25, 0.32, x, h + 0.05, z)).rotation.x = Math.PI;
+    g.add(turn(mesh(G.cone, head, 0.32, 0.25, 0.32, x, h + 0.05, z), 'x', Math.PI));
   }
   g.scale.setScalar(scale);
   return g;
@@ -551,7 +551,7 @@ export function makeLogStyled(style) {
       r.rotation.z = Math.PI / 2;
       g.add(r);
     }
-    g.add(mesh(G.box, mat(0x4f8a3a), 0.3, 0.05, 1.6, 1.1, 0.7, 0.3)).rotation.y = 0.6;
+    g.add(turn(mesh(G.box, mat(0x4f8a3a), 0.3, 0.05, 1.6, 1.1, 0.7, 0.3), 'y', 0.6));
   } else if (style === 'mossy') {
     for (let i = 0; i < 6; i++) g.add(mesh(G.ico1, mat(i % 2 ? 0x4f8a3a : 0x6aa845), rand(0.2, 0.35), 0.14, rand(0.2, 0.3), rand(-1, 1), 0.82, rand(-0.2, 0.2)));
     g.add(makeFern(0.6).translateX(0.9).translateY(0.6));
@@ -575,7 +575,7 @@ export function makeGateStyled(style) {
     for (let i = 0; i < 9; i++) g.add(mesh(G.box, cord, 0.03, 1.3, 0.03, -0.96 + i * 0.24, 1.95, 0));
     const floats = [mat(0xff6a3d), mat(0xffd34d)];
     for (let i = 0; i < 6; i++) g.add(mesh(G.sphere, floats[i % 2], 0.09, 0.09, 0.09, -0.85 + i * 0.34, 2.62, 0.04));
-    g.add(mesh(G.cyl, wood, 0.06, 2.3, 0.06, 0, 2.62, 0)).rotation.z = Math.PI / 2;
+    g.add(turn(mesh(G.cyl, wood, 0.06, 2.3, 0.06, 0, 2.62, 0), 'z', Math.PI / 2));
   } else {
     const bough = mesh(taper(0.75), wood, 0.2, 2.5, 0.2, 0, 2.3, 0);
     bough.rotation.z = Math.PI / 2;
@@ -639,13 +639,63 @@ export function makeCart() {
   return g;
 }
 
+/**
+ * A boda-boda: the scooter taxis of Zanzibar's lanes, with a rider in a white kanzu and kofia.
+ * Built facing -z like everything else; the game turns it to face the runner.
+ */
+export function makeScooter() {
+  const g = new Group();
+  const paint = mat(pick([0xd7263d, 0x1b998b, 0xf4a53a, 0x2e6f9a]), { flat: false });
+  const dark = mat(0x22201e);
+  const chrome = mat(0xc9c4ba, { flat: false });
+  // body: the rounded rear cowl, footboard and the front leg-shield
+  g.add(mesh(G.sphere, paint, 0.42, 0.36, 0.62, 0, 0.62, 0.35));
+  g.add(mesh(G.box, dark, 0.5, 0.08, 1.0, 0, 0.36, -0.15));
+  g.add(turn(mesh(G.box, paint, 0.62, 0.9, 0.12, 0, 0.82, -0.62), 'x', -0.25));
+  g.add(mesh(G.box, mat(0x3a2a20), 0.42, 0.12, 0.7, 0, 0.98, 0.28)); // seat
+  // handlebar, headlamp, front fork
+  g.add(turn(mesh(G.cyl, chrome, 0.03, 0.7, 0.03, 0, 1.32, -0.74), 'z', Math.PI / 2));
+  g.add(mesh(G.sphere, basic(0xfff3b0), 0.1, 0.1, 0.06, 0, 1.22, -0.8));
+  g.add(turn(mesh(G.cyl, chrome, 0.035, 0.8, 0.035, 0, 0.75, -0.8), 'x', -0.25));
+  for (const z of [-0.85, 0.62]) {
+    g.add(turn(mesh(G.cyl, dark, 0.27, 0.13, 0.27, 0, 0.27, z), 'z', Math.PI / 2));
+    g.add(turn(mesh(G.cyl, chrome, 0.11, 0.14, 0.11, 0, 0.27, z), 'z', Math.PI / 2));
+  }
+  // the rider: kanzu, embroidered kofia, hands on the bars
+  const skin = mat(pick([0x5a3a22, 0x4a2e1a, 0x6b4226]), { flat: false });
+  const kanzu = mat(0xf4efe2, { flat: false });
+  g.add(mesh(G.cyl, kanzu, 0.22, 0.62, 0.2, 0, 1.36, 0.22));
+  g.add(mesh(G.sphere, kanzu, 0.2, 0.14, 0.32, 0, 1.06, 0.05));
+  g.add(mesh(G.sphere, skin, 0.13, 0.15, 0.14, 0, 1.82, 0.16));
+  g.add(mesh(G.cyl, mat(0xf4efe2), 0.13, 0.09, 0.13, 0, 1.95, 0.16));
+  g.add(mesh(G.cyl, mat(0xd7263d), 0.135, 0.02, 0.135, 0, 1.92, 0.16));
+  for (const x of [-1, 1]) {
+    g.add(turn(mesh(G.cyl, kanzu, 0.05, 0.5, 0.05, x * 0.2, 1.4, -0.28), 'x', 1.1));
+    g.add(mesh(G.sphere, skin, 0.05, 0.05, 0.05, x * 0.3, 1.32, -0.72));
+  }
+  // a crate of fish strapped on the back
+  g.add(mesh(G.box, mat(0x8a5a32), 0.46, 0.28, 0.4, 0, 1.12, 0.78));
+  g.add(blobShadow(1.2, 2.2));
+  return g;
+}
+
 /** Boulder that tumbles down onto the trail. `rock` is animated by the game. */
 export function makeRockfall(style) {
   const g = new Group();
   const rock = new Group();
-  const b = makeBoulderStyled(style);
-  b.children.filter((c) => c.material?.map).forEach((c) => b.remove(c));
-  rock.add(b);
+  if (style === 'coconut') {
+    // a bunch of coconuts, husks and all, with a frond still attached
+    const husk = mat(0x6b4a2a, { flat: false });
+    const green = mat(0x8fae4a, { flat: false });
+    for (const [x, y, z, c] of [[-0.32, 0.26, 0.1, husk], [0.3, 0.26, -0.05, green], [0, 0.26, -0.36, husk], [0.02, 0.62, 0.02, green], [0.1, 0.24, 0.42, husk]]) {
+      rock.add(mesh(G.sphere, c, 0.3, 0.27, 0.3, x, y, z));
+    }
+    rock.add(turn(mesh(G.box, mat(0x5f8a3a), 0.06, 0.05, 1.1, 0.25, 0.75, 0.2), 'y', 0.7));
+  } else {
+    const b = makeBoulderStyled(style);
+    b.children.filter((c) => c.material?.map).forEach((c) => b.remove(c));
+    rock.add(b);
+  }
   g.add(rock);
   const warn = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.2, 24), basic(0xff4a2a, { transparent: true, opacity: 0.7, side: THREE.DoubleSide }));
   warn.rotation.x = -Math.PI / 2;
@@ -668,7 +718,7 @@ export function makeNgalawa(scale = 1) {
   g.add(hull);
   g.add(mesh(G.box, mat(0x2e6f9a), 0.86, 0.06, 3.6, 0, 0.42, 0)); // painted gunwale
   for (const z of [-0.9, 0.9]) {
-    g.add(mesh(G.cyl6, mat(0x5a3a22), 0.05, 3.4, 0.05, 0, 0.5, z)).rotation.z = Math.PI / 2;
+    g.add(turn(mesh(G.cyl6, mat(0x5a3a22), 0.05, 3.4, 0.05, 0, 0.5, z), 'z', Math.PI / 2));
     for (const s of [-1, 1]) g.add(mesh(G.sphere, wood, 0.16, 0.12, 1.0, s * 1.6, 0.16, z * 0.15));
   }
   g.add(mesh(G.cyl6, mat(0x5a3a22), 0.05, 3.6, 0.05, 0, 2.1, -0.6));
@@ -749,7 +799,7 @@ export function makeCoralRock(scale = 1) {
     g.add(r);
   }
   for (let i = 0; i < 5; i++) g.add(mesh(G.sphere, mat(0x8f8468), 0.08, 0.05, 0.08, rand(-0.9, 0.9), rand(0.4, 0.7), rand(-0.6, 0.6)));
-  g.add(mesh(G.box, mat(0xff8a5c), 0.18, 0.03, 0.18, rand(-1, 1), 0.04, 1.0)).rotation.y = 0.6; // a starfish
+  g.add(turn(mesh(G.box, mat(0xff8a5c), 0.18, 0.03, 0.18, rand(-1, 1), 0.04, 1.0), 'y', 0.6)); // a starfish
   g.scale.setScalar(scale);
   return g;
 }
@@ -773,7 +823,7 @@ export function makeFishRack(scale = 1) {
   const g = new Group();
   const pole = mat(0x7a5a3a);
   for (const x of [-1.1, 1.1]) g.add(mesh(G.cyl6, pole, 0.06, 1.6, 0.06, x, 0.8, 0));
-  g.add(mesh(G.cyl6, pole, 0.04, 2.4, 0.04, 0, 1.5, 0)).rotation.z = Math.PI / 2;
+  g.add(turn(mesh(G.cyl6, pole, 0.04, 2.4, 0.04, 0, 1.5, 0), 'z', Math.PI / 2));
   for (let i = 0; i < 7; i++) {
     const f = mesh(G.sphere, mat(0xb9c4c8), 0.06, 0.22, 0.03, -0.9 + i * 0.3, 1.25, 0);
     g.add(f);

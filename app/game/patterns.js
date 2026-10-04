@@ -25,7 +25,9 @@ export const KINDS = {
   mound: { y0: 0, y1: 2.9, len: 1.5, pass: 'hard' },
   cart: { y0: 0, y1: 2.5, len: 2.4, pass: 'hard' },
   gorilla: { y0: 0, y1: 2.3, len: 1.8, pass: 'hard' },
-  rockfall: { y0: 0, y1: 2.5, len: 1.9, pass: 'hard' },
+  rockfall: { y0: 0, y1: 2.5, len: 1.9, pass: 'hard', fall: true },
+  // coconuts drop from the palms, then lie in a pile you can hop
+  coconut: { y0: 0, y1: 0.8, len: 1.4, pass: 'jump', fall: true },
   truck: { y0: 0, y1: 2.7, len: TRUCK_LEN, top: 2.7, pass: 'hard' },
   ramp: { y0: 0, y1: 0, len: 5, ramp: 2.7, pass: 'ramp' },
   rhino: { y0: 0, y1: 1.9, len: 2.4, pass: 'hard', charger: true },
@@ -35,6 +37,7 @@ export const KINDS = {
   water: { y0: 0, y1: 0.42, len: 6, pass: 'jump', water: true },
   crossing: { y0: 0, y1: 3.2, len: 1.8, pass: 'hard', crosser: true },
   canoe: { y0: 0, y1: 1.6, len: 3.0, pass: 'hard' },
+  scooter: { y0: 0, y1: 1.75, len: 1.9, pass: 'hard', charger: true },
 };
 
 const L = [0, 1, 2];
@@ -69,7 +72,8 @@ export function makeChunk({ z, D, speed, region, wantTotem = false, wantBox = fa
     // Daily route moments: a river you have to jump, a lion that can clip you,
     // and a wildebeest close enough to fill the screen. Same weights everywhere,
     // so the day's seed — not the region — decides when they show up.
-    ['river', 1.7], ['lion', 1.15], ['beast', 1.25],
+    // Regions without big game (`wild: false`, the Zanzibar coast) skip the lion and the beast.
+    ['river', 1.7], ['lion', region.wild === false ? 0 : 1.15], ['beast', region.wild === false ? 0 : 1.25],
   ];
   for (const [name, w] of Object.entries(region.specials ?? {})) pats.push([name, D > 150 ? w : w * 0.3]);
   const total = pats.reduce((s, p) => s + p[1], 0);
@@ -171,6 +175,23 @@ export function makeChunk({ z, D, speed, region, wantTotem = false, wantBox = fa
       const free = L.filter((l) => !lanes.includes(l));
       line(free.length ? pick(free) : 1, z - 4, z + 14);
       return { len: 12, ops, pat };
+    }
+    case 'coconuts': {
+      // coconuts thud down from the palms: one or two lanes, then a pile to hop
+      const lanes = shuffle(L).slice(0, 1 + (D > 500 ? randi(2) : 0));
+      lanes.forEach((l, i) => obs('coconut', l, z + 2 + i * 8));
+      const free = L.filter((l) => !lanes.includes(l));
+      line(free.length ? pick(free) : lanes[0], z - 4, z + 12);
+      return { len: 12, ops, pat };
+    }
+    case 'boda': {
+      // a boda-boda scooter putters up the lane toward you
+      const l = randi(3);
+      const v = rand(6, 9);
+      obs('scooter', l, z + lead(v) + 2, { moving: v });
+      if (rng() < 0.5) obs('cart', pick(L.filter((x) => x !== l)), z + 6);
+      line(pick(L.filter((x) => x !== l)), z - 4, z + 12);
+      return { len: 10, ops, pat };
     }
     case 'croc': {
       const l = randi(3);

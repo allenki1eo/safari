@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { G, mat, basic, bend, mesh, taper, blobShadow, emojiTexture, bakeRigid } from './materials.js';
+import { G, mat, basic, bend, mesh, turn, taper, blobShadow, emojiTexture, bakeRigid } from './materials.js';
 
 import { makeAnimal } from './fauna.js';
 import { makeWildAnimal } from './wildlife.js';
@@ -496,7 +496,7 @@ export function makeTruck(len = 7, oncoming = false) {
   for (let i = 0; i < 5; i++) g.add(mesh(G.box, mat(0x777066), 0.06, 0.45, 0.04, -0.4 + i * 0.2, 0.95, cabZ - 0.9));
   g.add(mesh(G.box, mat(0x55504a), 2.3, 0.2, 0.2, 0, 0.6, cabZ - 0.9));
   const lightM = oncoming ? basic(0xfff3b0) : mat(0xddd6c0);
-  for (const x of [-1, 1]) g.add(mesh(G.cyl, lightM, 0.16, 0.06, 0.16, x * 0.78, 1.15, cabZ - 0.9)).rotation.x = Math.PI / 2;
+  for (const x of [-1, 1]) g.add(turn(mesh(G.cyl, lightM, 0.16, 0.06, 0.16, x * 0.78, 1.15, cabZ - 0.9), 'x', Math.PI / 2));
   // chassis + wheels
   g.add(mesh(G.box, dark, 1.9, 0.35, len - 0.3, 0, 0.55, 0));
   const wheelM = mat(0x1d1a18);
@@ -561,6 +561,29 @@ export function makeTotem(emoji, ring) {
     torus.rotation.x = Math.sin(t * 1.3) * 0.4;
     disc.position.y = 1.3 + Math.sin(t * 3) * 0.12;
     torus.position.y = disc.position.y;
+  };
+  return g;
+}
+
+/** A trail powerup: a faceted gem in the boost's colour with its emoji floating inside. */
+export function makeBoostGem(emoji, color) {
+  const g = new Group();
+  const c = new THREE.Color(color);
+  const disc = new THREE.Mesh(new THREE.PlaneGeometry(0.85, 0.85), basic(0xffffff, { map: emojiTexture(emoji, color), transparent: true }));
+  disc.position.y = 1.25;
+  g.add(disc);
+  const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.72, 0), basic(c.getHex(), { transparent: true, opacity: 0.2, additive: true }));
+  gem.position.y = 1.25;
+  g.add(gem);
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(gem.geometry), new THREE.LineBasicMaterial({ color: c.clone().lerp(new THREE.Color(0xffffff), 0.5) }));
+  gem.add(edges);
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.6, 2.2, 12, 1, true), basic(c.getHex(), { transparent: true, opacity: 0.08, additive: true, side: THREE.DoubleSide }));
+  beam.position.y = 1.1;
+  g.add(beam);
+  g.add(blobShadow(1.1, 1.1));
+  g.userData.spin = (t) => {
+    gem.rotation.y = t * 1.8;
+    gem.position.y = disc.position.y = 1.25 + Math.sin(t * 3.2) * 0.12;
   };
   return g;
 }
