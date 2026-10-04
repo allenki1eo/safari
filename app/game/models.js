@@ -157,6 +157,13 @@ export const Animals = {
   wildebeest: () => makeWildAnimal('wildebeest', () => makeAnimal('wildebeest')),
   buffalo: () => makeWildAnimal('buffalo', () => makeAnimal('buffalo')),
   hippo: () => makeWildAnimal('hippo', () => makeAnimal('hippo')),
+  // painted wolves run in the hyenas' frame, so the hyena stands in while they load
+  wilddog: () => makeWildAnimal('wilddog', () => makeAnimal('hyena')),
+  // no code-built cousins: these appear once their models arrive, at their real heights
+  gazelle: () => makeWildAnimal('gazelle', null, { height: 0.95 }),
+  warthog: () => makeWildAnimal('warthog', null, { height: 0.8 }),
+  elephantCalf: () => makeWildAnimal('elephant_calf', null, { height: 1.5 }),
+  giraffeCalf: () => makeWildAnimal('giraffe_calf', null, { height: 2.6 }),
 };
 
 /* ==========================================================================

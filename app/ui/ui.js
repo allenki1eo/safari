@@ -5,6 +5,7 @@ import { audio } from '../game/audio.js';
 import { whatsAppHref } from './share.js';
 import { fetchBoard, leaveDecision, postScore, renderRows, runnerName, scoreSavePlan } from './leaderboard.js';
 import { darDay, ghostFrom, huntWord, parseShareLink, routeForLink } from '../data/daily.js';
+import { install } from './install.js';
 
 const $ = (html) => {
   const t = document.createElement('template');
@@ -20,6 +21,7 @@ const ICON = {
   back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
   trophy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 21h8M9 17h6"/></svg>',
   share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg>',
+  install: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11M7.5 9.5 12 14l4.5-4.5"/><path d="M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"/></svg>',
 };
 
 /* ---------- illustrated story panels (pure CSS/SVG so they load instantly) ---------- */
@@ -146,6 +148,7 @@ export class UI {
             <div class="chip">✖️ ${multiplier()} <span class="muted" style="font-size:12px">MULTIPLIER</span></div>
           </div>
           <div class="title-actions">
+            ${install.offered ? `<button class="install-pill" data-act="install" data-click aria-label="Install Kimbia! on this device">${ICON.install}<span>Install</span></button>` : ''}
             <button class="icon-btn" data-act="board" data-click aria-label="Leaderboard" title="Leaderboard">🏆</button>
             <button class="icon-btn" data-act="settings" data-click aria-label="Settings">${ICON.gear}</button>
           </div>
@@ -185,8 +188,17 @@ export class UI {
       else if (act === 'missions') this.missions();
       else if (act === 'journey') this.journey();
       else if (act === 'board') this.showBoard();
+      else if (act === 'install') this.installApp();
     });
     this.show(el);
+    // the pill glows once the browser says it can install; it leaves once installed
+    this.offInstall?.();
+    this.offInstall = install.on((ev) => {
+      const pill = el.querySelector('.install-pill');
+      if (ev === 'ready') pill?.classList.add('ready');
+      if (ev === 'installed' || ev === 'accepted') pill?.remove();
+    });
+    if (install.how === 'prompt') el.querySelector('.install-pill')?.classList.add('ready');
     if (save.introSeen) setTimeout(() => this.daily(), 600);
   }
 
@@ -1188,6 +1200,48 @@ export class UI {
     render();
   }
 
+  /** Installs the game: the browser's own prompt where there is one, otherwise a how-to. */
+  async installApp() {
+    audio.click();
+    if (install.how === 'prompt') {
+      const outcome = await install.prompt();
+      if (outcome === 'accepted') this.toast('📲', 'Kimbia! is on your home screen. Karibu tena!');
+      if (outcome !== 'unavailable') return;
+    }
+    const step = (n, html) => `<li><b>${n}</b><span>${html}</span></li>`;
+    const steps = {
+      ios: [
+        step(1, `Tap <b>Share</b> <span class="key">${ICON.share}</span> in Safari's toolbar`),
+        step(2, 'Scroll down and tap <b>Add to Home Screen</b>'),
+        step(3, 'Tap <b>Add</b>. Kimbia! opens full screen, even offline'),
+      ],
+      inapp: [
+        step(1, 'Tap the <b>⋮</b> or <b>•••</b> menu in this app'),
+        step(2, 'Choose <b>Open in browser</b> (Chrome or Safari)'),
+        step(3, 'Tap <b>Install</b> on the Kimbia! home screen there'),
+      ],
+      menu: [
+        step(1, 'Open your browser menu <b>⋮</b>'),
+        step(2, 'Tap <b>Install app</b> or <b>Add to Home screen</b>'),
+        step(3, 'Confirm. Kimbia! opens full screen, even offline'),
+      ],
+    }[install.how] ?? [];
+    const el = $(`
+      <div class="screen modal-wrap scrim-full">
+        <div class="panel modal install-card">
+          <div class="install-icon"><img src="/icons/icon-192.png" alt="" width="72" height="72" /></div>
+          <h2>Install Kimbia!</h2>
+          <p class="muted">Play from your home screen: full screen, quicker to open, and it works offline.</p>
+          <ol class="install-steps">${steps.join('')}</ol>
+          <div class="stack"><button class="btn" data-act="close" data-click>Got it</button></div>
+        </div>
+      </div>`);
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('[data-act=close]') || e.target === el) el.remove();
+    });
+    this.overlay(el);
+  }
+
   settings() {
     const row = (key, label) => `<div class="toggle-row"><span>${label}</span><button class="switch ${save[key] ? 'on' : ''}" data-key="${key}" aria-label="${label}"></button></div>`;
     const el = $(`
@@ -1198,6 +1252,7 @@ export class UI {
           ${row('sound', '🔊 Sound effects')}
           ${row('haptics', '📳 Vibration')}
           <div class="toggle-row"><span>✨ Graphics</span><div class="seg" role="group">${['auto', 'high', 'low'].map((q) => `<button class="${(save.quality ?? 'auto') === q ? 'on' : ''}" data-q="${q}">${q[0].toUpperCase() + q.slice(1)}</button>`).join('')}</div></div>
+          ${install.offered ? `<div class="toggle-row"><span>📲 Play from your home screen</span><button class="btn small" data-act="install" data-click>Install</button></div>` : ''}
           <div style="margin:18px 0 6px" class="muted">Your runner name (shown on challenges)</div>
           <input class="name-input" maxlength="16" placeholder="e.g. Zuri" value="${esc(save.name)}" />
           <div class="stack"><button class="btn" data-act="close" data-click>Done</button></div>
@@ -1206,6 +1261,7 @@ export class UI {
         </div>
       </div>`);
     el.addEventListener('click', (e) => {
+      if (e.target.closest('[data-act=install]')) return this.installApp();
       const qb = e.target.closest('[data-q]');
       if (qb) {
         this.game.setQuality(qb.dataset.q);

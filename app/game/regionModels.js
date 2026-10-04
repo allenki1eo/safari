@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { G, mat, basic, bend, mesh, taper, blobShadow, bakeRigid } from './materials.js';
 import { Animals, quad, spots, makeTermiteMound } from './models.js';
+import { makeWildAnimal } from './wildlife.js';
 
 /* Low-poly art for the journey beyond the Serengeti. */
 
@@ -482,7 +483,10 @@ export const RegionAnimals = {
     };
   },
 
-  croc() {
+  /** 0 A.D.'s Nile crocodile, with the hand-built one standing in while it loads. */
+  croc: () => makeWildAnimal('croc', () => RegionAnimals.crocBuilt()),
+
+  crocBuilt() {
     const g = new Group();
     const skin = soft(0x4f5a2e);
     const belly = soft(0xc4b56a);

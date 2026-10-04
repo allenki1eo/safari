@@ -1,4 +1,6 @@
 import './styles.css';
+// first, so the browser's install offer is caught however early it fires
+import './ui/install.js';
 import { Game } from './game/game.js';
 import { UI } from './ui/ui.js';
 import { bindInput } from './game/input.js';

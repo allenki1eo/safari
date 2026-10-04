@@ -36,7 +36,10 @@ Every run is a chase across East Africa. Each region has its own ground, plants,
 | --- | --- | --- |
 | 🇹🇿 | Serengeti | Charging rhinos, poacher trucks |
 | 🇹🇿 | Ngorongoro Crater | Charging buffalo · flamingo lake inside the crater wall |
+| 🇹🇿 | Lake Manyara | Lakeshore water crossings and charging lions · flamingos under the Rift wall |
+| 🇹🇿 | Tarangire | Elephant families crossing · baobabs and termite towers |
 | 🇹🇿 | Mount Kilimanjaro | Rockfalls · snow, giant groundsels |
+| 🇹🇿 | Ruaha | Charging lions · painted wild dogs at dusk by the Great Ruaha River |
 | 🇹🇿 | Selous · Nyerere | Napping crocodiles · the Rufiji River |
 | 🇹🇿 | Zanzibar | Spice-market carts and fishing nets · dhows on turquoise water |
 | 🇰🇪 | Maasai Mara | Wildebeest stampedes |
@@ -47,7 +50,7 @@ After Bwindi the run loops into a *legend lap*. Regions you reach unlock on the 
 
 ### What keeps players coming back
 
-- **A story told across eight regions.** Each one has its own animal narrator, and the sun moves with you: morning on the Serengeti, sunset on Kilimanjaro, night on the Rufiji, a bright day on the Zanzibar coast.
+- **A story told across eleven regions.** Each one has its own narrator, and the sun moves with you: morning on the Serengeti, sunset on Kilimanjaro, dusk in Ruaha, night on the Rufiji, a bright day on the Zanzibar coast.
 - **Missions** in sets of three that raise a permanent score multiplier.
 - **Six unlockable runners** (Zuri, Juma, Neema, Baraka, Amani, Kito) and ally upgrades.
 - **Daily rewards** with a 7-day streak.
@@ -55,13 +58,13 @@ After Bwindi the run loops into a *legend lap*. Regions you reach unlock on the 
 - **Global leaderboard**: a finished run is saved to the board. A name already stored on the device is used immediately; otherwise the game-over card asks for one and saves when you confirm. Run again and Home will not drop that score. Rank is decided on the server. Open the board from the trophy on the title screen, or from the game-over card.
 - **Ngao shield charms**: buy them with seeds and tap 🛡️ mid-run to survive one crash.
 - **Seed combos, slow-motion close calls**, and music that builds as you speed up.
-- **Installable PWA** that works offline. The score API is network-only; the rest of the game still plays offline.
+- **Installable PWA** that works offline. An Install button on the title screen (and in Settings) uses the browser's own prompt where there is one, and shows step-by-step help on iPhone and in in-app browsers like WhatsApp (`app/ui/install.js`). The score API is network-only; the rest of the game still plays offline.
 
 ## Tech
 
 - [three.js](https://threejs.org) and vanilla ES modules, bundled with [Vite](https://vitejs.dev). About 175 KB gzipped in total.
 - **Runners:** fully modelled characters from Quaternius's CC0 [Universal Base Characters](https://quaternius.itch.io/universal-base-characters), animated with the CC0 [Universal Animation Library](https://quaternius.itch.io/universal-animation-library) (sprint, jump, slide, roll, sit, stumble, fall). Each runner is dressed in code (`app/game/kids.js`): a skin tone, an outfit painted onto the body with kitenge, kanga, shuka and jersey patterns, hair, and their kit (headwrap, sweatband, bucket hat, beaded collar, braids). Before a run you pick one outfit for the device (a racing kit, a football jersey, a kanga wrap, a ranger vest or a road cloak); it is saved locally and worn on the select screen and the track. `scripts/build-kids.mjs` compresses everything to about 1.3 MB for a run. The hand-built runner in `people.js` stands in until the files arrive.
-- **Animals:** every savanna animal is a textured, animated model from [0 A.D.](https://play0ad.com) by Wildfire Games, licensed [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) (`static/models/animals/`, licence text alongside; credited in Settings). Lion, lioness, African elephant, giraffe, zebra, wildebeest, rhino and hippo are 0 A.D.'s own; 0 A.D. has no hyena, cheetah or Cape buffalo, so Fisi's pack is its wolf, the cheetah its tiger and the buffalo its black bull, each given a new coat in a shader (`app/game/wildlife.js`). Those model files, and any changes to them, stay under that licence; the game's code is unaffected. The code-rigged animals (`app/game/rigkit.js`, `fauna.js`) stand in while the models load.
+- **Animals:** every savanna animal is a textured, animated model from [0 A.D.](https://play0ad.com) by Wildfire Games, licensed [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) (`static/models/animals/`, licence text alongside; credited in Settings). Lion, lioness, African elephant, giraffe, zebra, wildebeest, rhino, hippo, gazelle, crocodile and the elephant and giraffe calves (which walk at their mothers' side) are 0 A.D.'s own; 0 A.D. has no hyena, cheetah, Cape buffalo, African wild dog or warthog, so Fisi's pack and the painted wild dogs are its wolf, the cheetah its tiger, the buffalo its black bull and the warthog its boar, each given a new coat in a shader (`app/game/wildlife.js`). Those model files, and any changes to them, stay under that licence; the game's code is unaffected. The code-rigged animals (`app/game/rigkit.js`, `fauna.js`) stand in while the models load.
 - **No model, texture or audio files.** Trees, trucks and the remaining animals are built from low-poly primitives in `app/game/models.js`. Music (kalimba, djembe, shaker) and sound effects are synthesized with WebAudio in `app/game/audio.js`.
 - A curved-world vertex shader gives the rolling horizon (`app/game/materials.js`).
 - Static meshes are merged into vertex-coloured batches at build time, keeping each frame around 150–250 draw calls on phones. Pixel ratio adapts automatically if the frame rate drops.

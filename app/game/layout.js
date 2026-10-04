@@ -21,7 +21,10 @@ function weighted(list, rng) {
 }
 
 // Plains animals that graze, wander and trot; the rest keep the mode their region gives them.
-export const ROAMERS = new Set(['zebra', 'giraffe', 'elephant', 'wildebeest', 'buffalo', 'lion', 'rhino']);
+export const ROAMERS = new Set(['zebra', 'giraffe', 'elephant', 'wildebeest', 'buffalo', 'lion', 'rhino', 'gazelle', 'warthog', 'wilddog']);
+
+/** Mothers that sometimes bring a calf, which keeps to their side (world.js). */
+export const CALVES = { elephant: 'elephant_calf', giraffe: 'giraffe_calf' };
 
 /** Mixes a region's usual mode for an animal with the others, so a herd never moves as one. */
 function vary(kind, mode, rng) {
@@ -65,5 +68,6 @@ export function planHerd(region, day, wz) {
     dir: side,
     rot: rng() * Math.PI * 2,
     xr,
+    calf: CALVES[kind] && rng() < 0.4 ? CALVES[kind] : null,
   };
 }

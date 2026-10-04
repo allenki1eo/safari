@@ -32,13 +32,17 @@ const GOLD = { top: '#4b5aa8', hor: '#ffb070', fog: '#f4b47a', sun: '#ffb46a', s
 const DUSK = { top: '#2a2a6e', hor: '#ff7a45', fog: '#e8805a', sun: '#ff8040', sunI: 1.6, hemiS: '#ff9a7a', hemiG: '#6a3a2a', hemiI: 0.95, sunH: 0.04, night: 0.15, cloud: '#ff9a7a' };
 const NIGHT = { top: '#070b26', hor: '#26306e', fog: '#1d2558', sun: '#a9bcff', sunI: 0.9, hemiS: '#6a7ad0', hemiG: '#1e1a30', hemiI: 0.75, sunH: 0.5, night: 1, cloud: '#3a4278' };
 const BRIGHT = { top: '#3a95e6', hor: '#e8f4ff', fog: '#f2efe2', sun: '#fff6e0', sunI: 2.6, hemiS: '#f2f6ff', hemiG: '#c9b48a', hemiI: 1.35, sunH: 0.8, night: 0, cloud: '#ffffff' };
-// Serengeti morning → crater noon → Kili sunset → Rufiji night → Zanzibar in full daylight
-// → Mara day → golden Amboseli → soft misty Bwindi → morning again.
+// Serengeti morning → crater noon → bright lakeshore → baobab afternoon → Kili sunset → dusk
+// in Ruaha → Rufiji night → Zanzibar in full daylight → Mara day → golden Amboseli → soft misty
+// Bwindi → morning again. Keyed to regions (`at(id, metres in)`) so adding one keeps the light.
 // The coast starts bright on purpose: a night-to-dawn fade here turned the beach into fog.
+const at = (id, m = 0) => REGIONS.find((r) => r.id === id).at + m;
 const PALETTES = [
-  { at: 0, ...DAY }, { at: 900, ...NOON }, { at: 1750, ...GOLD }, { at: 2200, ...DUSK }, { at: 2550, ...NIGHT },
-  { at: 3000, ...NIGHT }, { at: 3100, ...BRIGHT }, { at: 4300, ...NOON }, { at: 4900, ...DAY },
-  { at: 5250, ...GOLD }, { at: 5650, ...DAY }, { at: CYCLE, ...DAY },
+  { at: 0, ...DAY }, { at: at('ngorongoro', 200), ...NOON }, { at: at('manyara', 400), ...NOON },
+  { at: at('tarangire', 400), ...DAY }, { at: at('kilimanjaro', 250), ...GOLD }, { at: at('ruaha', 350), ...DUSK },
+  { at: at('selous', 250), ...NIGHT }, { at: at('selous', 700), ...NIGHT }, { at: at('zanzibar'), ...BRIGHT },
+  { at: at('mara', 400), ...NOON }, { at: at('amboseli', 200), ...DAY }, { at: at('amboseli', 550), ...GOLD },
+  { at: at('bwindi', 150), ...DAY }, { at: CYCLE, ...DAY },
 ].map((p) => ({ ...p, top: C(p.top), hor: C(p.hor), fog: C(p.fog), sun: C(p.sun), hemiS: C(p.hemiS), hemiG: C(p.hemiG), cloud: C(p.cloud) }));
 
 /** Sun height and night amount at a journey distance. Used to keep regions in their own light. */
@@ -127,6 +131,11 @@ const HERD = {
   dolphin: () => RegionAnimals.dolphin(),
   crab: () => RegionAnimals.crab(),
   gorilla: () => RegionAnimals.gorilla(),
+  gazelle: () => Animals.gazelle(),
+  warthog: () => Animals.warthog(),
+  wilddog: () => Animals.wilddog(),
+  elephant_calf: () => Animals.elephantCalf(),
+  giraffe_calf: () => Animals.giraffeCalf(),
 };
 
 function weighted(list) {
@@ -554,6 +563,21 @@ export class World {
     a.visible = true;
     if (!a.parent) this.scene.add(a);
     this.herd.push({ root: a, anim });
+    if (plan.calf) this.spawnCalf(plan.calf, a);
+  }
+
+  /** A calf tucked in at its mother's flank; it copies her mood and her pace. */
+  spawnCalf(kind, mother) {
+    const c = this.take(kind, () => {
+      const m = HERD[kind]();
+      m.root.userData.anim = m;
+      return m.root;
+    });
+    const u = mother.userData;
+    Object.assign(c.userData, { wz: u.wz, xr: u.xr, mode: u.mode, roams: false, follow: mother, side: Math.random() < 0.5 ? -1 : 1 });
+    c.visible = true;
+    if (!c.parent) this.scene.add(c);
+    this.herd.push({ root: c, anim: c.userData.anim });
   }
 
   /**
@@ -731,7 +755,19 @@ export class World {
         this.herd.splice(i, 1);
         continue;
       }
-      if (u.roams) this.roam(a, u, dt);
+      if (u.follow) {
+        // beside the mother, a little behind, facing the way she faces
+        const m = u.follow;
+        const mu = m.userData;
+        const fx = -Math.sin(m.rotation.y);
+        const fz = -Math.cos(m.rotation.y);
+        // offset in scene space: 1.8 m to her side (right is (-fz, fx)) and 0.9 m back;
+        // scene z runs opposite to journey distance, hence the minus on wz
+        a.rotation.y = m.rotation.y;
+        a.position.x = m.position.x - fz * u.side * 1.8 - fx * 0.9;
+        u.wz = mu.wz - (fx * u.side * 1.8 - fz * 0.9);
+        u.mode = mu.mode;
+      } else if (u.roams) this.roam(a, u, dt);
       else if (u.mode === 'walk') {
         a.position.x += u.dir * u.walkV * dt;
         const ax = Math.abs(a.position.x);
