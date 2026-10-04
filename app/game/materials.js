@@ -62,7 +62,9 @@ export const GROUND_LIGHT = {
   // Gamma below 1 lifts dark grass and lane pixels more than pale ones, so a
   // brown forest path and a golden savanna path both stay readable, and the
   // worn lanes stay darker than the ridges between them.
-  fragmentLight: 'vec3 groundFloor = pow(max(diffuseColor.rgb, vec3(0.001)), vec3(0.62)) * uGroundLift;\noutgoingLight = max(outgoingLight, groundFloor);',
+  // The floor is capped, so pale ground (Zanzibar's white sand) settles to a soft beige at
+  // night instead of blowing out to white.
+  fragmentLight: 'vec3 groundFloor = min(pow(max(diffuseColor.rgb, vec3(0.001)), vec3(0.62)) * uGroundLift, vec3(0.42));\noutgoingLight = max(outgoingLight, groundFloor);',
   uniforms: { uGroundLift: groundLiftUniform },
 };
 

@@ -4,7 +4,7 @@ import { Look, detectQuality } from './look.js';
 import { Animals, makeEagle, makeHornbill, makeTruck, makeRamp, makeTotem, makePrizeBox, makeLetterToken } from './models.js';
 import { makeRunner } from './people.js';
 import {
-  RegionAnimals, makeLogStyled, makeGateStyled, makeBoulderStyled, makeMoundStyled, makeCart, makeRockfall,
+  RegionAnimals, makeLogStyled, makeGateStyled, makeBoulderStyled, makeMoundStyled, makeCart, makeRockfall, makeBeachedCanoe,
 } from './regionModels.js';
 import { World, Particles, LANE_W } from './world.js';
 import { audio } from './audio.js';
@@ -563,6 +563,7 @@ export class Game {
       case 'boulder': m = makeBoulderStyled(style.rock); break;
       case 'mound': m = makeMoundStyled(); break;
       case 'cart': m = makeCart(); break;
+      case 'canoe': m = makeBeachedCanoe(); break;
       case 'rockfall': m = makeRockfall(style.rock); break;
       case 'ramp': m = makeRamp(k.len, k.ramp); break;
       case 'truck': {

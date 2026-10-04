@@ -15,8 +15,9 @@ export const COUNTRIES = {
 export const PROP_TYPES = [
   'acacia', 'baobab', 'kopje', 'mound', 'bush', 'grass', 'fever', 'groundsel', 'lobelia', 'montane',
   'snowrock', 'palm', 'doum', 'papyrus', 'hut', 'stonehouse', 'banana', 'jungle', 'fern', 'treefern', 'flowers',
+  'ngalawa', 'banda', 'parasol', 'mangrove', 'coralrock', 'seaweed', 'fishrack', 'lighthouse',
 ];
-export const HERD_TYPES = ['zebra', 'giraffe', 'elephant', 'wildebeest', 'buffalo', 'flamingo', 'hippo', 'gorilla', 'lion', 'rhino'];
+export const HERD_TYPES = ['zebra', 'giraffe', 'elephant', 'wildebeest', 'buffalo', 'flamingo', 'hippo', 'gorilla', 'lion', 'rhino', 'dolphin', 'crab'];
 
 export const REGIONS = [
   {
@@ -80,12 +81,16 @@ export const REGIONS = [
     title: 'The Spice Island', speaker: 'Kima the Colobus', emoji: '🐒',
     line: 'Fisi\'s sneaking onto a dhow bound for Kenya! Through the spice market — quick!',
     blurb: 'White sand, turquoise water, carved doors and the scent of cloves on the breeze.',
-    ground: { grass: '#efe2bd', path: '#f6edd2', water: '#3fc1c9', waterSide: -1, beach: true },
-    hill: '#d9cfa8', fog: { tint: '#d6f1f2', amount: 0.25 }, ocean: true, blades: false,
-    kili: { x: -260, y: -200, z: -720, s: 1 },
-    props: [['palm', 6], ['hut', 1.6], ['stonehouse', 1.6], ['bush', 1.5], ['flowers', 2]],
-    herd: [],
-    blocks: ['cart'], style: { log: 'palm', gate: 'net', rock: 'rock' },
+    ground: { grass: '#c8ad78', path: '#a58757', water: '#2fb4bd', waterSide: -1, beach: true },
+    hill: '#d9cfa8', fog: { tint: '#e2f0ea', amount: 0.12 }, ocean: true, blades: false,
+    // an island: no Kilimanjaro on the horizon, just the Indian Ocean
+    kili: { x: -260, y: -520, z: -720, s: 1 },
+    props: [
+      ['palm', 6], ['stonehouse', 1.8], ['banda', 1.4], ['parasol', 1.6], ['coralrock', 1.6], ['mangrove', 1.2],
+      ['fishrack', 0.9], ['hut', 0.8], ['flowers', 1.2], ['ngalawa', 1.4], ['seaweed', 0.8], ['lighthouse', 0.12],
+    ],
+    herd: [['dolphin', 'idle', 3], ['crab', 'idle', 2]],
+    blocks: ['cart', 'canoe'], style: { log: 'palm', gate: 'net', rock: 'rock' },
     trucks: false, specials: { market: 3 },
     music: { transpose: 2, tempo: 120, scale: 'taarab' },
   },

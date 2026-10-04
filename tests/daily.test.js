@@ -83,7 +83,7 @@ describe('daily route', () => {
     expect(planHerd(region, day, 88)).toEqual(here);
     expect(planHerd(region, '2026-10-05', 88)).not.toEqual(here);
     expect(here.kind).toBeTruthy();
-    expect(planHerd(REGIONS.find((r) => r.id === 'zanzibar'), day, 88)).toBeNull();
+    expect(planHerd({ ...region, herd: [] }, day, 88)).toBeNull();
   });
 });
 

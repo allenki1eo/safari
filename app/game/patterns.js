@@ -34,6 +34,7 @@ export const KINDS = {
   lion: { y0: 0, y1: 1.55, len: 2.1, pass: 'hard', charger: true },
   water: { y0: 0, y1: 0.42, len: 6, pass: 'jump', water: true },
   crossing: { y0: 0, y1: 3.2, len: 1.8, pass: 'hard', crosser: true },
+  canoe: { y0: 0, y1: 1.6, len: 3.0, pass: 'hard' },
 };
 
 const L = [0, 1, 2];
