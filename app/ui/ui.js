@@ -89,6 +89,7 @@ export class UI {
     game.on('combo', (n) => this.onCombo(n));
     game.on('shield', (e) => this.onShield(e));
     game.on('lap', (e) => this.onLap(e));
+    game.on('quality', () => this.toast('✨', 'Switched to Low graphics to keep things smooth — change it in Settings.'));
   }
 
   /* ---------------------------------------------------------- plumbing */
@@ -897,6 +898,7 @@ export class UI {
           ${row('music', '🎵 Music')}
           ${row('sound', '🔊 Sound effects')}
           ${row('haptics', '📳 Vibration')}
+          <div class="toggle-row"><span>✨ Graphics</span><div class="seg" role="group">${['auto', 'high', 'low'].map((q) => `<button class="${(save.quality ?? 'auto') === q ? 'on' : ''}" data-q="${q}">${q[0].toUpperCase() + q.slice(1)}</button>`).join('')}</div></div>
           <div style="margin:18px 0 6px" class="muted">Your runner name (shown on challenges)</div>
           <input class="name-input" maxlength="16" placeholder="e.g. Zuri" value="${esc(save.name)}" />
           <div class="stack"><button class="btn" data-act="close" data-click>Done</button></div>
@@ -904,6 +906,12 @@ export class UI {
         </div>
       </div>`);
     el.addEventListener('click', (e) => {
+      const qb = e.target.closest('[data-q]');
+      if (qb) {
+        this.game.setQuality(qb.dataset.q);
+        el.querySelectorAll('[data-q]').forEach((b) => b.classList.toggle('on', b === qb));
+        audio.click();
+      }
       const sw = e.target.closest('[data-key]');
       if (sw) {
         const k = sw.dataset.key;

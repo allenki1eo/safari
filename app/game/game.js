@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { curve, bend, bakeRigid } from './materials.js';
+import { curve, bend, bakeRigid, finishProp, time as timeU } from './materials.js';
+import { Look, detectQuality } from './look.js';
 import { makeRunner, Animals, makeEagle, makeHornbill, makeTruck, makeRamp, makeTotem } from './models.js';
 import {
   RegionAnimals, makeLogStyled, makeGateStyled, makeBoulderStyled, makeMoundStyled, makeCart, makeRockfall,
@@ -12,6 +13,7 @@ import { REGIONS, regionIndexAt, regionAt } from '../data/regions.js';
 import { save, persist, multiplier } from '../data/save.js';
 
 const LANES = [-LANE_W, 0, LANE_W];
+const castShadows = (root) => root.traverse((o) => o.isMesh && !o.material.transparent && (o.castShadow = true));
 const SLIDE_T = 0.62;
 const SHIELD_T = 30;
 const COMBO_STEPS = [[10, 50], [25, 150], [50, 400], [100, 1000], [200, 2500]];
@@ -44,6 +46,7 @@ export class Game {
 
     this.world = new World(this.scene);
     this.fx = new Particles(this.scene);
+    this.look = new Look(this.renderer, this.scene, this.camera, this.world, detectQuality(save.quality));
 
     this.obstacles = [];
     this.coins = [];
@@ -94,6 +97,13 @@ export class Game {
     this.baseFov = THREE.MathUtils.clamp(vfov, 55, 84);
     this.camera.fov = this.baseFov;
     this.camera.updateProjectionMatrix();
+    this.look?.resize();
+  }
+
+  setQuality(pref) {
+    save.quality = pref;
+    persist();
+    this.look.set(detectQuality(pref));
   }
 
   /* -------------------------------------------------------- characters */
@@ -101,6 +111,7 @@ export class Game {
     const def = RUNNERS.find((r) => r.id === id) ?? RUNNERS[0];
     if (this.runner) this.scene.remove(this.runner.root);
     this.runner = makeRunner(def);
+    castShadows(this.runner.root);
     this.scene.add(this.runner.root);
     this.runnerId = def.id;
   }
@@ -119,6 +130,7 @@ export class Game {
     this.allyModels.twiga.root.scale.setScalar(0.9);
     for (const a of Object.values(this.allyModels)) {
       a.root.visible = false;
+      castShadows(a.root);
       this.scene.add(a.root);
     }
   }
@@ -130,6 +142,7 @@ export class Game {
       c.offset = [0, -1.5, 1.5][i];
       c.lag = [0, 0.5, 0.8][i];
       if (i) c.root.scale.setScalar(0.82);
+      castShadows(c.root);
       this.scene.add(c.root);
     });
   }
@@ -154,7 +167,7 @@ export class Game {
   buildCoins() {
     const geo = new THREE.CylinderGeometry(0.36, 0.36, 0.09, 14);
     geo.rotateX(Math.PI / 2);
-    const m = bend(new THREE.MeshLambertMaterial({ color: 0xffc83d, emissive: 0x8a5200 }));
+    const m = bend(new THREE.MeshLambertMaterial({ color: 0xffc83d, emissive: 0xc07400 }));
     this.coinMesh = new THREE.InstancedMesh(geo, m, 400);
     this.coinMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.coinMesh.frustumCulled = false;
@@ -324,6 +337,7 @@ export class Game {
     this.timeScale = damp(this.timeScale, this.slowmo > 0 ? 0.35 : 1, this.slowmo > 0 ? 30 : 6, realDt);
     const dt = realDt * this.timeScale;
     this.time += dt;
+    timeU.value = this.time;
 
     if (this.state === 'running') this.updateRun(dt);
     else if (this.state === 'dying') this.updateDying(dt);
@@ -337,17 +351,19 @@ export class Game {
       for (const t of this.totems) t.mesh.userData.spin(this.time);
     }
     // gentle sway of the curved horizon, like the real thing
-    curve.value.x = Math.sin(this.time * 0.08) * 0.0011;
+    curve.value.x = Math.sin(this.time * 0.08) * 0.00035;
     this.updateCamera(dt);
-    this.renderer.render(this.scene, this.camera);
+    this.look.update(dt, this.p.x, this.world.palette.night);
+    this.look.render();
   }
 
   adaptQuality(dt) {
     this.fpsAcc += dt;
     this.fpsFrames++;
-    if (this.fpsAcc > 2.5) {
+    if (this.fpsAcc > 1) {
       const fps = this.fpsFrames / this.fpsAcc;
-      if (fps < 42 && this.pixelRatio > 1) {
+      if (this.look?.watch(fps, (save.quality ?? 'auto') === 'auto')) this.emit('quality', 'low');
+      if (fps < 42 && this.pixelRatio > 1 && this.look?.quality === 'low') {
         this.pixelRatio = Math.max(1, this.pixelRatio - 0.35);
         this.renderer.setPixelRatio(this.pixelRatio);
         this.resize();
@@ -506,7 +522,8 @@ export class Game {
       case 'crossing': anim = Animals.elephant(); break;
     }
     if (anim) m = anim.root;
-    else if (kind !== 'rockfall') bakeRigid(m, true);
+    else if (kind !== 'rockfall') finishProp(bakeRigid(m, true));
+    castShadows(m);
     // animals in the lane face the runner
     if (kind === 'croc' || kind === 'gorilla') m.rotation.y = Math.PI;
     if (kind === 'crossing') {
@@ -534,6 +551,9 @@ export class Game {
       o.warned = true;
       const lane = o.kind === 'crossing' ? (o.cross.dir > 0 ? 0 : 2) : o.lane;
       this.emit('warn', { lane, icon: WARN_ICONS[o.kind] ?? '⚠️' });
+    }
+    if (o.moving && dz > -4 && dz < 90 && Math.random() < dt * 22) {
+      this.fx.emit(o.x + rand(-0.8, 0.8), 0.2, this.D - o.wz - o.len / 2, { vx: rand(-1, 1), vy: rand(0.6, 1.6), vz: rand(-1, 1), life: rand(0.6, 1.1), size: rand(0.25, 0.5), color: this.world.dustColor(), grow: 1.2 });
     }
     if (o.kind === 'rockfall') {
       const rock = o.mesh.userData.rock;
@@ -1071,8 +1091,8 @@ export class Game {
     let k = 6;
     if (this.camMode === 'menu') {
       const s = Math.sin(this.time * 0.15);
-      tp.set(1.7 + s * 0.3, 1.6, 4.1);
-      tl.set(-1.4, 1.75, -8);
+      tp.set(1.35 + s * 0.25, 1.6, 4.3);
+      tl.set(-1.0, 1.75, -8);
       k = 2;
     } else if (this.camMode === 'select') {
       tp.set(0.5, 1.45, -4.6);

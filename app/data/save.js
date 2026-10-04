@@ -23,6 +23,7 @@ const defaults = () => ({
   sound: true,
   music: true,
   haptics: true,
+  quality: 'auto', // graphics: auto | high | low
   lastDaily: '',
   streak: 0,
 });

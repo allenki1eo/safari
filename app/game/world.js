@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { bend, mat, G, mesh, bakeRigid } from './materials.js';
+import { bend, mat, G, mesh, bakeRigid, finishProp, pathTexture, grassTexture, waterMaterial, SWAY_EXT, setBlobStrength } from './materials.js';
 import {
   Animals, makeAcacia, makeBaobab, makeKopje, makeTermiteMound, makeGrass, makeBush, makeKilimanjaro,
 } from './models.js';
@@ -74,6 +74,11 @@ const PROPS = {
   dhow: [() => makeDhow(rand(0.9, 1.3)), 24, 70],
 };
 for (const t of PROP_TYPES) if (!PROPS[t]) throw new Error(`missing prop factory: ${t}`);
+// how far each plant's tips move in the wind (metres)
+const SWAY = {
+  acacia: 0.22, baobab: 0.06, bush: 0.08, grass: 0.18, fever: 0.28, groundsel: 0.05, lobelia: 0.04, montane: 0.16,
+  palm: 0.45, doum: 0.28, papyrus: 0.3, banana: 0.3, jungle: 0.16, fern: 0.14, treefern: 0.22, flowers: 0.1,
+};
 
 const HERD = {
   zebra: () => Animals.zebra(),
@@ -129,6 +134,7 @@ export class World {
     this.tmp = new THREE.Color();
     this.tmp2 = new THREE.Color();
     this.tmpV = new THREE.Vector3();
+    this.sunDir = new THREE.Vector3(-0.45, 0.4, -1).normalize();
 
     scene.fog = new THREE.Fog(0xf5d9a6, 45, 175);
     this.hemi = new THREE.HemisphereLight(0xd6ecff, 0xb08a4a, 1.2);
@@ -141,6 +147,7 @@ export class World {
     this.buildBackdrop();
     this.buildGround();
     this.buildWeather();
+    this.buildBlades();
     this.pools = new Map();
     this.props = [];
     this.herd = [];
@@ -280,7 +287,7 @@ export class World {
   /* --------------------------------------------------------------- ground */
   buildGround() {
     // brightness-only vertex colours; hue comes from each segment's region tint
-    const grassGeo = new THREE.PlaneGeometry(220, SEG_LEN, 22, 4);
+    const grassGeo = new THREE.PlaneGeometry(220, SEG_LEN, 22, 12);
     grassGeo.rotateX(-Math.PI / 2);
     const gc = [];
     const p = grassGeo.attributes.position;
@@ -296,9 +303,12 @@ export class World {
     grassGeo.setAttribute('color', new THREE.Float32BufferAttribute(gc, 3));
     grassGeo.computeVertexNormals();
 
-    const waterGeo = new THREE.PlaneGeometry(110, SEG_LEN, 1, 1);
+    const trailGeo = new THREE.PlaneGeometry(LANE_W * 3 + 0.9, SEG_LEN, 1, 12);
+    trailGeo.rotateX(-Math.PI / 2);
+    pathTexture().repeat.set(1, SEG_LEN / (LANE_W * 3 + 0.9));
+    const waterGeo = new THREE.PlaneGeometry(110, SEG_LEN, 4, 12);
     waterGeo.rotateX(-Math.PI / 2);
-    const foamGeo = new THREE.PlaneGeometry(1.2, SEG_LEN);
+    const foamGeo = new THREE.PlaneGeometry(1.2, SEG_LEN, 1, 12);
     foamGeo.rotateX(-Math.PI / 2);
     const foamMat = bend(new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75 }));
 
@@ -306,31 +316,36 @@ export class World {
     this.segments = [];
     for (let i = 0; i < SEG_COUNT; i++) {
       const g = new THREE.Group();
-      const grassMat = bend(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }));
+      const grassMat = bend(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, map: grassTexture() }), { key: 'grass' });
       const grass = new THREE.Mesh(grassGeo, grassMat);
       grass.userData.keep = true;
+      grass.receiveShadow = true;
       g.add(grass);
+      // the trail surface itself: a textured strip with worn lanes, tyre tracks and footprints
+      const trailMat = bend(new THREE.MeshLambertMaterial({ map: pathTexture() }), { key: 'trail' });
+      const trail = new THREE.Mesh(trailGeo, trailMat);
+      trail.position.y = 0.035;
+      trail.receiveShadow = true;
+      trail.userData.keep = true;
+      g.add(trail);
 
       // path pieces are white-ish so the region tint shows through
       const path = new THREE.Group();
-      path.add(mesh(G.box, shade(1.0), LANE_W * 3 + 0.9, 0.05, SEG_LEN, 0, 0, 0));
-      for (let l = -1; l <= 1; l++) path.add(mesh(G.box, shade(0.86), 1.3, 0.05, SEG_LEN, l * LANE_W, 0.012, 0));
-      for (const s of [-1, 1]) path.add(mesh(G.box, shade(1.08), 0.5, 0.07, SEG_LEN, s * (LANE_W * 1.5 + 0.55), 0, 0));
+      path.add(mesh(G.boxLong, shade(1.0), LANE_W * 3 + 0.9, 0.05, SEG_LEN, 0, 0, 0));
+      for (const s of [-1, 1]) path.add(mesh(G.boxLong, shade(1.08), 0.5, 0.07, SEG_LEN, s * (LANE_W * 1.5 + 0.55), 0, 0));
       for (let k = 0; k < 6; k++) {
         const s = Math.random() < 0.5 ? -1 : 1;
         path.add(mesh(G.dodec, shade(0.7), rand(0.1, 0.22), rand(0.08, 0.15), rand(0.1, 0.2), s * rand(4.1, 5.2), 0.06, rand(-SEG_LEN / 2, SEG_LEN / 2)));
       }
-      for (let k = 0; k < 7; k++) {
-        const patch = mesh(G.cyl6, shade(Math.random() < 0.5 ? 0.93 : 1.04), rand(0.25, 0.6), 0.02, rand(0.4, 0.9), rand(-3.8, 3.8), 0.03, rand(-SEG_LEN / 2, SEG_LEN / 2));
-        patch.rotation.y = rand(0, 3);
-        path.add(patch);
-      }
       bakeRigid(path, true);
       const pathMat = bend(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }));
-      path.children.forEach((c) => (c.material = pathMat));
+      path.children.forEach((c) => {
+        c.material = pathMat;
+        c.receiveShadow = true;
+      });
       g.add(path);
 
-      const waterMat = bend(new THREE.MeshLambertMaterial({ color: 0x3fc1c9, emissive: 0x0a2a30, flatShading: true }));
+      const waterMat = waterMaterial(0x3fc1c9);
       const water = new THREE.Mesh(waterGeo, waterMat);
       water.position.y = 0.46;
       g.add(water);
@@ -338,7 +353,7 @@ export class World {
       foam.position.y = 0.48;
       g.add(foam);
 
-      g.userData = { wz: 0, grassMat, pathMat, waterMat, water, foam, region: -1 };
+      g.userData = { wz: 0, grassMat, pathMat, trailMat, waterMat, water, foam, region: -1 };
       this.segments.push(g);
       this.scene.add(g);
     }
@@ -349,6 +364,7 @@ export class World {
     const m = this.mixAt(u.wz + SEG_LEN / 2);
     this.mixColor(u.grassMat.color, 'grass', m);
     this.mixColor(u.pathMat.color, 'path', m);
+    u.trailMat.color.copy(u.pathMat.color);
     const ra = REGIONS[m.a].ground;
     const rb = REGIONS[m.b].ground;
     const wr = m.t < 0.5 ? ra : rb;
@@ -360,6 +376,47 @@ export class World {
       u.water.position.x = side * (14 + 55);
       u.foam.position.x = side * 14.3;
     }
+  }
+
+  /* ------------------------------------------------------------ grass blades */
+  /** Thousands of instanced, wind-blown blades lining the trail (High quality only). */
+  buildBlades() {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute([-0.05, 0, 0, 0.05, 0, 0, 0, 1, 0.02], 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute([0, 0.3, 1, 0, 0.3, 1, 0, 0.3, 1], 3));
+    geo.setAttribute('aSway', new THREE.Float32BufferAttribute([0, 0, 0.28], 1));
+    this.bladeMat = bend(new THREE.MeshLambertMaterial({ color: 0xd4b05a, side: THREE.DoubleSide }), SWAY_EXT);
+    this.bladeTiles = [];
+    const TL = 40;
+    const per = 1800;
+    const m4 = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const e = new THREE.Euler();
+    const col = new THREE.Color();
+    for (let t = 0; t < 3; t++) {
+      const im = new THREE.InstancedMesh(geo, this.bladeMat, per);
+      for (let i = 0; i < per; i++) {
+        const side = Math.random() < 0.5 ? -1 : 1;
+        const x = side * (4.75 + Math.pow(Math.random(), 1.6) * 16);
+        const h = rand(0.35, 0.95) * (1 - Math.abs(x) / 40);
+        e.set(rand(-0.25, 0.25), rand(0, Math.PI), rand(-0.25, 0.25));
+        m4.compose(new THREE.Vector3(x, 0, -Math.random() * TL), q.setFromEuler(e), new THREE.Vector3(rand(0.7, 1.4), h, 1));
+        im.setMatrixAt(i, m4);
+        const v = rand(0.78, 1.12);
+        im.setColorAt(i, col.setRGB(v, v * rand(0.95, 1.05), v * 0.9));
+      }
+      im.frustumCulled = false;
+      im.userData.wz = t * TL;
+      im.visible = false;
+      this.bladeTiles.push(im);
+      this.scene.add(im);
+    }
+    this.bladeLen = TL;
+  }
+
+  setDetail(high) {
+    this.detail = high;
+    setBlobStrength(high ? 0.55 : 1);
   }
 
   /* --------------------------------------------------------------- weather */
@@ -413,7 +470,10 @@ export class World {
       side = water;
     }
     const [factory, xMin, xMax, small] = PROPS[type];
-    const obj = this.take(type, factory, (o) => bakeRigid(o, true));
+    const obj = this.take(type, factory, (o) => {
+      finishProp(bakeRigid(o, true), { sway: SWAY[type] ?? 0, ao: type !== 'dhow' });
+      o.traverse((c) => c.isMesh && !c.material.transparent && (c.castShadow = true));
+    });
     let x = side * rand(xMin, xMax);
     // keep land props out of the water (papyrus and dhows like it wet)
     if (water && side === water && type !== 'dhow' && type !== 'papyrus') x = side * rand(xMin, Math.min(xMax, 13));
@@ -458,6 +518,7 @@ export class World {
     this.herd = [];
     this.propCursor = J - 20;
     this.herdCursor = J + rand(10, 30);
+    this.bladeTiles?.forEach((t, i) => (t.userData.wz = Math.floor(J / this.bladeLen) * this.bladeLen + (i - 0.25) * this.bladeLen));
     const base = Math.floor((J - 16) / SEG_LEN) * SEG_LEN;
     this.segments.forEach((s, i) => {
       s.userData.wz = base + i * SEG_LEN;
@@ -510,7 +571,8 @@ export class World {
     this.skyUniforms.uSun.value.copy(P.sun);
     this.skyUniforms.uNight.value = P.night;
     const sd = this.skyUniforms.uSunDir.value.set(-0.45, P.sunH, -1).normalize();
-    this.sun.position.copy(sd).multiplyScalar(60);
+    this.sunDir.copy(sd);
+    if (!this.sun.castShadow) this.sun.position.copy(sd).multiplyScalar(60);
     this.sun.color.copy(P.sun);
     this.sun.intensity = P.sunI;
     this.hemi.color.copy(P.hemiS);
@@ -573,6 +635,16 @@ export class World {
         this.tintSegment(seg);
       }
       seg.position.z = J - seg.userData.wz - SEG_LEN / 2;
+    }
+
+    // grass blades leapfrog along with the runner and take the region's colour
+    const pickR = this.blend.t < 0.5 ? REGIONS[this.blend.a] : REGIONS[this.blend.b];
+    const blades = this.detail && pickR.blades !== false;
+    if (blades) this.mixColor(this.bladeMat.color, 'grass', this.blend).multiplyScalar(1.05);
+    for (const t of this.bladeTiles) {
+      if (t.userData.wz + this.bladeLen < J - 12) t.userData.wz += this.bladeLen * this.bladeTiles.length;
+      t.position.z = J - t.userData.wz;
+      t.visible = blades;
     }
 
     this.populate(J);
