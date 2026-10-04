@@ -2,6 +2,7 @@ import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, CHAPTERS, INTRO } from '../da
 import { save, persist, ensureMissions, checkMissions, claimMissionSet, multiplier, claimDaily } from '../data/save.js';
 import { audio } from '../game/audio.js';
 import { shareRun } from './share.js';
+import { fetchBoard, postScore, renderRows } from './leaderboard.js';
 
 const $ = (html) => {
   const t = document.createElement('template');
@@ -73,6 +74,9 @@ export class UI {
     this.challenge = this.params.get('c') ? { score: parseInt(this.params.get('c'), 10) || 0, name: (this.params.get('n') || 'A friend').slice(0, 16) } : null;
     this.missionTick = 0;
     this.selIdx = Math.max(0, RUNNERS.findIndex((r) => r.id === save.runner));
+    this.boardYouId = null;
+    this.postedRunId = null;
+    this.postedEntry = null;
 
     game.on('hud', (g) => this.updateHud(g));
     game.on('seed', () => this.bumpSeeds());
@@ -122,7 +126,10 @@ export class UI {
             <div class="chip"><span class="seed"></span><span>${fmt(save.seeds)}</span></div>
             <div class="chip">✖️ ${multiplier()} <span class="muted" style="font-size:12px">MULTIPLIER</span></div>
           </div>
-          <button class="icon-btn" data-act="settings" data-click aria-label="Settings">${ICON.gear}</button>
+          <div class="title-actions">
+            <button class="icon-btn" data-act="board" data-click aria-label="Leaderboard" title="Leaderboard">🏆</button>
+            <button class="icon-btn" data-act="settings" data-click aria-label="Settings">${ICON.gear}</button>
+          </div>
         </div>
         <div class="logo">
           <h1>KIMBIA!</h1>
@@ -150,6 +157,7 @@ export class UI {
       else if (act === 'allies') this.allies();
       else if (act === 'missions') this.missions();
       else if (act === 'story') this.story();
+      else if (act === 'board') this.showBoard();
     });
     this.show(el);
     if (save.introSeen) setTimeout(() => this.daily(), 600);
@@ -496,6 +504,10 @@ export class UI {
             <div class="stat"><b>${fmt(run.distance)}m</b><span>Distance</span></div>
             <div class="stat"><b>${run.stats.allies}</b><span>Allies</span></div>
           </div>
+          <div class="lb">
+            <div class="lb-head"><b>Savanna board</b><span class="muted">Top runs</span></div>
+            <div class="lb-slot"><p class="muted">Loading the board…</p></div>
+          </div>
           <div class="story-unlock"><span class="e">${ch.emoji}</span><div><b>Chapter ${run.chapter + 1}: ${esc(ch.title)}</b><br><span class="muted">${run.chapter < CHAPTERS.length - 1 ? `Next chapter at ${fmt(CHAPTERS[run.chapter + 1].at)}m` : 'You reached the legend!'}</span></div></div>
           <div class="mission-mini">
             ${ms.map((m) => `<div><span class="tick ${m.done ? 'done' : ''}">${m.done ? '✓' : ''}</span>${esc(m.text)}</div>`).join('')}
@@ -521,10 +533,135 @@ export class UI {
         const r = await shareRun(run);
         if (r === 'copied') this.toast('🔗', 'Challenge link copied — send it to a friend!');
         else if (r === 'downloaded') this.toast('🖼️', 'Score card saved!');
+      } else if (act === 'post') {
+        this.postRun(el, run);
+      } else if (act === 'board') {
+        this.showBoard();
       }
     });
     this.overlay(el);
+    this.loadBoard(el, run);
     if (ms.every((m) => m.done)) setTimeout(() => this.missionSetComplete(), 900);
+  }
+
+  async loadBoard(root, run) {
+    let top = [];
+    let error = '';
+    try {
+      top = (await fetchBoard()).top || [];
+    } catch (err) {
+      error = err.message || 'The board is quiet right now.';
+    }
+    if (!root.isConnected) return;
+    const entry = this.postedRunId === this.game.runId ? this.postedEntry : null;
+    this.paintBoard(root, top, entry, error, run);
+  }
+
+  paintBoard(root, top, entry, error, run) {
+    const slot = root.querySelector('.lb-slot');
+    if (!slot) return;
+    const youName = (entry?.name || save.name || '').trim();
+    const preview = (top || []).slice(0, 5);
+    const placed = entry
+      ? `<div class="lb-placed">You're <b>#${fmt(entry.rank)}</b> on the savanna board</div>`
+      : `<div class="lb-form">
+          <input class="name-input" maxlength="16" data-lb-name placeholder="Your name" value="${esc(save.name)}" autocomplete="nickname" />
+          <button class="btn teal" data-act="post" data-click>Post</button>
+        </div>
+        <p class="lb-msg">${esc(error)}</p>`;
+    const list = error
+      ? ''
+      : (preview.length
+        ? renderRows(preview, { youId: entry?.id ?? this.boardYouId, youName })
+        : '<p class="muted lb-empty">No scores yet. Be the first name on the board.</p>');
+    slot.innerHTML = `
+      ${placed}
+      ${list}
+      <button class="lb-more" data-act="board" data-click>Full board ›</button>`;
+    slot.querySelector('[data-lb-name]')?.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      this.postRun(root, run);
+    });
+  }
+
+  async postRun(root, run) {
+    if (this.posting || this.postedRunId === this.game.runId) return;
+    const input = root.querySelector('[data-lb-name]');
+    const button = root.querySelector('[data-act=post]');
+    const msg = root.querySelector('.lb-msg');
+    if (!input || !button) return;
+    this.posting = true;
+    button.disabled = true;
+    button.textContent = '…';
+    try {
+      const data = await postScore({
+        name: input.value,
+        score: run.score,
+        distance: run.distance,
+        seeds: run.seeds,
+        allies: run.stats?.allies ?? 0,
+        chapter: run.chapter ?? 0,
+        runner: save.runner,
+      });
+      save.name = data.entry.name;
+      persist();
+      this.postedRunId = this.game.runId;
+      this.postedEntry = data.entry;
+      this.boardYouId = data.entry.id;
+      this.paintBoard(root, data.top, data.entry, '', run);
+      audio.buy();
+    } catch (err) {
+      button.disabled = false;
+      button.textContent = 'Post';
+      if (msg) msg.textContent = err.message || 'Could not post your score';
+    } finally {
+      this.posting = false;
+    }
+  }
+
+  showBoard() {
+    this.root.querySelector('.lb-screen')?.remove();
+    const el = $(`
+      <div class="screen scrim-full lb-screen">
+        <div class="sheet-head">
+          <button class="icon-btn" data-act="back" data-click aria-label="Back">${ICON.back}</button>
+          <h2>Leaderboard</h2>
+          <div class="chip">🏆</div>
+        </div>
+        <div class="sheet-body"></div>
+      </div>`);
+    const body = el.querySelector('.sheet-body');
+    const close = () => el.remove();
+    el.querySelector('[data-act=back]').addEventListener('click', close);
+    el.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('[data-click]')) audio.click();
+    });
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('[data-act=retry]')) this.fillBoard(body);
+    });
+    this.overlay(el);
+    this.fillBoard(body);
+  }
+
+  async fillBoard(body) {
+    body.innerHTML = '<p class="muted">Loading the savanna board…</p>';
+    try {
+      const { top } = await fetchBoard();
+      if (!body.isConnected) return;
+      const youName = (this.postedEntry?.name || save.name || '').trim();
+      body.innerHTML = top?.length
+        ? `<p class="muted" style="margin:0 4px">Fastest runners on the Serengeti, ranked by score.</p>${renderRows(top, { youId: this.boardYouId, youName })}`
+        : '<div class="panel lb-empty-card"><div class="e">🌱</div><p>No scores yet. Finish a run and put your name on the board.</p></div>';
+    } catch (err) {
+      if (!body.isConnected) return;
+      body.innerHTML = `
+        <div class="panel lb-empty-card">
+          <div class="e">🌫️</div>
+          <p>${esc(err.message || 'Could not load the board')}</p>
+          <button class="btn" data-act="retry" data-click style="margin-top:14px">Try again</button>
+        </div>`;
+    }
   }
 
   missionSetComplete() {
