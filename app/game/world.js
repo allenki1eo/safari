@@ -545,6 +545,8 @@ export class World {
   }
 
   spawnHerd(wz) {
+    // Low graphics keeps every other herd animal: animated models are the costliest thing on screen
+    if (this.detail === false && Math.round(wz / HERD_STEP) % 2) return;
     const region = REGIONS[regionIndexAt(wz).index];
     const plan = planHerd(region, this.day, wz);
     if (!plan) return;
@@ -563,7 +565,7 @@ export class World {
     a.visible = true;
     if (!a.parent) this.scene.add(a);
     this.herd.push({ root: a, anim });
-    if (plan.calf) this.spawnCalf(plan.calf, a);
+    if (plan.calf && this.detail !== false) this.spawnCalf(plan.calf, a);
   }
 
   /** A calf tucked in at its mother's flank; it copies her mood and her pace. */
@@ -712,6 +714,7 @@ export class World {
 
   /* -------------------------------------------------------------- update */
   update(dt, J, camera, time) {
+    this.frame = (this.frame ?? 0) + 1;
     this.sky.position.copy(camera.position);
     this.stars.position.copy(camera.position);
     this.ocean.position.x = camera.position.x;
@@ -779,7 +782,11 @@ export class World {
       }
       a.position.z = J - u.wz;
       a.visible = a.position.z > -175 && a.position.z < 12;
-      if (a.visible && a.position.z > -120) anim.update(dt, 1, u.mode);
+      // far animals animate at half rate (a frame each, alternately); near ones every frame
+      if (a.visible && a.position.z > -120) {
+        if (a.position.z > -55) anim.update(dt, 1, u.mode);
+        else if ((this.frame + i) % 2 === 0) anim.update(dt * 2, 1, u.mode);
+      }
     }
 
     for (const c of this.clouds) {
@@ -814,21 +821,55 @@ export class World {
 }
 
 /* ======================================================================
- * Particles — a single instanced mesh for dust, sparkles and debris.
+ * Particles — two instanced meshes: soft round puffs for dust and smoke
+ * (camera-facing, fading out), and small solid chips for debris and sparkles.
  * ====================================================================== */
+let puffTex;
+function puffTexture() {
+  if (puffTex) return puffTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grd.addColorStop(0, 'rgba(255,255,255,0.9)');
+  grd.addColorStop(0.45, 'rgba(255,255,255,0.55)');
+  grd.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 64, 64);
+  puffTex = new THREE.CanvasTexture(c);
+  puffTex.colorSpace = THREE.SRGBColorSpace;
+  return puffTex;
+}
+
 export class Particles {
   constructor(scene, max = 260) {
     this.max = max;
-    const m = bend(new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false }));
-    this.mesh = new THREE.InstancedMesh(G.ico, m, max);
-    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.mesh.frustumCulled = false;
-    this.mesh.count = 0;
+    const chips = bend(new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false }));
+    this.mesh = new THREE.InstancedMesh(G.ico, chips, max);
+    // puffs carry their own fade in a per-instance alpha
+    this.alpha = new THREE.InstancedBufferAttribute(new Float32Array(max), 1);
+    this.alpha.setUsage(THREE.DynamicDrawUsage);
+    const plane = new THREE.PlaneGeometry(1, 1);
+    plane.setAttribute('aAlpha', this.alpha);
+    const puffs = bend(new THREE.MeshBasicMaterial({ color: 0xffffff, map: puffTexture(), transparent: true, depthWrite: false }), {
+      key: 'puff',
+      vertexHead: 'attribute float aAlpha;\nvarying float vAlpha;\n',
+      vertexBegin: 'vAlpha = aAlpha;\n',
+      fragmentHead: 'varying float vAlpha;\n',
+      fragmentColor: 'diffuseColor.a *= vAlpha;\n',
+    });
+    this.puffs = new THREE.InstancedMesh(plane, puffs, max);
+    for (const m of [this.mesh, this.puffs]) {
+      m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      m.frustumCulled = false;
+      m.count = 0;
+      m.setColorAt(0, new THREE.Color());
+      scene.add(m);
+    }
     this.p = [];
     this.dummy = new THREE.Object3D();
     this.color = new THREE.Color();
-    this.mesh.setColorAt(0, this.color);
-    scene.add(this.mesh);
+    this.camera = null; // set by the game so puffs can face it
   }
 
   emit(x, y, z, o = {}) {
@@ -854,6 +895,8 @@ export class Particles {
   update(dt, scroll) {
     const d = this.dummy;
     let n = 0;
+    let m = 0;
+    const face = this.camera?.quaternion;
     for (let i = this.p.length - 1; i >= 0; i--) {
       const q = this.p[i];
       q.life += dt;
@@ -872,15 +915,31 @@ export class Particles {
       }
       const k = 1 - q.life / q.max;
       d.position.set(q.x, q.y, q.z);
-      d.rotation.set(q.life * q.spin, q.life * q.spin * 0.7, 0);
-      d.scale.setScalar(q.size * (q.grow ? 1 + (1 - k) * q.grow * 3 : k));
-      d.updateMatrix();
-      this.mesh.setMatrixAt(n, d.matrix);
-      this.mesh.setColorAt(n, this.color.set(q.color));
-      n++;
+      if (q.grow) {
+        // a puff swells as it drifts and fades out softly
+        if (face) d.quaternion.copy(face);
+        else d.rotation.set(0, 0, 0);
+        d.scale.setScalar(q.size * 2.2 * (1 + (1 - k) * q.grow * 2));
+        d.updateMatrix();
+        this.puffs.setMatrixAt(m, d.matrix);
+        this.puffs.setColorAt(m, this.color.set(q.color));
+        this.alpha.setX(m, Math.min(1, k * 1.6) * 0.75);
+        m++;
+      } else {
+        d.rotation.set(q.life * q.spin, q.life * q.spin * 0.7, 0);
+        d.scale.setScalar(q.size * k);
+        d.updateMatrix();
+        this.mesh.setMatrixAt(n, d.matrix);
+        this.mesh.setColorAt(n, this.color.set(q.color));
+        n++;
+      }
     }
     this.mesh.count = n;
+    this.puffs.count = m;
     this.mesh.instanceMatrix.needsUpdate = true;
+    this.puffs.instanceMatrix.needsUpdate = true;
+    this.alpha.needsUpdate = true;
+    if (this.puffs.instanceColor) this.puffs.instanceColor.needsUpdate = true;
     if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
   }
 }

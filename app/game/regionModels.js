@@ -701,7 +701,9 @@ export function makeRockfall(style) {
   warn.rotation.x = -Math.PI / 2;
   warn.position.y = 0.05;
   g.add(warn);
-  g.add(blobShadow(2.6, 2.4));
+  const shadow = blobShadow(2.6, 2.4);
+  g.add(shadow);
+  g.userData.shadow = shadow; // grows as the rock (or coconut) comes down
   g.userData.rock = rock;
   g.userData.warn = warn;
   return g;

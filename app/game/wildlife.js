@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
+import { track } from './loading.js';
 import { G, bakeRigid, bend, mat, mesh } from './materials.js';
 import { PAT, PATTERN_GLSL } from './rigkit.js';
 
@@ -21,13 +22,13 @@ function load(name) {
   if (!files.has(name)) {
     loader ??= new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
     const entry = { gltf: null };
-    entry.promise = loader
+    entry.promise = track(loader
       .loadAsync(`${BASE}${name}.glb`)
       .then((g) => (entry.gltf = g))
       .catch((err) => {
         console.warn(`[wildlife] ${name} unavailable, keeping the hand-built animal`, err);
         return null;
-      });
+      }));
     files.set(name, entry);
   }
   return files.get(name);
@@ -62,6 +63,40 @@ const CLIPS = {
 
 // species drawn from another species' model file: the wild dog is 0 A.D.'s wolf, like the hyena
 const FILES = { wilddog: 'hyena' };
+
+/**
+ * Reshaping a borrowed body, applied after each animation update (the clips key every bone's
+ * scale, so a one-off change wouldn't stick). The hyena is the wolf with its spine tilted nose-up
+ * from the hips, longer front legs, a heavier neck and a short tail: the sloping-backed outline
+ * that reads as a hyena at a glance.
+ */
+const RESHAPE = {
+  hyena: { tilt: ['Bone', -0.15], scale: { FrontLeg1_L: 1.2, FrontLeg1_R: 1.2, Neck1: 1.14, Tail1: 0.55 } },
+};
+
+function reshaper(kind, model) {
+  const spec = RESHAPE[kind];
+  if (!spec) return null;
+  const bones = {};
+  model.traverse((o) => o.isBone && (bones[o.name] = o));
+  const tiltBone = spec.tilt && bones[spec.tilt[0]];
+  let tilt = null;
+  if (tiltBone) {
+    // pitch about the model's own sideways axis, expressed in the bone's parent space
+    model.updateMatrixWorld(true);
+    const rel = new THREE.Quaternion();
+    tiltBone.parent.matrixWorld.decompose(new THREE.Vector3(), rel, new THREE.Vector3());
+    const modelQ = new THREE.Quaternion();
+    model.matrixWorld.decompose(new THREE.Vector3(), modelQ, new THREE.Vector3());
+    const axis = new THREE.Vector3(1, 0, 0).applyQuaternion(modelQ).applyQuaternion(rel.invert()).normalize();
+    tilt = new THREE.Quaternion().setFromAxisAngle(axis, spec.tilt[1]);
+  }
+  const scaled = Object.entries(spec.scale ?? {}).filter(([n]) => bones[n]).map(([n, k]) => [bones[n], k]);
+  return () => {
+    if (tilt) tiltBone.quaternion.premultiply(tilt);
+    for (const [b, k] of scaled) b.scale.multiplyScalar(k);
+  };
+}
 
 /**
  * New coats for models borrowed from a cousin: the texture keeps the fur's light and shade
@@ -189,12 +224,14 @@ export function makeWildAnimal(kind, makeFallback, { saddle = false, boss = fals
     let shadows = !fallback;
     fallback?.root.traverse((o) => o.isMesh && o.castShadow && (shadows = true));
     // measured on the skinned pose: some meshes carry a node scale that skinning ignores
+    const reshape = reshaper(kind, model);
     // and standing in the idle pose, since a bind pose can crouch or sprawl
     if (!sizes.has(kind)) {
       const idle = file.gltf.animations.find((c) => c.name === 'Idle');
       const probe = idle && new THREE.AnimationMixer(model);
       probe?.clipAction(idle).play();
       probe?.update(0);
+      reshape?.();
       model.updateMatrixWorld(true);
       sizes.set(kind, new THREE.Box3().setFromObject(model, true).getSize(new THREE.Vector3()));
       probe?.stopAllAction();
@@ -220,7 +257,7 @@ export function makeWildAnimal(kind, makeFallback, { saddle = false, boss = fals
     const mixer = new THREE.AnimationMixer(model);
     const actions = {};
     for (const c of file.gltf.animations) actions[c.name] = mixer.clipAction(c);
-    rig = { mixer, actions, current: null };
+    rig = { mixer, actions, current: null, reshape };
     mixer.setTime(Math.random() * 3);
     if (fallback) fallback.root.visible = false;
   };
@@ -259,6 +296,7 @@ export function makeWildAnimal(kind, makeFallback, { saddle = false, boss = fals
       }
       if (a) a.timeScale = next === 'idle' ? 1 : Math.max(0.4, rate) * (next === 'walk' ? 1 : 0.85);
       rig.mixer.update(dt);
+      rig.reshape?.();
     },
   };
 }

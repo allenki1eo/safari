@@ -173,10 +173,23 @@ export const HUNT_PER_LETTER = 150;
  * box). `dur` 0 means instant.
  */
 export const BOOSTS = {
-  gold: { id: 'gold', name: 'Dhahabu', emoji: '🌟', color: '#ffc940', dur: 12, line: 'Golden seeds: every seed is worth 3' },
-  score: { id: 'score', name: 'Pointi ×2', emoji: '⚡', color: '#7ad7ff', dur: 15, line: 'Every step scores double' },
-  slow: { id: 'slow', name: 'Pole Pole', emoji: '🐢', color: '#7bd389', dur: 8, line: 'The chase slows right down' },
-  wind: { id: 'wind', name: 'Kimbunga', emoji: '🌪️', color: '#c9b8ff', dur: 0, line: 'A whirlwind sweeps the trail ahead' },
+  // `tag` labels the HUD chip; `intro` is said once, the first time a player finds it
+  gold: {
+    id: 'gold', name: 'Dhahabu', emoji: '🌟', color: '#ffc940', dur: 12, tag: '×3', line: 'Golden seeds: every seed is worth 3',
+    intro: 'Dhahabu means gold. For 12 seconds every seed you grab is worth three!',
+  },
+  score: {
+    id: 'score', name: 'Pointi ×2', emoji: '⚡', color: '#7ad7ff', dur: 15, tag: '×2', line: 'Every step scores double',
+    intro: 'Double points for 15 seconds. Keep running and watch your score fly!',
+  },
+  slow: {
+    id: 'slow', name: 'Pole Pole', emoji: '🐢', color: '#7bd389', dur: 8, tag: 'slow', line: 'The chase slows right down',
+    intro: 'Pole pole — slowly, slowly. The trail eases off for 8 seconds so you can breathe.',
+  },
+  wind: {
+    id: 'wind', name: 'Kimbunga', emoji: '🌪️', color: '#c9b8ff', dur: 0, tag: '', line: 'A whirlwind sweeps the trail ahead',
+    intro: 'A kimbunga is a whirlwind! It blows every obstacle just ahead clean off the trail.',
+  },
 };
 export const BOOST_IDS = Object.keys(BOOSTS);
 
