@@ -3,7 +3,7 @@ import { REGIONS, COUNTRIES } from '../data/regions.js';
 import { save, persist, ensureMissions, checkMissions, claimMissionSet, multiplier, claimDaily } from '../data/save.js';
 import { audio } from '../game/audio.js';
 import { shareRun } from './share.js';
-import { fetchBoard, postScore, renderRows } from './leaderboard.js';
+import { fetchBoard, leaveDecision, postScore, renderRows, runnerName, scoreSavePlan } from './leaderboard.js';
 
 const $ = (html) => {
   const t = document.createElement('template');
@@ -79,6 +79,8 @@ export class UI {
     this.postedRunId = null;
     this.postedEntry = null;
     this.lastTop = [];
+    this._submitTask = null;
+    this.leaveLock = false;
 
     game.on('hud', (g) => this.updateHud(g));
     game.on('seed', () => this.bumpSeeds());
@@ -592,48 +594,51 @@ export class UI {
           </div>
           <div class="lb">
             <div class="lb-head"><b>Savanna board</b><span class="muted">Top runs</span></div>
-            <div class="lb-slot"><p class="muted">Loading the board…</p></div>
+            <div class="lb-slot"><p class="muted">Saving your run…</p></div>
           </div>
           <div class="story-unlock"><span class="e">${COUNTRIES[reg.country].flag}</span><div><b>${esc(reg.name)} · ${esc(reg.title)}</b><br><span class="muted">${next ? `Next: ${COUNTRIES[next.country].flag} ${esc(next.name)}` : 'You crossed all three countries!'}</span></div></div>
           <div class="mission-mini">
             ${ms.map((m) => `<div><span class="tick ${m.done ? 'done' : ''}">${m.done ? '✓' : ''}</span>${esc(m.text)}</div>`).join('')}
           </div>
           <div style="display:flex;flex-direction:column;gap:12px">
-            <button class="btn big" data-act="again" data-click>↻ Run again</button>
+            <button class="btn big" type="button" data-act="again">↻ Run again</button>
             <div class="row2">
-              <button class="btn teal" data-act="share" data-click>${ICON.share.replace('<svg', '<svg width="22" height="22"')} Challenge</button>
-              <button class="btn ghost" data-act="home" data-click>🏠 Home</button>
+              <button class="btn teal" type="button" data-act="share">${ICON.share.replace('<svg', '<svg width="22" height="22"')} Challenge</button>
+              <button class="btn ghost" type="button" data-act="home">🏠 Home</button>
             </div>
           </div>
         </div>
       </div>`);
     el.addEventListener('click', async (e) => {
       const act = e.target.closest('[data-act]')?.dataset.act;
-      if (act === 'again') {
-        el.remove();
-        this.startRun();
-      } else if (act === 'home') {
-        el.remove();
-        this.title();
+      if (act === 'again' || act === 'home') {
+        this.leaveResults(el, run, act);
+      } else if (act === 'post') {
+        this.postRun(el, run);
       } else if (act === 'share') {
         const r = await shareRun(run);
         if (r === 'copied') this.toast('🔗', 'Challenge link copied — send it to a friend!');
         else if (r === 'downloaded') this.toast('🖼️', 'Score card saved!');
-      } else if (act === 'post') {
-        this.postRun(el, run);
       } else if (act === 'board') {
         this.showBoard();
       }
     });
     this.overlay(el);
-    this.loadBoard(el, run);
+    this.recordFinishedRun(el, run);
     if (ms.every((m) => m.done)) setTimeout(() => this.missionSetComplete(), 900);
   }
 
-  /** Game over: post automatically for named players; ask new players for a name once. */
-  async loadBoard(root, run) {
-    if (this.postedRunId === this.game.runId) return this.paintBoard(root, this.lastTop, this.postedEntry, '', run);
-    if (save.name && run.score > 0) return this.submitRun(root, run, save.name);
+  /** Saves a finished run. A stored name posts immediately; otherwise the card asks. */
+  recordFinishedRun(root, run) {
+    const plan = scoreSavePlan(save.name);
+    if (plan.action === 'save' && run.score > 0) {
+      this.submitRun(root, run, plan.name);
+      return;
+    }
+    this.loadPreview(root, run, plan.action === 'ask');
+  }
+
+  async loadPreview(root, run, ask) {
     let top = [];
     let error = '';
     try {
@@ -641,47 +646,95 @@ export class UI {
     } catch (err) {
       error = err.message || 'The board is quiet right now.';
     }
-    if (!root.isConnected) return;
-    this.paintBoard(root, top, null, error, run, !save.name);
+    if (!root.isConnected || this.postedRunId === this.game.runId) return;
+    this.lastTop = top;
+    this.paintBoard(root, top, null, error, run, ask);
+    if (ask) root.querySelector('[data-lb-name]')?.focus();
   }
 
-  async submitRun(root, run, name) {
-    if (this.posting) return;
-    this.posting = true;
+  /**
+   * Posts this run once. Later callers share the same request so Run again
+   * cannot fire a second insert or leave before the first one finishes.
+   */
+  submitRun(root, run, name) {
+    if (this.postedRunId === this.game.runId) return Promise.resolve(true);
+    if (this._submitTask) return this._submitTask;
     const slot = root.querySelector('.lb-slot');
-    if (slot && !slot.querySelector('.lb-list')) slot.innerHTML = '<p class="muted">Updating the savanna board…</p>';
-    try {
-      const data = await postScore({
-        name,
-        score: run.score,
-        distance: run.distance,
-        seeds: run.seeds,
-        allies: run.stats?.allies ?? 0,
-        chapter: run.chapter ?? 0,
-        runner: save.runner,
-      });
-      save.name = data.entry.name;
-      save.playerId = data.entry.id;
-      persist();
-      this.postedRunId = this.game.runId;
-      this.postedEntry = data.entry;
-      this.lastTop = data.top;
-      if (root.isConnected) this.paintBoard(root, data.top, data.entry, '', run);
-      if (data.entry.improved && data.entry.rank) audio.buy();
-    } catch (err) {
-      if (!root.isConnected) return;
-      if (err.code === 'NAME_TAKEN') {
-        let top = [];
-        try { top = (await fetchBoard()).top || []; } catch { /* keep the form usable */ }
-        this.paintBoard(root, top, null, `“${name}” is taken. Pick another name.`, run, true);
-      } else {
-        let top = [];
-        try { top = (await fetchBoard()).top || []; } catch { /* offline */ }
-        this.paintBoard(root, top, null, err.status === 503 ? '' : 'Couldn\'t reach the board. Your next run will try again.', run, false);
-      }
-    } finally {
-      this.posting = false;
+    if (slot && !slot.querySelector('.lb-list') && !slot.querySelector('[data-lb-name]')) {
+      slot.innerHTML = '<p class="muted">Saving your run…</p>';
     }
+    let finish;
+    const task = new Promise((resolve) => {
+      finish = resolve;
+    });
+    this._submitTask = task;
+    (async () => {
+      try {
+        const data = await postScore({
+          name,
+          score: run.score,
+          distance: run.distance,
+          seeds: run.seeds,
+          allies: run.stats?.allies ?? 0,
+          chapter: Math.max(0, run.chapter || 0),
+          runner: save.runner,
+        });
+        save.name = data.entry.name;
+        save.playerId = data.entry.id;
+        persist();
+        this.postedRunId = this.game.runId;
+        this.postedEntry = data.entry;
+        this.lastTop = data.top;
+        if (root.isConnected) this.paintBoard(root, data.top, data.entry, '', run);
+        if (data.entry.improved && data.entry.rank) audio.buy();
+        finish(true);
+      } catch (err) {
+        if (root.isConnected) {
+          let top = this.lastTop;
+          try { top = (await fetchBoard()).top || top; } catch { /* keep the card usable */ }
+          this.lastTop = top;
+          const message = err.code === 'NAME_TAKEN'
+            ? `“${name}” is taken. Pick another name.`
+            : (err.message || 'Could not save your score');
+          this.paintBoard(root, top, null, message, run, true);
+          root.querySelector('[data-lb-name]')?.focus();
+        }
+        finish(false);
+      }
+    })();
+    return task.finally(() => {
+      if (this._submitTask === task) this._submitTask = null;
+    });
+  }
+
+  leaveResults(root, run, where) {
+    if (this.leaveLock) return;
+    this.leaveLock = true;
+    this.finishLeave(root, run, where).finally(() => {
+      this.leaveLock = false;
+    });
+  }
+
+  async finishLeave(root, run, where) {
+    const typed = root.querySelector('[data-lb-name]')?.value ?? '';
+    const worthSaving = run.score > 0 || !!runnerName(typed);
+    const decision = leaveDecision({
+      alreadySaved: this.postedRunId === this.game.runId || !worthSaving,
+      savedName: run.score > 0 ? save.name : '',
+      typedName: typed,
+    });
+    if (decision.action === 'ask') {
+      this.paintBoard(root, this.lastTop, null, 'Add your name so this run is saved.', run, true);
+      root.querySelector('[data-lb-name]')?.focus();
+      return;
+    }
+    if (decision.action === 'save') {
+      const ok = await this.submitRun(root, run, decision.name);
+      if (!ok || !root.isConnected) return;
+    }
+    root.remove();
+    if (where === 'again') this.startRun();
+    else this.title();
   }
 
   paintBoard(root, top, entry, error, run, needName = false) {
@@ -694,21 +747,21 @@ export class UI {
       const note = entry.improved ? '🎉 New personal best!' : `Your best: <b>${fmt(entry.score)}</b>`;
       head = `<div class="lb-placed">${rank}<span class="lb-note">${note}</span></div>`;
     } else if (needName) {
+      const draft = slot.querySelector('[data-lb-name]')?.value ?? save.name;
       head = `
         <p class="lb-ask">Pick your runner name. It's yours for good, and your best run will post by itself after every game.</p>
-        <div class="lb-form">
-          <input class="name-input" maxlength="16" data-lb-name placeholder="Your name" value="${esc(save.name)}" autocomplete="nickname" />
-          <button class="btn teal" data-act="post" data-click>Save</button>
-        </div>`;
+        <form class="lb-form">
+          <input class="name-input" maxlength="16" data-lb-name placeholder="Your name" value="${esc(draft)}" autocomplete="nickname" enterkeyhint="done" />
+          <button class="btn teal wide" type="submit" data-act="post">Save score</button>
+        </form>`;
     }
     const msg = `<p class="lb-msg">${esc(error)}</p>`;
     const youId = save.playerId ?? null;
     const list = preview.length
       ? renderRows(preview, { youId, youName: '' })
       : (error ? '' : '<p class="muted lb-empty">No scores yet. Be the first name on the board.</p>');
-    slot.innerHTML = `${head}${msg}${list}<button class="lb-more" data-act="board" data-click>Full board ›</button>`;
-    slot.querySelector('[data-lb-name]')?.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter') return;
+    slot.innerHTML = `${head}${msg}${list}<button class="lb-more" type="button" data-act="board">Full board ›</button>`;
+    slot.querySelector('form')?.addEventListener('submit', (e) => {
       e.preventDefault();
       this.postRun(root, run);
     });
@@ -717,13 +770,14 @@ export class UI {
   /** Name picked on the game-over card: claim it and post this run in one go. */
   postRun(root, run) {
     const input = root.querySelector('[data-lb-name]');
-    const name = input?.value.trim() ?? '';
-    if (!name) {
+    const decision = leaveDecision({ alreadySaved: false, savedName: '', typedName: input?.value ?? '' });
+    if (decision.action !== 'save') {
       const msg = root.querySelector('.lb-msg');
-      if (msg) msg.textContent = 'Type a name first.';
+      if (msg) msg.textContent = 'Add your name so this run is saved.';
+      input?.focus();
       return;
     }
-    this.submitRun(root, run, name);
+    this.submitRun(root, run, decision.name);
   }
 
   showBoard() {
@@ -753,6 +807,7 @@ export class UI {
   async fillBoard(body) {
     body.innerHTML = '<p class="muted">Loading the savanna board…</p>';
     try {
+      if (this._submitTask) await this._submitTask;
       const { top } = await fetchBoard();
       if (!body.isConnected) return;
       const youId = save.playerId ?? null;

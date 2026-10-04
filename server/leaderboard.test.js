@@ -12,6 +12,7 @@ import {
   resetLeaderboardClient,
   validateSubmission,
 } from './leaderboard.js';
+import { leaveDecision, runnerName, scoreSavePlan } from '../app/ui/leaderboard.js';
 
 // a distinct device secret per fake player
 const tok = (n) => String(n).padStart(2, '0').repeat(32).slice(0, 64).replace(/[^a-f0-9]/g, 'a');
@@ -83,6 +84,36 @@ test('the browser module never mentions Turso credentials', () => {
     assert.equal(source.includes('@libsql'), false);
     assert.equal(source.includes('authToken'), false);
   }
+});
+
+test('a finished run is saved from the stored name, or the card asks before anyone can leave', () => {
+  assert.deepEqual(scoreSavePlan('  Allen '), { action: 'save', name: 'Allen' });
+  assert.deepEqual(scoreSavePlan(''), { action: 'ask' });
+  assert.deepEqual(scoreSavePlan('   '), { action: 'ask' });
+  assert.equal(runnerName('A'.repeat(NAME_MAX) + 'x'), '');
+
+  assert.deepEqual(
+    leaveDecision({ alreadySaved: false, savedName: '', typedName: '' }),
+    { action: 'ask' },
+  );
+  assert.deepEqual(
+    leaveDecision({ alreadySaved: false, savedName: '', typedName: '  Zuri ' }),
+    { action: 'save', name: 'Zuri' },
+  );
+  assert.deepEqual(
+    leaveDecision({ alreadySaved: false, savedName: 'Juma', typedName: '' }),
+    { action: 'save', name: 'Juma' },
+  );
+  assert.deepEqual(
+    leaveDecision({ alreadySaved: true, savedName: 'Juma', typedName: '' }),
+    { action: 'leave' },
+  );
+
+  const ui = readFileSync(new URL('../app/ui/ui.js', import.meta.url), 'utf8');
+  assert.match(ui, /recordFinishedRun\(el, run\)/);
+  assert.match(ui, /scoreSavePlan\(save\.name\)/);
+  assert.match(ui, /leaveResults\(el, run, act\)/);
+  assert.doesNotMatch(ui, /if \(act === 'again'\) \{\s*el\.remove\(\)/);
 });
 
 test('answers 503 until storage is configured', async () => {
