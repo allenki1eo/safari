@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { curve, bend, bakeRigid, finishProp, time as timeU } from './materials.js';
 import { Look, detectQuality } from './look.js';
-import { makeRunner, Animals, makeEagle, makeHornbill, makeTruck, makeRamp, makeTotem } from './models.js';
-import { makeRiggedRunner, preloadRigs, riggedAnimal } from './rig.js';
+import { Animals, makeEagle, makeHornbill, makeTruck, makeRamp, makeTotem } from './models.js';
+import { makeRunner } from './people.js';
 import {
   RegionAnimals, makeLogStyled, makeGateStyled, makeBoulderStyled, makeMoundStyled, makeCart, makeRockfall,
 } from './regionModels.js';
@@ -52,7 +52,6 @@ export class Game {
     this.obstacles = [];
     this.coins = [];
     this.totems = [];
-    preloadRigs(save.runner);
     this.buildCoins();
     this.buildAllies();
     this.buildChasers();
@@ -112,7 +111,7 @@ export class Game {
   setRunner(id) {
     const def = RUNNERS.find((r) => r.id === id) ?? RUNNERS[0];
     if (this.runner) this.scene.remove(this.runner.root);
-    this.runner = makeRiggedRunner(def, makeRunner(def));
+    this.runner = makeRunner(def);
     castShadows(this.runner.root);
     this.scene.add(this.runner.root);
     this.runnerId = def.id;
@@ -120,7 +119,7 @@ export class Game {
 
   buildAllies() {
     this.allyModels = {
-      tembo: Animals.elephant(),
+      tembo: Animals.elephant({ saddle: true }),
       tai: makeEagle(),
       duma: Animals.cheetah(),
       twiga: Animals.giraffe(),
@@ -138,11 +137,7 @@ export class Game {
   }
 
   buildChasers() {
-    this.chasers = [
-      riggedAnimal('hyena', () => Animals.hyena(true), { boss: true }),
-      riggedAnimal('hyena', () => Animals.hyena()),
-      riggedAnimal('hyena', () => Animals.hyena()),
-    ];
+    this.chasers = [Animals.hyena(true), Animals.hyena(), Animals.hyena()];
     this.chasers.forEach((c, i) => {
       c.root.position.set((i - 1) * 1.6, 0, 14);
       c.offset = [0, -1.5, 1.5][i];
@@ -521,8 +516,8 @@ export class Game {
         break;
       }
       case 'rhino': anim = Animals.rhino(); break;
-      case 'wildebeest': anim = riggedAnimal('wildebeest', () => Animals.wildebeest()); break;
-      case 'buffalo': anim = riggedAnimal('buffalo', () => RegionAnimals.buffalo()); break;
+      case 'wildebeest': anim = Animals.wildebeest(); break;
+      case 'buffalo': anim = RegionAnimals.buffalo(); break;
       case 'croc': anim = RegionAnimals.croc(); break;
       case 'gorilla': anim = RegionAnimals.gorilla(true); break;
       case 'crossing': anim = Animals.elephant(); break;

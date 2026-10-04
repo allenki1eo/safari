@@ -1,6 +1,6 @@
 // Kimbia service worker — network-first pages, cache-first hashed assets.
 // Replaces the previous "safari-v1" worker and clears its cache on activate.
-const CACHE = 'kimbia-v4';
+const CACHE = 'kimbia-v3';
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(['/'])).then(() => self.skipWaiting()));
@@ -29,22 +29,6 @@ self.addEventListener('fetch', (e) => {
         caches.open(CACHE).then((c) => c.put(request, copy));
         return res;
       })),
-    );
-    return;
-  }
-
-  // Character models keep their names between releases: fetch fresh, but keep a copy for offline runs.
-  if (url.pathname.startsWith('/models/')) {
-    e.respondWith(
-      fetch(request)
-        .then((res) => {
-          if (res.ok) {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(request, copy));
-          }
-          return res;
-        })
-        .catch(() => caches.match(request)),
     );
     return;
   }
