@@ -8,6 +8,7 @@ import {
   makePapyrus, makeHut, makeStoneHouse, makeBanana, makeJungleTree, makeFern, makeTreeFern, makeFlowers, makeDhow,
 } from './regionModels.js';
 import { REGIONS, regionIndexAt, PROP_TYPES, JOURNEY_LEN } from '../data/regions.js';
+import { riggedAnimal } from './rig.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const C = (h) => new THREE.Color(h);
@@ -81,13 +82,13 @@ const SWAY = {
 };
 
 const HERD = {
-  zebra: () => Animals.zebra(),
+  zebra: () => riggedAnimal('zebra', () => Animals.zebra()),
   giraffe: () => Animals.giraffe(),
   elephant: () => Animals.elephant(),
-  wildebeest: () => Animals.wildebeest(),
+  wildebeest: () => riggedAnimal('wildebeest', () => Animals.wildebeest()),
   lion: () => Animals.lion(),
   rhino: () => Animals.rhino(),
-  buffalo: () => RegionAnimals.buffalo(),
+  buffalo: () => riggedAnimal('buffalo', () => RegionAnimals.buffalo()),
   flamingo: () => RegionAnimals.flamingo(),
   hippo: () => RegionAnimals.hippo(),
   gorilla: () => RegionAnimals.gorilla(),

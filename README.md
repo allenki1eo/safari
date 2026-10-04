@@ -60,7 +60,8 @@ After Bwindi the run loops into a *legend lap*. Regions you reach unlock on the 
 ## Tech
 
 - [three.js](https://threejs.org) and vanilla ES modules, bundled with [Vite](https://vitejs.dev). About 175 KB gzipped in total.
-- **No model, texture or audio files.** Every animal, tree and truck is built from low-poly primitives in `app/game/models.js`. Music (kalimba, djembe, shaker) and sound effects are synthesized with WebAudio in `app/game/audio.js`.
+- **Rigged characters.** The six runners, Fisi's hyena pack, the zebra, wildebeest and buffalo are skinned glTF models with real animation clips: running, rolling, waving, galloping, grazing (`app/game/rig.js`). Jump, elephant-ride and eagle-flight poses are layered on top of the clips bone by bone. Each runner is repainted and kitted out (headwrap, cap, beads, scarf, backpack); zebra stripes and hyena spots are painted by a shader. The models are CC0 from [Quaternius](https://quaternius.com), compressed with meshopt by `scripts/build-models.mjs` to about 1 MB for the whole set (70–140 KB each). Until a model arrives, or if it can't load, the hand-built stand-in runs instead.
+- **No texture or audio files.** Trees, trucks and the other animals are built from low-poly primitives in `app/game/models.js`. Music (kalimba, djembe, shaker) and sound effects are synthesized with WebAudio in `app/game/audio.js`.
 - A curved-world vertex shader gives the rolling horizon (`app/game/materials.js`).
 - Static meshes are merged into vertex-coloured batches at build time, keeping each frame around 150–250 draw calls on phones. Pixel ratio adapts automatically if the frame rate drops.
 
@@ -70,6 +71,7 @@ app/
   game/game.js       run loop, physics, spawner, collisions, allies, camera
   game/world.js      sky, day/night cycle, ground, scenery, herds, particles
   game/models.js     procedural low-poly characters, animals, props
+  game/rig.js        rigged runners and animals: loading, repainting, clips + pose layering
   game/materials.js  curved-world shader, material cache, mesh baking
   game/audio.js      procedural soundtrack + SFX
   game/input.js      swipe + keyboard
@@ -86,6 +88,8 @@ server/              libSQL access, validation, and the Vite dev/preview middlew
 migrations/          SQL schema for the scores table
 tests/               vitest suites (pattern fairness, regions, save data)
 static/              PWA manifest, service worker, icons, fonts, og image
+static/models/       compressed character models (CC0, Quaternius)
+scripts/             database init, model build
 ```
 
 ## Develop
