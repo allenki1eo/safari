@@ -9,7 +9,7 @@ import { challengeUrl, makeCard, shareText } from './share.js';
 import { fetchBoard, leaveDecision, postScore, renderRows, runnerName, scoreSavePlan } from './leaderboard.js';
 import { darDay, ghostFrom, huntWord, parseShareLink, routeForLink } from '../data/daily.js';
 import { STAKES, acceptBet, collectBets, createChallenge, fetchChallenge, finishBet, linkOrigin } from './challenges.js';
-import { install } from './install.js';
+import { install, device } from './install.js';
 import { onLoading } from '../game/loading.js';
 import { t, missionText, shareMessage, lang, LANGS, setLang } from '../i18n.js';
 
@@ -27,6 +27,8 @@ const ICON = {
   back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
   trophy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 21h8M9 17h6"/></svg>',
   share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg>',
+  addHome: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M12 8.5v7M8.5 12h7"/></svg>',
+  dots: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="18.5" cy="12" r="2"/></svg>',
   install: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11M7.5 9.5 12 14l4.5-4.5"/><path d="M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"/></svg>',
 };
 
@@ -205,6 +207,7 @@ export class UI {
     });
     this.show(el);
     this.collectWinnings();
+    this.maybeNudgeInstall();
     // the pill glows once the browser says it can install; it leaves once installed
     this.offInstall?.();
     this.offInstall = install.on((ev) => {
@@ -1635,6 +1638,11 @@ export class UI {
   }
 
   /** Installs the game: the browser's own prompt where there is one, otherwise a how-to. */
+  /**
+   * Install. One tap where the browser can install (Android, desktop Chrome/Edge); on iPhone
+   * and iPad, steps for this exact browser with pictures of the buttons, and an arrow that
+   * points at the Share button; elsewhere, how to get to a browser that can install.
+   */
   async installApp() {
     audio.click();
     if (install.how === 'prompt') {
@@ -1642,12 +1650,31 @@ export class UI {
       if (outcome === 'accepted') this.toast('📲', t('Kimbia! is on your home screen. Karibu tena!'));
       if (outcome !== 'unavailable') return;
     }
+    const how = install.how;
+    const key = (icon) => `<span class="key">${icon}</span>`;
     const step = (n, html) => `<li><b>${n}</b><span>${html}</span></li>`;
+    const addRow = `<span class="ios-row">${key(ICON.addHome)} ${t('Add to Home Screen')}</span>`;
+    const where = device.ipad ? t('at the top right of Safari') : t('in the bar at the bottom of Safari');
     const steps = {
-      ios: [
-        step(1, t("Tap <b>Share</b> {icon} in Safari's toolbar", { icon: `<span class="key">${ICON.share}</span>` })),
-        step(2, t('Scroll down and tap <b>Add to Home Screen</b>')),
+      'ios-safari': [
+        step(1, t('Tap <b>Share</b> {icon} {where}', { icon: key(ICON.share), where })),
+        step(2, t('Scroll down and tap {row}', { row: addRow })),
         step(3, t('Tap <b>Add</b>. Kimbia! opens full screen, even offline')),
+      ],
+      'ios-safari26': [
+        step(1, t('Tap {icon} at the bottom right of Safari', { icon: key(ICON.dots) })),
+        step(2, t('Tap <b>Share</b> {icon}', { icon: key(ICON.share) })),
+        step(3, t('Tap {row}, then <b>Add</b>', { row: addRow })),
+      ],
+      'ios-browser': [
+        step(1, t('Tap <b>Share</b> {icon} at the top right, in the address bar', { icon: key(ICON.share) })),
+        step(2, t('Scroll down and tap {row}', { row: addRow })),
+        step(3, t('Tap <b>Add</b>. Kimbia! opens full screen, even offline')),
+      ],
+      'ios-open': [
+        step(1, t('Copy the game link with the button below')),
+        step(2, t('Open <b>Safari</b> and paste it into the address bar')),
+        step(3, t('Then tap <b>Share</b> {icon} → {row}', { icon: key(ICON.share), row: addRow })),
       ],
       inapp: [
         step(1, t('Tap the <b>⋮</b> or <b>•••</b> menu in this app')),
@@ -1659,21 +1686,87 @@ export class UI {
         step(2, t('Tap <b>Install app</b> or <b>Add to Home screen</b>')),
         step(3, t('Confirm. Kimbia! opens full screen, even offline')),
       ],
-    }[install.how] ?? [];
+    }[how] ?? [];
+    const ios = device.platform === 'ios';
+    const name = { safari: 'Safari', chrome: 'Chrome', edge: 'Edge', firefox: 'Firefox' }[device.browser];
+    const chip = ios ? `${device.ipad ? 'iPad' : 'iPhone'}${device.inApp ? '' : name ? ` · ${name}` : ''}` : '';
+    const canPoint = ['ios-safari', 'ios-safari26', 'ios-browser'].includes(how);
     const el = $(`
       <div class="screen modal-wrap scrim-full">
         <div class="panel modal install-card">
-          <div class="install-icon"><img src="/icons/icon-192.png" alt="" width="72" height="72" /></div>
-          <h2>${t('Install Kimbia!')}</h2>
-          <p class="muted">${t('Play from your home screen: full screen, quicker to open, and it works offline.')}</p>
+          <div class="install-icon"><img src="/icons/apple-touch-icon.png" alt="" width="72" height="72" /></div>
+          ${chip ? `<div class="device-chip">📱 ${esc(chip)}</div>` : ''}
+          <h2>${t(ios ? 'Add to Home Screen' : 'Install Kimbia!')}</h2>
+          <p class="muted">${how === 'ios-open' ? t('iPhone can only add games to the home screen from Safari.') : t('Play from your home screen: full screen, quicker to open, and it works offline.')}</p>
           <ol class="install-steps">${steps.join('')}</ol>
-          <div class="stack"><button class="btn" data-act="close" data-click>${t('Got it')}</button></div>
+          <div class="stack">
+            ${canPoint ? `<button class="btn" data-act="point" data-click>👆 ${t('Show me where')}</button>` : ''}
+            ${how === 'ios-open' ? `<button class="btn" data-act="copy" data-click>🔗 ${t('Copy game link')}</button>` : ''}
+            <button class="btn ${canPoint || how === 'ios-open' ? 'ghost' : ''}" data-act="close" data-click>${t('Got it')}</button>
+          </div>
         </div>
       </div>`);
-    el.addEventListener('click', (e) => {
-      if (e.target.closest('[data-act=close]') || e.target === el) el.remove();
+    el.addEventListener('click', async (e) => {
+      const act = e.target.closest('[data-act]')?.dataset.act;
+      if (act === 'point') {
+        el.remove();
+        this.pointAtShare(how);
+      } else if (act === 'copy') {
+        const url = location.origin + location.pathname;
+        try {
+          await navigator.clipboard.writeText(url);
+          this.toast('🔗', t('Link copied — now open Safari and paste it'));
+        } catch {
+          this.toast('🔗', esc(url), 6000);
+        }
+      } else if (act === 'close' || e.target === el) el.remove();
     });
     this.overlay(el);
+  }
+
+  /** A bouncing arrow at the browser's Share (or •••) button, which lives outside the page. */
+  pointAtShare(how) {
+    const spot = how === 'ios-safari26' ? 'bottom-right' : how === 'ios-browser' || device.ipad ? 'top-right' : 'bottom';
+    const label = how === 'ios-safari26'
+      ? t('Tap ••• here, then Share → Add to Home Screen')
+      : t('Tap Share here, then Add to Home Screen');
+    const el = $(`
+      <div class="share-pointer ${spot}" role="status">
+        <div class="bubble">${ICON.addHome}<span>${label}</span></div>
+        <div class="arrow">${spot === 'top-right' ? '⬆' : '⬇'}</div>
+      </div>`);
+    const close = () => el.remove();
+    el.addEventListener('click', close);
+    document.body.appendChild(el);
+    setTimeout(close, 9000);
+  }
+
+  /**
+   * iPhone and iPad never offer to install on their own, so a returning player is asked once,
+   * gently, after a couple of runs.
+   */
+  maybeNudgeInstall() {
+    if (device.platform !== 'ios' || !install.offered || save.iosNudge || (save.runs ?? 0) < 2) return;
+    if (install.how === 'ios-open') return; // can't install from here; the Install button explains
+    save.iosNudge = true;
+    persist();
+    setTimeout(() => {
+      if (!this.screen?.classList.contains('title')) return;
+      const el = $(`
+        <div class="install-nudge panel">
+          <img src="/icons/apple-touch-icon.png" alt="" width="48" height="48" />
+          <div class="txt"><b>${t('Play Kimbia! like an app')}</b><span>${t('Add it to your Home Screen: full screen and it works offline.')}</span></div>
+          <div class="acts"><button class="btn small" data-act="show">${t('Show me')}</button><button class="later" data-act="later">${t('Later')}</button></div>
+        </div>`);
+      el.addEventListener('click', (e) => {
+        const act = e.target.closest('[data-act]')?.dataset.act;
+        if (!act) return;
+        el.remove();
+        if (act === 'show') this.installApp();
+      });
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 12000);
+    }, 1800);
   }
 
   settings() {
