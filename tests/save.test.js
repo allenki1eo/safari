@@ -37,10 +37,12 @@ describe('progress & missions', () => {
   });
 
   it('tracks the best run towards each mission', () => {
-    const [m] = ensureMissions();
-    checkMissions({ [m.stat]: Math.floor(m.n / 2) });
-    checkMissions({ [m.stat]: 1 });
-    expect(m.best).toBe(Math.floor(m.n / 2));
+    const ms = ensureMissions();
+    ms[0] = { ...ms[0], id: 'jumps', stat: 'jumps', n: 15, best: 0, done: false };
+    const m = ms[0];
+    checkMissions({ jumps: 7 });
+    checkMissions({ jumps: 1 });
+    expect(m.best).toBe(7);
     expect(m.done).toBe(false);
   });
 
