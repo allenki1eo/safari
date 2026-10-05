@@ -120,10 +120,11 @@ describe('share link', () => {
   };
 
   it('opens WhatsApp with a link to the live site and that same route', () => {
-    const url = challengeUrl(run);
+    const url = challengeUrl({ ...run, route: 'r9x8y7', challengeId: 'abcd2345' });
     expect(url.startsWith(`${LIVE_ORIGIN}/?`)).toBe(true);
     const params = new URL(url).searchParams;
-    expect(params.get('day')).toBe('2026-10-04');
+    expect(params.get('ch')).toBe('abcd2345');
+    expect(params.get('rt')).toBe('r9x8y7');
     expect(params.get('c')).toBe('12000');
     expect(params.get('m')).toBe('842');
     expect(params.get('s')).toBe('38');
@@ -131,32 +132,30 @@ describe('share link', () => {
     expect(params.get('from')).toBe('0');
     const href = whatsAppHref(run);
     expect(href.startsWith('https://wa.me/?text=')).toBe(true);
-    expect(decodeURIComponent(href)).toContain(url);
+    expect(decodeURIComponent(href)).toContain(challengeUrl(run));
     expect(shareText(run)).toContain('Lion clip');
     expect(shareText(run)).toContain('#4');
+    expect(shareText({ ...run, stake: 200 })).toContain('200 coins');
   });
 
-  it('rebuilds the friend ghost from the link and hides it when the numbers are missing', () => {
-    const params = new URL(challengeUrl(run)).searchParams;
-    const link = parseShareLink(params);
-    const today = routeForLink(link, '2026-10-04');
-    expect(today.sameDay).toBe(true);
-    expect(today.startRegion).toBe(0);
-    expect(ghostFrom(today.friend, null)).toMatchObject({ source: 'friend', name: 'Allen', distance: 842, duration: 38 });
-
-    const stale = routeForLink(link, '2026-10-05');
-    expect(stale.sameDay).toBe(false);
-    expect(stale.startRegion).toBeNull();
-    expect(ghostFrom(stale.friend, { name: 'Juma', distance: 10, duration: 4 })).toMatchObject({ source: 'friend', name: 'Allen' });
-
-    expect(ghostFrom(null, null)).toBeNull();
-    expect(ghostFrom(null, { name: 'Juma', distance: 10, duration: 0 })).toBeNull();
-    expect(ghostFrom({ name: '', distance: 10, duration: 4 }, null)).toBeNull();
-    expect(ghostFrom(null, { name: 'Juma', distance: 90, duration: 30, runner: 'neema' })).toMatchObject({
-      source: 'yesterday',
-      name: 'Juma',
-      runner: 'neema',
-    });
+  it('a challenge link carries the route, the start and the friend for the shadow runner', () => {
+    const link = parseShareLink(new URL(challengeUrl({ ...run, route: 'r9x8y7', challengeId: 'abcd2345' })).searchParams);
+    const r = routeForLink(link);
+    expect(r).toMatchObject({ id: 'abcd2345', route: 'r9x8y7', startRegion: 0, challenge: { name: 'Allen', score: 12000 } });
+    expect(ghostFrom(r.friend)).toMatchObject({ source: 'friend', name: 'Allen', distance: 842, duration: 38, track: null });
+    // older links were dealt from a calendar day, which still reproduces their route
+    const old = routeForLink(parseShareLink(new URLSearchParams('day=2026-10-04&c=5&n=Juma&m=10&s=4')));
+    expect(old.route).toBe('2026-10-04');
+    // junk is ignored rather than trusted
+    const junk = parseShareLink(new URLSearchParams('ch=DROP;&rt=<x>&n=Zuri&c=1'));
+    expect(junk.id).toBeNull();
+    expect(junk.route).toBeNull();
+    // no challenge, no shadow runner
+    expect(routeForLink(null).friend).toBeNull();
+    expect(ghostFrom(null)).toBeNull();
+    expect(ghostFrom({ name: '', distance: 10, duration: 4 })).toBeNull();
+    expect(ghostFrom({ name: 'Juma', distance: 10, duration: 0 })).toBeNull();
+    expect(ghostFrom({ name: 'Juma', distance: 0, duration: 0, track: 'AAAA' })).toMatchObject({ track: 'AAAA' });
   });
 
   it('places the ghost on their real pace and stops them where that run ended', () => {

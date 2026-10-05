@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { bend, mat, G, mesh, bakeRigid, finishProp, pathTexture, grassTexture, waterMaterial, SWAY_EXT, GROUND_LIGHT, setBlobStrength } from './materials.js';
+import { cutGround } from './river.js';
+import { bend, mat, G, mesh, bakeRigid, finishProp, pathTexture, grassTexture, waterMaterial, waterLight, SWAY_EXT, GROUND_LIGHT, setBlobStrength } from './materials.js';
 import {
   Animals, makeAcacia, makeBaobab, makeKopje, makeTermiteMound, makeGrass, makeBush, makeKilimanjaro,
 } from './models.js';
@@ -328,7 +329,7 @@ export class World {
     this.scene.add(this.forest);
 
     // horizon ocean for the coast
-    this.oceanMat = new THREE.MeshLambertMaterial({ color: 0x3fc1c9, fog: false, emissive: 0x0a3a40 });
+    this.oceanMat = waterMaterial(0x3fc1c9, { open: true });
     this.ocean = new THREE.Mesh(new THREE.CircleGeometry(700, 32, Math.PI * 0.5, Math.PI), this.oceanMat);
     this.ocean.rotation.x = -Math.PI / 2;
     this.ocean.position.y = -8;
@@ -357,23 +358,21 @@ export class World {
     const trailGeo = new THREE.PlaneGeometry(LANE_W * 3 + 0.9, SEG_LEN, 1, 12);
     trailGeo.rotateX(-Math.PI / 2);
     pathTexture().repeat.set(1, SEG_LEN / (LANE_W * 3 + 0.9));
-    const waterGeo = new THREE.PlaneGeometry(110, SEG_LEN, 4, 12);
+    // reaches a few metres up the beach so the swash and the wet sand can show
+    const waterGeo = new THREE.PlaneGeometry(116, SEG_LEN, 4, 12);
     waterGeo.rotateX(-Math.PI / 2);
-    const foamGeo = new THREE.PlaneGeometry(1.2, SEG_LEN, 1, 12);
-    foamGeo.rotateX(-Math.PI / 2);
-    const foamMat = bend(new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75 }));
 
     const shade = (v) => mat(new THREE.Color(v, v, v).getHex());
     this.segments = [];
     for (let i = 0; i < SEG_COUNT; i++) {
       const g = new THREE.Group();
-      const grassMat = bend(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, map: grassTexture() }), { key: 'grass', ...GROUND_LIGHT });
+      const grassMat = cutGround(bend(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, map: grassTexture() }), { key: 'grass', ...GROUND_LIGHT }));
       const grass = new THREE.Mesh(grassGeo, grassMat);
       grass.userData.keep = true;
       grass.receiveShadow = true;
       g.add(grass);
       // the trail surface itself: a textured strip with worn lanes, tyre tracks and footprints
-      const trailMat = bend(new THREE.MeshLambertMaterial({ map: pathTexture() }), { key: 'trail', ...GROUND_LIGHT });
+      const trailMat = cutGround(bend(new THREE.MeshLambertMaterial({ map: pathTexture() }), { key: 'trail', ...GROUND_LIGHT }));
       const trail = new THREE.Mesh(trailGeo, trailMat);
       trail.position.y = 0.035;
       trail.receiveShadow = true;
@@ -391,7 +390,7 @@ export class World {
         path.add(mesh(G.dodec, shade(0.7), rand(0.1, 0.22), rand(0.08, 0.15), rand(0.1, 0.2), s * rand(4.1, 5.2), 0.06, rand(-SEG_LEN / 2, SEG_LEN / 2)));
       }
       bakeRigid(path, true);
-      const pathMat = bend(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), { key: 'path', ...GROUND_LIGHT });
+      const pathMat = cutGround(bend(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), { key: 'path', ...GROUND_LIGHT }));
       path.children.forEach((c) => {
         c.material = pathMat;
         c.receiveShadow = true;
@@ -400,13 +399,11 @@ export class World {
 
       const waterMat = waterMaterial(0x3fc1c9);
       const water = new THREE.Mesh(waterGeo, waterMat);
-      water.position.y = 0.46;
+      water.position.y = 0.44; // just over the gentle swell of the lake bed (±0.4)
+      water.renderOrder = 1;
       g.add(water);
-      const foam = new THREE.Mesh(foamGeo, foamMat);
-      foam.position.y = 0.48;
-      g.add(foam);
 
-      g.userData = { wz: 0, grassMat, pathMat, trailMat, waterMat, water, foam, region: -1 };
+      g.userData = { wz: 0, grassMat, pathMat, trailMat, waterMat, water, region: -1 };
       this.segments.push(g);
       this.scene.add(g);
     }
@@ -422,12 +419,10 @@ export class World {
     const rb = REGIONS[m.b].ground;
     const wr = m.t < 0.5 ? ra : rb;
     const hasWater = !!wr.water;
-    u.water.visible = u.foam.visible = hasWater;
+    u.water.visible = hasWater;
     if (hasWater) {
       u.waterMat.color.set(wr.water);
-      const side = wr.waterSide ?? -1;
-      u.water.position.x = side * (14 + 55);
-      u.foam.position.x = side * 14.3;
+      u.water.position.x = (wr.waterSide ?? -1) * (14 - 4.5 + 58);
     }
   }
 
@@ -438,13 +433,13 @@ export class World {
     geo.setAttribute('position', new THREE.Float32BufferAttribute([-0.05, 0, 0, 0.05, 0, 0, 0, 1, 0.02], 3));
     geo.setAttribute('normal', new THREE.Float32BufferAttribute([0, 0.3, 1, 0, 0.3, 1, 0, 0.3, 1], 3));
     geo.setAttribute('aSway', new THREE.Float32BufferAttribute([0, 0, 0.28], 1));
-    this.bladeMat = bend(new THREE.MeshLambertMaterial({ color: 0xd4b05a, side: THREE.DoubleSide }), {
+    this.bladeMat = cutGround(bend(new THREE.MeshLambertMaterial({ color: 0xd4b05a, side: THREE.DoubleSide }), {
       ...SWAY_EXT,
       key: 'swayground',
       fragmentHead: GROUND_LIGHT.fragmentHead,
       fragmentLight: GROUND_LIGHT.fragmentLight,
       uniforms: { ...GROUND_LIGHT.uniforms },
-    });
+    }));
     this.bladeTiles = [];
     const TL = 40;
     const per = 1800;
@@ -685,6 +680,10 @@ export class World {
     this.cloudMat.color.copy(P.cloud);
     this.cloudMat.emissive.copy(P.cloud).multiplyScalar(0.35);
     this.oceanMat.color.set(rb.ocean && m.t > 0.5 ? rb.ground.water : ra.ground.water ?? '#3fc1c9').lerp(P.fog, 0.25);
+    // what the water reflects: the sky near the horizon, and the sun (fading at night)
+    waterLight.uSkyCol.value.copy(P.hor).lerp(P.top, 0.6);
+    waterLight.uSunDir.value.copy(sd);
+    waterLight.uSunCol.value.copy(P.sun).multiplyScalar(Math.min(1.2, P.sunI * 0.6));
 
     // backdrop pieces glide in and out between regions
     const k = this.snapBackdrop ? 1 : 1 - Math.exp(-1.5 * dt);

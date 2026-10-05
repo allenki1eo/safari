@@ -39,7 +39,7 @@ Every run is a chase across East Africa. Each region has its own ground, plants,
 | 🇹🇿 | Lake Manyara | Lakeshore water crossings and charging lions · flamingos under the Rift wall |
 | 🇹🇿 | Tarangire | Elephant families crossing · baobabs and termite towers |
 | 🇹🇿 | Mount Kilimanjaro | Rockfalls · snow, giant groundsels |
-| 🇹🇿 | Ruaha | Charging lions · painted wild dogs at dusk by the Great Ruaha River |
+| 🇹🇿 | Ruaha | Charging lions · painted wild dogs · **the Great Ruaha crossing**: hop logs and stepping stones past hippos and basking crocs |
 | 🇹🇿 | Selous · Nyerere | Napping crocodiles · the Rufiji River |
 | 🇹🇿 | Zanzibar | Falling coconuts, boda-boda scooters, spice-market carts and fishing nets · no big game on the beach |
 | 🇰🇪 | Maasai Mara | Wildebeest stampedes |
@@ -52,7 +52,11 @@ After Bwindi the run loops into a *legend lap*. Regions you reach unlock on the 
 
 - **A story told across eleven regions.** Each one has its own narrator, and the sun moves with you: morning on the Serengeti, sunset on Kilimanjaro, dusk in Ruaha, night on the Rufiji, a bright day on the Zanzibar coast.
 - **English and Kiswahili.** The game picks Kiswahili on phones set to it and can be switched in Settings. Menus, the story, every region's narrator, missions, word-hunt facts and powerups are translated (`app/i18n.js`; a test checks nothing new ships without its Kiswahili).
-- **Missions** in sets of three that raise a permanent score multiplier.
+- **Missions** in sets of three. Each one pays seeds, collected on the results screen with a coin shower; a mission you're stuck on can be skipped for a fee (it counts towards the set but pays nothing). Settle all three for the set bonus and a permanent +1 score multiplier.
+- **A new trail every run.** Obstacles, prizes and herds are dealt fresh each time; a challenge hands your route to your friend so you both race the same trail.
+- **Friend challenges with a shadow runner and coin bets.** Your run is recorded (lane, height, jump, slide, ride, fly — eight times a second). Send it on WhatsApp and your friend races a translucent replay that dodges and slides exactly where you did. Put coins on it: the first friend to take the bet matches your stake and the winner takes the pot (a tie goes to the challenger; an untaken bet is refunded after 3 days; a friend who takes it and never finishes forfeits). The server (`/api/challenges`) referees; the shadow runner only ever appears in a challenge.
+- **Fuller trees.** Umbrella-thorn acacias with forked trunks and layered crowns, bottle-trunked baobabs and leafy bushes.
+- **Living water.** Lakes, rivers and the Zanzibar sea run from clear, caustic-lit shallows to deep water, reflect the sky and the sun (or moon), and lap up the beach with foam and wet sand. Rivers cut a real, deep channel through the trail and off into the reeds on both sides (a single 3 m jump), racing sideways with white water at the banks.
 - **Six unlockable runners** (Zuri, Juma, Neema, Baraka, Amani, Kito) and ally upgrades.
 - **Daily rewards** with a 7-day streak.
 - **Challenge sharing**: the game renders a score card image and a link (`/?c=<score>&n=<name>`) that greets your friend with *"Allen challenges you to beat 12,000!"*
@@ -92,6 +96,10 @@ app/
   game/patterns.js   obstacle pattern generator (pure, unit-tested)
   game/regionModels.js  flora, fauna and hazards beyond the Serengeti
   data/save.js       local progress, missions, daily reward
+  game/ghostTrack.js the shadow runner's recording and replay
+  game/river.js      river channels cut into the trail, the Great Ruaha crossing
+  ui/challenges.js   friend challenges and coin bets (talks to /api/challenges)
+  server/challenges.js  challenge storage and bet refereeing (Turso / libSQL)
   ui/ui.js           all screens (title, intro, HUD, game over, shop…)
   ui/leaderboard.js  fetch + render the global board (no database credentials)
   ui/share.js        share-card renderer + Web Share

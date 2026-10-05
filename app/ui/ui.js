@@ -1,10 +1,14 @@
 import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO, OUTFITS, outfitId, HUNT_WORDS, BOOSTS } from '../data/content.js';
 import { REGIONS, COUNTRIES } from '../data/regions.js';
-import { save, persist, ensureMissions, checkMissions, claimMissionSet, multiplier, claimDaily } from '../data/save.js';
+import {
+  save, persist, ensureMissions, checkMissions, claimMissionSet, multiplier, claimDaily,
+  collectMission, skipMission, skipCost, setBonus, missionSetReady, uncollected,
+} from '../data/save.js';
 import { audio } from '../game/audio.js';
-import { challengeUrl, makeCard, shareText, whatsAppHref } from './share.js';
+import { challengeUrl, makeCard, shareText } from './share.js';
 import { fetchBoard, leaveDecision, postScore, renderRows, runnerName, scoreSavePlan } from './leaderboard.js';
 import { darDay, ghostFrom, huntWord, parseShareLink, routeForLink } from '../data/daily.js';
+import { STAKES, acceptBet, collectBets, createChallenge, fetchChallenge, finishBet, linkOrigin } from './challenges.js';
 import { install } from './install.js';
 import { onLoading } from '../game/loading.js';
 import { t, missionText, shareMessage, lang, LANGS, setLang } from '../i18n.js';
@@ -79,10 +83,13 @@ export class UI {
     this.hud = null;
     this.params = new URLSearchParams(location.search);
     this.link = parseShareLink(this.params);
-    this.route = routeForLink(this.link, darDay());
+    this.route = routeForLink(this.link);
     this.challenge = this.route.challenge;
-    this.ghostRun = ghostFrom(this.route.friend, null);
-    if (!this.ghostRun) this.loadYesterday();
+    // the shadow runner only ever comes from a friend's challenge
+    this.ghostRun = ghostFrom(this.route.friend);
+    this.remote = null; // the challenge as the server has it (recording, bet)
+    this.bet = null; // a bet taken on this device, settled when the next run ends
+    if (this.route.id) this.loadChallenge(this.route.id);
     this.missionTick = 0;
     this.selIdx = Math.max(0, RUNNERS.findIndex((r) => r.id === save.runner));
     this.postedRunId = null;
@@ -144,7 +151,7 @@ export class UI {
     this.removeHud();
     this.game.toMenu('menu');
     const missions = ensureMissions();
-    const missionsReady = missions.every((m) => m.done);
+    const missionsReady = missions.some((m) => m.done && !m.claimed) || missionSetReady();
     const start = REGIONS[Math.min(save.startRegion ?? 0, save.regionMax ?? 0)];
     const canAfford = RUNNERS.some((r) => !save.owned.includes(r.id) && r.cost <= save.seeds) || ALLY_IDS.some((id) => (save.upgrades[id] ?? 0) < 5 && UPGRADE_COSTS[save.upgrades[id] ?? 0] <= save.seeds);
     const el = $(`
@@ -165,10 +172,7 @@ export class UI {
           <div class="sub">${t('SPIRIT OF THE SERENGETI')}</div>
         </div>
         <div class="title-bottom">
-          ${this.challenge ? `<div class="challenge"><span style="font-size:28px">🔥</span><div>${this.challenge.sameDay === false
-            ? t("{name} ran that on an earlier route. Today's trail is a new one.", { name: `<b>${esc(this.challenge.name)}</b>` })
-            : t("{name} challenges you to beat {score} on today's route!", { name: `<b>${esc(this.challenge.name)}</b>`, score: `<b>${fmt(this.challenge.score)}</b>` })}</div></div>` : ''}
-          ${this.ghostRun ? `<div class="best-line">${t('{name} is a faint runner ahead — pass them.', { name: esc(this.ghostRun.name) })}</div>` : ''}
+          ${this.challengeCardHtml()}
           ${save.best ? `<div class="best-line">${t('Best run {score} pts · {dist}m', { score: `<b>${fmt(save.best)}</b>`, dist: `<b>${fmt(save.bestDistance)}` })}</b></div>` : ''}
           <button class="start-chip" data-act="journey" data-click>
             <span class="flag">${COUNTRIES[start.country].flag}</span>
@@ -197,8 +201,10 @@ export class UI {
       else if (act === 'journey') this.journey();
       else if (act === 'board') this.showBoard();
       else if (act === 'install') this.installApp();
+      else if (act === 'take-bet') this.takeBet(e.target.closest('button'));
     });
     this.show(el);
+    this.collectWinnings();
     // the pill glows once the browser says it can install; it leaves once installed
     this.offInstall?.();
     this.offInstall = install.on((ev) => {
@@ -293,25 +299,12 @@ export class UI {
   startRun() {
     audio.unlock();
     this.game.linkedStart = this.route.startRegion;
+    this.game.linkedRoute = this.route.route;
     this.game.setGhost(this.ghostRun);
     this.show($('<div class="screen" style="pointer-events:none"></div>'));
     this.buildHud();
     this.game.start();
     this.missionTick = 0;
-  }
-
-  /** Yesterday's best, when the server has one. A friend link already set the ghost. */
-  async loadYesterday() {
-    try {
-      const data = await fetchBoard('daily');
-      if (this.route.friend) return;
-      const ghost = ghostFrom(null, data.yesterday);
-      if (!ghost) return;
-      this.ghostRun = ghost;
-      this.game.setGhost(ghost);
-    } catch {
-      /* no ghost rather than a made-up one */
-    }
   }
 
   buildHud() {
@@ -364,7 +357,8 @@ export class UI {
     this.last = {};
     this.overlay(el);
     const today = save.hunt?.day === darDay();
-    this.paintHunt(huntWord(HUNT_WORDS, darDay(), today ? save.hunt.done ?? 0 : 0).word, today ? save.hunt.got : 0);
+    const resting = today && (save.hunt.nextAt ?? 0) > Date.now();
+    this.paintHunt(resting ? null : huntWord(HUNT_WORDS, darDay(), today ? save.hunt.done ?? 0 : 0).word, today ? save.hunt.got : 0);
   }
 
   removeHud() {
@@ -420,7 +414,7 @@ export class UI {
     }
     // missions — checked a few times per second
     if ((this.missionTick += 1) % 20 === 0) {
-      for (const done of checkMissions(g.stats)) this.toast('🎯', `<b>${t('Mission complete!')}</b><br>${esc(missionText(done))}`);
+      for (const done of checkMissions(g.stats)) this.toast('🎯', `<b>${t('Mission complete!')}</b><br>${esc(missionText(done))}<br><span class="toast-reward">+${fmt(done.reward)} <span class="seed"></span> ${t('to collect at the finish')}</span>`);
     }
   }
 
@@ -542,6 +536,8 @@ export class UI {
   paintHunt(word, got, fresh = false) {
     const row = this.hud?.querySelector('.hunt');
     if (!row) return;
+    row.hidden = !word; // no word while the hunt rests after one is spelled
+    if (!word) return;
     if (row.dataset.word !== word) {
       row.dataset.word = word;
       row.innerHTML = [...word].map((c) => `<i>${c}</i>`).join('');
@@ -609,7 +605,9 @@ export class UI {
         e.target.closest('button').textContent = save.music ? t('🔊 Music') : t('🔇 Music');
       } else if (act === 'home') {
         el.remove();
-        this.bankRun(this.game.summary());
+        const run = this.game.summary();
+        this.bankRun(run);
+        if (this.bet) this.settleBet(null, run); // leaving a bet run counts as its finish
         this.title();
       }
     });
@@ -706,7 +704,6 @@ export class UI {
     const ri = Math.max(0, run.chapter);
     const reg = REGIONS[ri];
     const next = REGIONS[ri + 1];
-    const ms = ensureMissions();
     const beatChallenge = this.challenge && run.score > this.challenge.score;
     const el = $(`
       <div class="screen over scrim-full">
@@ -727,9 +724,8 @@ export class UI {
             <div class="lb-slot"><p class="muted">${t('Saving your run…')}</p></div>
           </div>
           <div class="story-unlock"><span class="e">${COUNTRIES[reg.country].flag}</span><div><b>${esc(reg.name)} · ${esc(reg.title)}</b><br><span class="muted">${next ? t('Next: {place}', { place: `${COUNTRIES[next.country].flag} ${esc(next.name)}` }) : t('You crossed all three countries!')}</span></div></div>
-          <div class="mission-mini">
-            ${ms.map((m) => `<div><span class="tick ${m.done ? 'done' : ''}">${m.done ? '✓' : ''}</span>${esc(missionText(m))}</div>`).join('')}
-          </div>
+          <div class="bet-slot"></div>
+          <div class="chal-slot"></div>
           <div style="display:flex;flex-direction:column;gap:12px">
             <button class="btn big" type="button" data-act="again">${t('↻ Run again')}</button>
             <div class="row2">
@@ -746,7 +742,7 @@ export class UI {
       } else if (act === 'post') {
         this.postRun(el, run);
       } else if (act === 'share') {
-        this.shareOnWhatsApp(run);
+        this.challengeSheet(run);
       } else if (act === 'board') {
         this.showBoard();
       }
@@ -754,7 +750,213 @@ export class UI {
     this.overlay(el);
     this.cardFor(run); // draw the score card now, so the share can happen inside the tap
     this.recordFinishedRun(el, run);
-    if (ms.every((m) => m.done)) setTimeout(() => this.missionSetComplete(), 900);
+    this.mountChallenges(el.querySelector('.chal-slot'));
+    if (this.bet) this.settleBet(el, run);
+  }
+
+  /* ------------------------------------------------------ friend challenges */
+  /** Opens a friend's challenge from the server: their route, shadow-runner recording and bet. */
+  async loadChallenge(id) {
+    try {
+      const ch = await fetchChallenge(id);
+      this.remote = ch;
+      this.route = { ...this.route, id: ch.id, route: ch.route, startRegion: ch.startRegion };
+      this.challenge = { name: ch.name, score: ch.score };
+      this.ghostRun = ghostFrom(ch);
+      if (this.screen?.classList.contains('title')) this.title();
+    } catch {
+      /* the link's own numbers still make a challenge, just without the recording or bet */
+    }
+  }
+
+  challengeCardHtml() {
+    if (!this.challenge) return '';
+    const ch = this.remote;
+    const name = `<b>${esc(this.challenge.name)}</b>`;
+    let bet = '';
+    if (ch?.stake > 0) {
+      const own = (save.betsOut ?? []).includes(ch.id);
+      const pot = `<b>${fmt(ch.stake * 2)}</b>&nbsp;<span class="seed"></span>`;
+      if (this.bet?.id === ch.id) {
+        bet = `<div class="bet-line on">🤝 ${t('Bet on! Beat {score} to win {pot}', { score: `<b>${fmt(ch.score)}</b>`, pot })}</div>`;
+      } else if (own) {
+        bet = `<div class="bet-line">${t('Your bet: {stake} coins on this run', { stake: fmt(ch.stake) })}</div>`;
+      } else if (ch.status === 'open') {
+        const short = save.seeds < ch.stake;
+        bet = `
+          <div class="bet-line">${t('Bet {stake} coins · winner takes {pot}', { stake: `<b>${fmt(ch.stake)}</b>`, pot })}</div>
+          <button class="btn small flame bet-take" data-act="take-bet" data-click ${short ? 'disabled' : ''}>🤝 ${t('Take the bet')} · ${fmt(ch.stake)} <span class="seed"></span></button>
+          ${short ? `<div class="bet-note">${t('You need {n} coins to take this bet.', { n: fmt(ch.stake) })}</div>` : ''}`;
+      } else {
+        bet = `<div class="bet-line">${ch.rivalName ? t('{name} already took this bet — race the shadow anyway.', { name: esc(ch.rivalName) }) : t('This bet is closed — race the shadow anyway.')}</div>`;
+      }
+    }
+    return `
+      <div class="challenge challenge-card">
+        <span class="ch-ico">🔥</span>
+        <div class="ch-body">
+          <div>${t('{name} challenges you to beat {score}!', { name, score: `<b>${fmt(this.challenge.score)}</b>` })}</div>
+          ${this.ghostRun ? `<div class="ch-sub">👻 ${t('Their shadow runner races you on the same route.')}</div>` : ''}
+          ${bet}
+        </div>
+      </div>`;
+  }
+
+  async takeBet(btn) {
+    const ch = this.remote;
+    if (!ch || this.bet) return;
+    btn.disabled = true;
+    try {
+      await acceptBet(ch.id, save.name || t('A friend'));
+      this.bet = { id: ch.id, stake: ch.stake, pot: ch.stake * 2, score: ch.score, name: ch.name };
+      audio.buy();
+      this.toast('🤝', t('Bet on! Beat {score} to win {pot} coins.', { score: fmt(ch.score), pot: fmt(ch.stake * 2) }));
+      this.startRun();
+    } catch (err) {
+      if (err.code === 'TAKEN' || err.code === 'OWN') this.remote = { ...ch, status: 'taken' };
+      this.toast('⚠️', esc(err.message));
+      this.title();
+    }
+  }
+
+  /** Reports a bet run and shows who took the pot. `root` is the results card (or null). */
+  async settleBet(root, run) {
+    const bet = this.bet;
+    this.bet = null;
+    const slot = root?.querySelector('.bet-slot');
+    if (slot) slot.innerHTML = `<div class="bet-result pending">🤝 ${t('Checking the bet…')}</div>`;
+    try {
+      const res = await finishBet(bet.id, run.score);
+      if (this.remote?.id === bet.id) this.remote = { ...this.remote, status: 'settled' };
+      const won = res.winner === 'rival';
+      const html = won
+        ? `<div class="bet-result won">🏆 <div><b>${t('You won the bet!')}</b><span>${t('+{pot} coins from {name}', { pot: fmt(res.pot), name: esc(res.hostName) })}</span></div></div>`
+        : `<div class="bet-result lost">😬 <div><b>${t('{name} keeps the pot', { name: esc(res.hostName) })}</b><span>${t('You needed more than {score}.', { score: fmt(res.hostScore) })}</span></div></div>`;
+      if (slot?.isConnected) {
+        slot.innerHTML = html;
+        root.querySelectorAll('.bank').forEach((b) => (b.textContent = fmt(save.seeds)));
+      }
+      else this.toast(won ? '🏆' : '😬', won ? t('You won the bet! +{pot} coins', { pot: fmt(res.pot) }) : t('{name} keeps the pot', { name: esc(res.hostName) }));
+      if (won) audio.buy();
+    } catch (err) {
+      if (slot?.isConnected) slot.innerHTML = `<div class="bet-result lost">⚠️ <div><b>${t('The bet could not be settled')}</b><span>${esc(err.message)}</span></div></div>`;
+    }
+  }
+
+  /** Winnings, refunds and news from your own bets, collected quietly in the background. */
+  async collectWinnings() {
+    if (this.collecting || Date.now() - (this.collectedAt ?? 0) < 20000) return;
+    this.collecting = true;
+    try {
+      const payouts = await collectBets();
+      this.collectedAt = Date.now();
+      payouts.forEach((p, i) => setTimeout(() => {
+        if (p.kind === 'won') this.toast('🏆', `<b>${t('{name} could not beat you!', { name: esc(p.rivalName) })}</b><br>${t('+{n} coins from your bet', { n: fmt(p.amount) })}`, 4200);
+        else if (p.kind === 'forfeit') this.toast('🏆', `<b>${t('{name} never finished your challenge', { name: esc(p.rivalName ?? '') })}</b><br>${t('+{n} coins from your bet', { n: fmt(p.amount) })}`, 4200);
+        else if (p.kind === 'refund') this.toast('↩️', t('Nobody took your bet — {n} coins back', { n: fmt(p.amount) }), 4200);
+        else if (p.kind === 'lost') this.toast('😬', t('{name} beat your challenge and took the pot', { name: esc(p.rivalName) }), 4200);
+      }, i * 4400));
+      if (payouts.some((p) => p.amount > 0)) {
+        audio.buy();
+        if (this.screen?.classList.contains('title')) {
+          const chip = this.screen.querySelector('.title-top .chip span:last-child');
+          if (chip) chip.textContent = fmt(save.seeds);
+        }
+      }
+    } catch {
+      /* try again next time */
+    } finally {
+      this.collecting = false;
+    }
+  }
+
+  /**
+   * The challenge sheet: send your run to a friend, with an optional coin bet. A free
+   * challenge is posted the moment the sheet opens, so Send works in one tap; a bet is locked
+   * in first (the coins leave your bank), then sent.
+   */
+  challengeSheet(run) {
+    const base = { ...run, runner: run.runner || save.runner };
+    const links = new Map(); // stake → link
+    let stake = 0;
+    const el = $(`
+      <div class="screen modal-wrap scrim-full">
+        <div class="panel modal challenge-sheet">
+          <h2>${t('Challenge a friend')}</h2>
+          <div class="muted">${t('They race your shadow on this exact route.')}</div>
+          ${save.name ? '' : `<input class="name-input" data-name maxlength="16" placeholder="${t('Your runner name')}" autocomplete="nickname">`}
+          <div class="bet-head"><b>${t('Bet coins?')}</b><span>${t('Winner takes all')}</span></div>
+          <div class="stakes">
+            ${STAKES.map((n) => `<button class="stake ${n === 0 ? 'on' : ''}" data-stake="${n}" ${n > save.seeds ? 'disabled' : ''}>${n ? `${fmt(n)}<span class="seed"></span>` : t('Free')}</button>`).join('')}
+          </div>
+          <div class="pot-line" data-pot></div>
+          <div class="stack">
+            <button class="btn teal big send" data-send>${ICON.share.replace('<svg', '<svg width="24" height="24"')} ${t('Send on WhatsApp')}</button>
+            <button class="btn ghost" data-close data-click>${t('Not now')}</button>
+          </div>
+        </div>
+      </div>`);
+    const send = el.querySelector('[data-send]');
+    const pot = el.querySelector('[data-pot]');
+    const nameOf = () => runnerName(el.querySelector('[data-name]')?.value ?? '') || save.name;
+    const paint = () => {
+      el.querySelectorAll('[data-stake]').forEach((b) => b.classList.toggle('on', Number(b.dataset.stake) === stake));
+      const ready = links.has(stake);
+      pot.innerHTML = stake
+        ? `${t('You put in {n}. If they take the bet and lose, you win {pot}.', { n: `<b>${fmt(stake)}</b>`, pot: `<b>${fmt(stake * 2)}</b>` })}`
+        : t('Just for bragging rights.');
+      const label = stake && !ready ? `🔒 ${t('Lock bet')} · ${fmt(stake)} <span class="seed"></span>` : `${ICON.share.replace('<svg', '<svg width="24" height="24"')} ${t('Send on WhatsApp')}`;
+      send.innerHTML = label;
+      send.classList.toggle('flame', !!stake && !ready);
+      send.classList.toggle('teal', !stake || ready);
+    };
+    const make = async (n) => {
+      const name = nameOf();
+      if (!name) throw Object.assign(new Error(t('Pick a runner name first.')), { code: 'NAME' });
+      if (!save.name) {
+        save.name = name;
+        persist();
+      }
+      const { id } = await createChallenge(base, n, name);
+      const url = challengeUrl({ ...base, name, challengeId: id }).replace(/^https?:\/\/[^/]+/, linkOrigin());
+      links.set(n, url);
+      return url;
+    };
+    // a free challenge, ready before the first tap
+    if (save.name) make(0).then(paint, () => {});
+    el.addEventListener('click', async (e) => {
+      if (e.target.closest('[data-close]') || e.target === el) return el.remove();
+      const chip = e.target.closest('[data-stake]');
+      if (chip && !chip.disabled) {
+        stake = Number(chip.dataset.stake);
+        audio.click();
+        return paint();
+      }
+      if (!e.target.closest('[data-send]') || send.disabled) return;
+      const url = links.get(stake);
+      if (url) {
+        this.shareOnWhatsApp({ ...base, stake }, url);
+        return;
+      }
+      send.disabled = true;
+      try {
+        await make(stake);
+        if (stake) {
+          audio.buy();
+          el.querySelectorAll('[data-stake]').forEach((b) => (b.disabled = Number(b.dataset.stake) !== stake));
+          this.toast('🔒', t('Bet locked: {n} coins. Now send it!', { n: fmt(stake) }));
+        } else this.shareOnWhatsApp(base, links.get(0));
+      } catch (err) {
+        if (stake) this.toast('⚠️', `${esc(err.message)}<br>${t('Bets need a connection.')}`);
+        else if (err.code === 'NAME') this.toast('✏️', esc(err.message));
+        else this.shareOnWhatsApp(base); // offline: the plain link still makes a challenge
+      } finally {
+        send.disabled = false;
+        paint();
+      }
+    });
+    paint();
+    this.overlay(el);
   }
 
   shareCardHtml(run) {
@@ -797,20 +999,21 @@ export class UI {
    * Shares the score card image with the challenge link. Phones that can share files open the
    * share sheet (WhatsApp is right there); anything else falls back to a WhatsApp text link.
    */
-  async shareOnWhatsApp(run) {
+  async shareOnWhatsApp(run, url) {
     const r = { ...run, name: save.name || run.name, runner: run.runner || save.runner };
+    url ??= challengeUrl(r);
     const card = this.cardFor(r);
     // usually ready already; waiting briefly keeps us inside the tap that allows sharing
     const file = card.file ?? (await Promise.race([card.ready, new Promise((ok) => setTimeout(ok, 900))]));
     if (file && navigator.canShare?.({ files: [file] })) {
       try {
-        await navigator.share({ files: [file], text: `${shareMessage(r, shareText(r))} ${challengeUrl(r)}`, title: 'KIMBIA!' });
+        await navigator.share({ files: [file], text: `${shareMessage(r, shareText(r))} ${url}`, title: 'KIMBIA!' });
         return;
       } catch (e) {
         if (e?.name === 'AbortError') return; // closed the sheet
       }
     }
-    const href = whatsAppHref(r);
+    const href = `https://wa.me/?text=${encodeURIComponent(`${shareMessage(r, shareText(r))} ${url}`)}`;
     const opened = window.open(href, '_blank', 'noopener,noreferrer');
     if (!opened) {
       navigator.clipboard?.writeText(href).then(
@@ -1049,9 +1252,172 @@ export class UI {
   }
 
   missionSetComplete() {
-    if (!claimMissionSet()) return;
+    const bonus = claimMissionSet();
+    if (!bonus) return false;
     audio.buy();
-    this.toast('🎉', `<b>${t('Mission set complete!')}</b><br>${t('Multiplier is now ×{m} · +{s} seeds', { m: multiplier(), s: fmt(250 * save.missionLevel) })}`, 3600);
+    this.toast('🎉', `<b>${t('Mission set complete!')}</b><br>${t('Multiplier is now ×{m} · +{s} seeds', { m: multiplier(), s: fmt(bonus) })}`, 3600);
+    return true;
+  }
+
+  /* -------------------------------------------------------- challenges */
+  /**
+   * The three missions with live progress. Finished ones are collected here for their seeds
+   * (coins fly into the bank); unfinished ones can be skipped for a fee, confirmed with a
+   * second tap. Once all three are settled the set bonus raises the multiplier.
+   */
+  mountChallenges(slot, onSet) {
+    if (!slot) return;
+    const render = (fresh = false) => {
+      slot.innerHTML = this.challengesHtml(fresh);
+      // keep the sheet's own bank chip in step
+      document.querySelectorAll('.sheet-head .bank').forEach((b) => (b.textContent = fmt(save.seeds)));
+    };
+    render();
+    let confirmTimer = 0;
+    slot.addEventListener('click', async (e) => {
+      const btn = e.target.closest('button');
+      if (!btn || btn.disabled || slot.dataset.busy) return;
+      const bank = slot.querySelector('.bank');
+      if (btn.dataset.collect || btn.hasAttribute('data-collect-all')) {
+        const ids = btn.dataset.collect ? [btn.dataset.collect] : uncollected().map((m) => m.id);
+        const from = save.seeds;
+        let paid = 0;
+        for (const id of ids) paid += collectMission(id);
+        if (!paid) return render();
+        slot.dataset.busy = '1';
+        btn.disabled = true;
+        await this.flySeeds(btn, slot.querySelector('.bank-chip'), Math.min(12, 4 + ids.length * 3), from, save.seeds, bank);
+        delete slot.dataset.busy;
+        render();
+      } else if (btn.dataset.skip) {
+        if (!btn.classList.contains('confirm')) {
+          // first tap arms it, so a stray tap never spends seeds
+          slot.querySelectorAll('.chal-skip.confirm').forEach((b) => { b.classList.remove('confirm'); b.innerHTML = b.dataset.label; });
+          btn.dataset.label = btn.innerHTML;
+          btn.classList.add('confirm');
+          btn.innerHTML = `${t('Pay {n}?', { n: fmt(skipCost(ensureMissions().find((m) => m.id === btn.dataset.skip))) })} <span class="seed"></span>`;
+          clearTimeout(confirmTimer);
+          confirmTimer = setTimeout(() => { if (btn.isConnected) { btn.classList.remove('confirm'); btn.innerHTML = btn.dataset.label; } }, 3000);
+          return;
+        }
+        clearTimeout(confirmTimer);
+        const from = save.seeds;
+        if (!skipMission(btn.dataset.skip)) return render();
+        audio.buy();
+        this.countTo(bank, from, save.seeds, 500);
+        btn.closest('.chal')?.classList.add('skipping');
+        setTimeout(render, 420);
+      } else if (btn.hasAttribute('data-set-bonus')) {
+        const from = save.seeds;
+        if (!this.missionSetComplete()) return render();
+        slot.dataset.busy = '1';
+        await this.flySeeds(btn, slot.querySelector('.bank-chip'), 14, from, save.seeds, bank);
+        delete slot.dataset.busy;
+        render(true);
+        onSet?.();
+      }
+    });
+  }
+
+  challengesHtml(fresh = false) {
+    const ms = ensureMissions();
+    const waiting = uncollected();
+    const owed = waiting.reduce((n, m) => n + m.reward, 0);
+    return `
+      <div class="chal-wrap">
+        <div class="chal-head">
+          <b>${t('Challenges')}</b>
+          <span class="chal-mult">×${multiplier()}</span>
+          <span class="chip bank-chip"><span class="seed"></span><span class="bank">${fmt(save.seeds)}</span></span>
+        </div>
+        ${ms.map((m, i) => this.challengeRow(m, fresh, i)).join('')}
+        ${waiting.length > 1 ? `<button class="btn wide chal-all" data-collect-all>${t('Collect all')} · +${fmt(owed)} <span class="seed"></span></button>` : ''}
+        ${missionSetReady() ? `<button class="btn flame wide chal-set" data-set-bonus>🎉 ${t('Set bonus')} · +${fmt(setBonus(save.missionLevel))} <span class="seed"></span></button>` : ''}
+      </div>`;
+  }
+
+  challengeRow(m, fresh, i) {
+    const best = Math.min(m.n, m.best ?? 0);
+    const pct = m.done ? 100 : Math.round((100 * best) / m.n);
+    let act;
+    let meta;
+    if (m.skipped) {
+      act = `<span class="chal-tag">${t('Skipped')}</span>`;
+      meta = t('Counts towards the set');
+    } else if (m.claimed) {
+      act = `<span class="chal-tag paid">✓ +${fmt(m.reward)}</span>`;
+      meta = t('Collected');
+    } else if (m.done) {
+      act = `<button class="btn small chal-collect" type="button" data-collect="${m.id}">${t('Collect')} +${fmt(m.reward)} <span class="seed"></span></button>`;
+      meta = `<b>${t('Done!')}</b>`;
+    } else {
+      const cost = skipCost(m);
+      act = `<button class="btn small ghost chal-skip" type="button" data-skip="${m.id}" ${save.seeds < cost ? 'disabled' : ''}>${t('Skip')} · ${fmt(cost)} <span class="seed"></span></button>`;
+      meta = `<span><b>${fmt(best)}</b> / ${fmt(m.n)}</span><span class="pays"><b>+${fmt(m.reward)}</b><span class="seed"></span></span>`;
+    }
+    const cls = m.skipped ? 'skipped' : m.claimed ? 'claimed' : m.done ? 'ready' : '';
+    return `
+      <div class="chal ${cls}" style="${fresh ? `animation:rise .45s ${i * 0.08}s ease both` : ''}">
+        <span class="chal-ico">${m.skipped ? '⏭' : m.done ? '✓' : '🎯'}</span>
+        <div class="chal-body">
+          <div class="chal-txt">${esc(missionText(m))}</div>
+          <div class="chal-bar"><i style="width:${pct}%"></i></div>
+          <div class="chal-foot"><div class="chal-meta">${meta}</div><div class="chal-act">${act}</div></div>
+        </div>
+      </div>`;
+  }
+
+  /** Counts a number up (or down) in place. */
+  countTo(el, from, to, ms = 700) {
+    if (!el) return;
+    const t0 = performance.now();
+    const step = (now) => {
+      const k = Math.min(1, (now - t0) / ms);
+      el.textContent = fmt(from + (to - from) * (1 - Math.pow(1 - k, 3)));
+      if (k < 1 && el.isConnected) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  /** Coins burst from `fromEl` and arc into `toEl`, the bank ticking up as each lands. */
+  flySeeds(fromEl, toEl, n, from, to, numEl) {
+    const a = fromEl.getBoundingClientRect();
+    const b = (toEl ?? fromEl).getBoundingClientRect();
+    const ax = a.left + a.width / 2;
+    const ay = a.top + a.height / 2;
+    const bx = b.left + 18;
+    const by = b.top + b.height / 2;
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || !toEl) {
+      this.countTo(numEl, from, to, 400);
+      audio.coin(3);
+      return new Promise((r) => setTimeout(r, 400));
+    }
+    const jobs = [];
+    for (let i = 0; i < n; i++) {
+      const c = document.createElement('span');
+      c.className = 'seed fly-seed';
+      document.body.appendChild(c);
+      const sx = (Math.random() - 0.5) * 90;
+      const sy = -30 - Math.random() * 60;
+      const anim = c.animate(
+        [
+          { transform: `translate(${ax}px, ${ay}px) scale(0.4)`, opacity: 0 },
+          { transform: `translate(${ax + sx}px, ${ay + sy}px) scale(1.15)`, opacity: 1, offset: 0.35 },
+          { transform: `translate(${bx}px, ${by}px) scale(0.7)`, opacity: 1 },
+        ],
+        { duration: 720 + i * 18, delay: i * 55, easing: 'cubic-bezier(.45,0,.3,1)', fill: 'forwards' },
+      );
+      jobs.push(anim.finished.then(() => {
+        c.remove();
+        audio.coin(i);
+        if (numEl) numEl.textContent = fmt(from + ((to - from) * (i + 1)) / n);
+        toEl.classList.remove('bump');
+        void toEl.offsetWidth;
+        toEl.classList.add('bump');
+      }));
+    }
+    return Promise.all(jobs).then(() => numEl && (numEl.textContent = fmt(to)));
   }
 
   /* ------------------------------------------------------------ sheets */
@@ -1129,19 +1495,15 @@ export class UI {
   }
 
   missions() {
-    const ms = ensureMissions();
-    const ready = ms.every((m) => m.done);
     const el = this.sheet(t('Missions'), `
       <div class="panel mult-hero">
         <div class="x">×${multiplier()}</div>
-        <div><b style="font-size:18px">${t('Score multiplier')}</b><div class="muted" style="font-size:14px">${t('Complete all three missions to raise it by one and earn bonus seeds.')}</div></div>
+        <div><b style="font-size:18px">${t('Score multiplier')}</b><div class="muted" style="font-size:14px">${t('Each mission pays seeds. Settle all three — finish them or skip them — to raise your multiplier and win the set bonus.')}</div></div>
       </div>
-      ${ms.map((m, i) => `<div class="panel mission ${m.done ? 'done' : ''}" style="animation:rise .4s ${i * 0.06}s ease both"><span class="tick ${m.done ? 'done' : ''}">${m.done ? '✓' : '🎯'}</span><div class="txt">${esc(missionText(m))}</div></div>`).join('')}
-      ${ready ? `<button class="btn big" data-act="claim" data-click>${t('🎉 Claim reward')}</button>` : ''}
+      <div class="panel chal-panel"><div class="chal-slot"></div></div>
     `);
-    el.querySelector('[data-act=claim]')?.addEventListener('click', () => {
-      this.missionSetComplete();
-      this.missions();
+    this.mountChallenges(el.querySelector('.chal-slot'), () => {
+      el.querySelector('.mult-hero .x').textContent = `×${multiplier()}`;
     });
   }
 

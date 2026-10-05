@@ -28,6 +28,9 @@
   "functions": {
     "api/scores.js": {
       "includeFiles": "migrations/**"
+    },
+    "api/challenges.js": {
+      "includeFiles": "migrations/**"
     }
   }
 }

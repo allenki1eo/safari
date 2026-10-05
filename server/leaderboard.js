@@ -14,10 +14,10 @@ import { loadLocalEnv } from './env.js';
 loadLocalEnv();
 
 // Applied in order on first use; every statement is idempotent.
-const SCHEMA_SQL = ['001_scores.sql', '002_players.sql', '003_daily.sql']
+const SCHEMA_SQL = ['001_scores.sql', '002_players.sql', '003_daily.sql', '004_challenges.sql']
   .map((file) => readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8'))
   .join('\n');
-const TOKEN_RE = /^[a-f0-9]{64}$/;
+export const TOKEN_RE = /^[a-f0-9]{64}$/;
 
 export const TOP_LIMIT = 20;
 export const NAME_MAX = 16;
@@ -29,6 +29,7 @@ const ALLIES_MAX = 999;
 const DURATION_MAX = 100_000;
 
 let clock = () => new Date();
+export const now = () => clock();
 
 /** Tests pin the Dar day. Production uses the real clock. */
 export function setLeaderboardClock(fn) {
@@ -36,7 +37,7 @@ export function setLeaderboardClock(fn) {
 }
 // `chapter` is the furthest journey region reached (an index into REGIONS: 0 = Serengeti)
 const CHAPTER_MAX = REGIONS.length - 1;
-const RUNNER_IDS = new Set(RUNNERS.map((runner) => runner.id));
+export const RUNNER_IDS = new Set(RUNNERS.map((runner) => runner.id));
 
 let clientPromise = null;
 let clientUrl = '';
@@ -80,7 +81,7 @@ export function getClient() {
   return clientPromise;
 }
 
-function cleanName(raw) {
+export function cleanName(raw) {
   if (typeof raw !== 'string') return null;
   const name = raw.normalize('NFKC').replace(/[\u0000-\u001F\u007F]/g, '').trim().replace(/\s+/g, ' ');
   const length = [...name].length;
@@ -93,11 +94,11 @@ export function nameKey(name) {
   return name.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
-function hashToken(token) {
+export function hashToken(token) {
   return createHash('sha256').update(token).digest('hex');
 }
 
-function strictInt(value, max) {
+export function strictInt(value, max) {
   let n;
   if (typeof value === 'number') n = value;
   else if (typeof value === 'string' && /^(0|[1-9]\d*)$/.test(value)) n = Number(value);
@@ -177,7 +178,7 @@ async function rankOf(db, score, id) {
   return Number(result.rows[0].n) + 1;
 }
 
-function fail(err) {
+export function fail(err) {
   if (err?.code === 'NOT_CONFIGURED') {
     return { status: 503, body: { error: 'The leaderboard is not set up yet.' } };
   }

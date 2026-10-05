@@ -263,3 +263,94 @@ test('today\'s board resets at midnight in Dar and yesterday\'s best is the only
   const all = await handleScoreRequest('GET');
   assert.deepEqual(all.body.top.map((row) => row.name), ['Juma', 'Neema']);
 }));
+
+/* ------------------------------------------------------------ challenges */
+import { handleChallengeRequest, OPEN_TTL, TAKEN_TTL } from './challenges.js';
+import { GhostRecorder } from '../app/game/ghostTrack.js';
+
+const chPost = (body) => handleChallengeRequest('POST', body);
+const chGet = (id) => handleChallengeRequest('GET', undefined, { id });
+
+function track() {
+  const r = new GhostRecorder();
+  for (let t = 0; t <= 3; t += 1 / 60) r.sample(t, t * 15, Math.sin(t) * 2.5, t > 1 && t < 1.5 ? 1.2 : 0, t > 1 && t < 1.5 ? 'jump' : 'run');
+  return r.encode();
+}
+
+const host = (over = {}) => ({
+  action: 'create', token: T.juma, name: 'Juma', runner: 'juma', score: 5000, distance: 700, duration: 50,
+  startRegion: 2, route: 'r1a2b3c', track: track(), stake: 100, ...over,
+});
+
+test('a challenge stores the route and the shadow-runner recording', async () => {
+  await withDb(async () => {
+    const made = await chPost(host());
+    assert.equal(made.status, 200);
+    assert.match(made.body.id, /^[a-z0-9]{8}$/);
+    const got = await chGet(made.body.id);
+    assert.equal(got.status, 200);
+    assert.equal(got.body.challenge.route, 'r1a2b3c');
+    assert.equal(got.body.challenge.name, 'Juma');
+    assert.equal(got.body.challenge.stake, 100);
+    assert.equal(got.body.challenge.track, host().track);
+    assert.equal(got.body.challenge.status, 'open');
+    assert.equal(JSON.stringify(got.body).includes('hash'), false);
+    assert.equal((await chGet('nope')).status, 400);
+    assert.equal((await chPost(host({ route: 'drop table' }))).status, 400);
+    assert.equal((await chPost(host({ stake: 999999 }))).status, 400);
+    assert.equal((await chPost(host({ track: 'not*a*track' }))).status, 400);
+    assert.equal((await chPost(host({ name: '' }))).status, 400);
+  });
+});
+
+test('the first friend locks the bet, and the higher score takes the pot', async () => {
+  await withDb(async () => {
+    const { id } = (await chPost(host())).body;
+    assert.equal((await chPost({ action: 'accept', token: T.juma, id, name: 'Juma' })).body.code, 'OWN');
+    const ok = await chPost({ action: 'accept', token: T.neema, id, name: 'Neema' });
+    assert.equal(ok.status, 200);
+    assert.equal(ok.body.stake, 100);
+    assert.equal((await chPost({ action: 'accept', token: T.kito, id, name: 'Kito' })).body.code, 'TAKEN');
+    assert.equal((await chPost({ action: 'finish', token: T.kito, id, score: 9 })).status, 409);
+    const fin = await chPost({ action: 'finish', token: T.neema, id, score: 7000 });
+    assert.deepEqual(fin.body, { winner: 'rival', pot: 200, hostName: 'Juma', hostScore: 5000 });
+    // finishing twice changes nothing
+    assert.equal((await chPost({ action: 'finish', token: T.neema, id, score: 1 })).body.winner, 'rival');
+    // the host hears they lost, once, and is paid nothing
+    const col = await chPost({ action: 'collect', token: T.juma });
+    assert.deepEqual(col.body.payouts.map((p) => [p.kind, p.amount, p.rivalName]), [['lost', 0, 'Neema']]);
+    assert.equal((await chPost({ action: 'collect', token: T.juma })).body.payouts.length, 0);
+  });
+});
+
+test('the host collects a win once; a tie goes to the host', async () => {
+  await withDb(async () => {
+    const { id } = (await chPost(host())).body;
+    await chPost({ action: 'accept', token: T.neema, id, name: 'Neema' });
+    assert.equal((await chPost({ action: 'finish', token: T.neema, id, score: 5000 })).body.winner, 'host');
+    const col = await chPost({ action: 'collect', token: T.juma });
+    assert.deepEqual(col.body.payouts.map((p) => [p.kind, p.amount]), [['won', 200]]);
+    assert.equal((await chPost({ action: 'collect', token: T.juma })).body.payouts.length, 0);
+  });
+});
+
+test('untaken bets are refunded and abandoned ones are forfeited', async () => {
+  await withDb(async () => {
+    const t0 = Date.parse('2026-10-05T08:00:00Z');
+    setLeaderboardClock(() => new Date(t0));
+    const open = (await chPost(host())).body.id;
+    const taken = (await chPost(host({ stake: 50 }))).body.id;
+    const free = (await chPost(host({ stake: 0 }))).body.id;
+    await chPost({ action: 'accept', token: T.neema, id: taken, name: 'Neema' });
+    assert.equal((await chPost({ action: 'accept', token: T.neema, id: free, name: 'Neema' })).body.code, 'NO_BET');
+    assert.equal((await chPost({ action: 'collect', token: T.juma })).body.payouts.length, 0);
+    setLeaderboardClock(() => new Date(t0 + TAKEN_TTL + 1000));
+    let col = (await chPost({ action: 'collect', token: T.juma })).body.payouts;
+    assert.deepEqual(col.map((p) => [p.id, p.kind, p.amount]), [[taken, 'forfeit', 100]]);
+    setLeaderboardClock(() => new Date(t0 + OPEN_TTL + 1000));
+    col = (await chPost({ action: 'collect', token: T.juma })).body.payouts;
+    assert.deepEqual(col.map((p) => [p.id, p.kind, p.amount]), [[open, 'refund', 100]]);
+    assert.equal((await chGet(open)).body.challenge.status, 'expired');
+    assert.equal((await chGet(free)).body.challenge.status, 'open');
+  });
+});

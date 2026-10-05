@@ -227,6 +227,7 @@ input { font: inherit; }
 @keyframes flash { from { opacity: 1; } to { opacity: 0; } }
 
 /* daily word hunt: K I M B I A along the top, lit as the letters are found */
+.hunt[hidden] { display: none; }
 .hunt { position: absolute; left: 50%; top: calc(66px + var(--safe-t)); transform: translateX(-50%); display: flex; gap: 3px; pointer-events: none; }
 .hunt i { width: 20px; height: 22px; display: grid; place-items: center; border-radius: 6px; font-style: normal; font-family: var(--display); font-size: 14px; color: rgba(255,255,255,0.45); background: rgba(40,22,8,0.35); border: 1px solid rgba(255,255,255,0.12); }
 .hunt i.on { color: #5a2d00; background: linear-gradient(180deg, #fff3b0, #ffb703); border-color: #ffe58a; box-shadow: 0 0 10px rgba(255,190,40,0.6); }
@@ -508,3 +509,88 @@ input { font: inherit; }
 .herd-loading i { width: min(240px, 70%); height: 6px; border-radius: 99px; background: rgba(43,26,14,0.45); overflow: hidden; }
 .herd-loading b { display: block; height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg, var(--sun), var(--sun-2)); transition: width 0.3s ease; }
 .herd-loading.done { opacity: 0; }
+
+/* ---------------------------------------------------------- challenges */
+/* mission rows with progress, Collect / Skip, and the set bonus (results + Missions sheet) */
+.chal-wrap { display: flex; flex-direction: column; gap: 8px; margin: 2px 0 14px; text-align: left; }
+.chal-head { display: flex; align-items: center; gap: 8px; }
+.chal-head > b { font-family: var(--display); font-weight: 400; font-size: 19px; color: var(--sun-2); }
+.chal-mult { padding: 1px 8px; border-radius: 8px; background: var(--sun); color: var(--earth); font-family: var(--display); font-size: 14px; box-shadow: 0 2px 0 #a8620a; }
+.bank-chip { margin-left: auto; padding: 4px 10px 4px 6px; font-size: 15px; font-variant-numeric: tabular-nums; }
+.bank-chip.bump { animation: bump 0.22s ease; }
+.chal {
+  display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px; align-items: start;
+  padding: 11px 10px 10px; border-radius: 16px; background: rgba(255, 244, 222, 0.06); border: 1px solid var(--line);
+  transition: background 0.3s, border-color 0.3s;
+}
+.chal.ready { background: linear-gradient(90deg, rgba(255, 201, 64, 0.24), rgba(255, 201, 64, 0.06)); border-color: rgba(255, 201, 64, 0.6); animation: chalGlow 1.8s ease-in-out infinite; }
+@keyframes chalGlow { 50% { box-shadow: 0 0 0 3px rgba(255, 201, 64, 0.16), 0 0 18px rgba(255, 201, 64, 0.35); } }
+.chal-ico { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; font-size: 17px; background: rgba(255, 255, 255, 0.1); }
+.chal.ready .chal-ico, .chal.claimed .chal-ico { background: var(--leaf); color: #fff; font-weight: 900; }
+.chal.skipped .chal-ico { background: rgba(255, 255, 255, 0.16); font-size: 15px; }
+.chal-txt { font-size: 14px; font-weight: 800; line-height: 1.25; color: var(--cream); }
+.chal.claimed .chal-txt, .chal.skipped .chal-txt { opacity: 0.6; }
+.chal-bar { height: 7px; margin: 7px 0 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.chal-bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--sun), var(--flame)); transition: width 0.6s ease; }
+.chal.ready .chal-bar i, .chal.claimed .chal-bar i { background: linear-gradient(90deg, #a6d65a, var(--leaf)); }
+.chal.skipped .chal-bar i { background: rgba(255, 244, 222, 0.35); }
+.chal-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 34px; }
+.chal-meta { display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; min-width: 0; font-size: 12px; font-weight: 700; color: rgba(255, 244, 222, 0.68); }
+.chal-meta b { color: var(--sun-2); }
+.chal-meta > span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.chal-meta .pays::before { content: '·'; margin-right: 2px; opacity: 0.6; }
+.chal-meta .seed { width: 12px; height: 12px; }
+.chal-act { flex: none; }
+.chal-act .btn.small { min-height: 34px; padding: 0 12px; gap: 6px; font-size: 15px; border-radius: 11px; box-shadow: 0 4px 0 var(--edge), inset 0 2px 0 rgba(255,255,255,0.45); }
+.chal-act .btn.small:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--edge); }
+.chal-act .btn .seed { width: 15px; height: 15px; }
+.chal-skip.confirm { --c1: #ff9a4c; --c2: var(--ember); --edge: #8e2414; --ink: #fff; animation: pop 0.25s ease; }
+.chal-tag { display: inline-block; padding: 5px 10px; border-radius: 10px; font-family: var(--display); font-size: 15px; white-space: nowrap; color: rgba(255, 244, 222, 0.62); background: rgba(255, 255, 255, 0.08); }
+.chal-tag.paid { color: #c8ec92; background: rgba(127, 174, 58, 0.22); }
+.chal.skipping { animation: chalSkip 0.4s ease forwards; }
+@keyframes chalSkip { to { opacity: 0.35; transform: translateX(14px); } }
+.chal-all, .chal-set { min-height: 50px; font-size: 19px; margin-top: 4px; }
+.chal-all .seed, .chal-set .seed { width: 18px; height: 18px; }
+.chal-set { animation: pop 0.4s ease both, breathe 1.6s 0.4s ease-in-out infinite; }
+.chal-panel { padding: 16px 12px 12px; }
+.chal-panel .chal-wrap { margin: 0; }
+.fly-seed { position: fixed; left: 0; top: 0; width: 22px; height: 22px; margin: -11px 0 0 -11px; z-index: 1000; pointer-events: none; }
+.toast-reward { display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; font-weight: 900; color: var(--sun-2); }
+.toast-reward .seed { width: 14px; height: 14px; }
+
+/* ------------------------------------------------------- friend challenges */
+.challenge-card { align-items: flex-start; text-align: left; }
+.challenge-card .ch-ico { font-size: 28px; line-height: 1; }
+.challenge-card .ch-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ch-sub { font-size: 13px; font-weight: 800; opacity: 0.92; }
+.bet-line { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; padding: 6px 10px; border-radius: 10px; background: rgba(43, 26, 14, 0.35); font-size: 13.5px; font-weight: 800; }
+.bet-line b { font-size: 16px; }
+.bet-line .seed, .bet-take .seed { width: 15px; height: 15px; }
+.bet-line.on { background: rgba(127, 174, 58, 0.45); }
+.bet-take { align-self: flex-start; --c1: #fff4de; --c2: #ffd9a0; --edge: #9a4a12; --ink: var(--earth); }
+.bet-note { font-size: 12px; font-weight: 800; opacity: 0.85; }
+
+.challenge-sheet .name-input { margin-top: 14px; }
+.bet-head { display: flex; justify-content: space-between; align-items: baseline; margin: 18px 2px 8px; }
+.bet-head b { font-family: var(--display); font-weight: 400; font-size: 19px; color: var(--sun-2); }
+.bet-head span { font-size: 13px; font-weight: 800; color: rgba(255, 244, 222, 0.7); }
+.stakes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.stake {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 46px; border-radius: 14px;
+  font-family: var(--display); font-size: 18px; color: var(--cream);
+  background: rgba(255, 244, 222, 0.08); border: 1.5px solid var(--line); transition: transform 0.1s, background 0.2s, border-color 0.2s;
+}
+.stake .seed { width: 16px; height: 16px; }
+.stake.on { background: linear-gradient(180deg, rgba(255, 201, 64, 0.35), rgba(255, 122, 47, 0.25)); border-color: var(--sun); color: #fff; box-shadow: 0 0 0 3px rgba(255, 201, 64, 0.18); }
+.stake:active { transform: scale(0.95); }
+.stake:disabled { opacity: 0.35; }
+.pot-line { min-height: 38px; margin-top: 10px; font-size: 13.5px; font-weight: 700; line-height: 1.35; color: rgba(255, 244, 222, 0.8); }
+.pot-line b { color: var(--sun-2); }
+
+.bet-result { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; padding: 12px 14px; border-radius: 16px; text-align: left; font-size: 30px; animation: pop 0.45s ease both; }
+.bet-result > div { display: flex; flex-direction: column; gap: 2px; }
+.bet-result b { font-family: var(--display); font-weight: 400; font-size: 20px; }
+.bet-result span { font-size: 13px; font-weight: 800; opacity: 0.85; }
+.bet-result.won { background: linear-gradient(90deg, rgba(127, 174, 58, 0.9), rgba(60, 199, 181, 0.75)); color: #fff; }
+.bet-result.lost { background: rgba(255, 244, 222, 0.08); border: 1px solid var(--line); }
+.bet-result.pending { font-size: 15px; font-weight: 800; background: rgba(255, 244, 222, 0.06); }

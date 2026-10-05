@@ -105,7 +105,7 @@ export const REGIONS = [
     props: [['baobab', 3.5], ['kopje', 2.2], ['acacia', 2.5], ['doum', 1.4], ['bush', 3], ['grass', 6]],
     herd: [['wilddog', 'walk', 1.6], ['elephant', 'walk', 1.6], ['giraffe', 'walk', 1], ['gazelle', 'idle', 1.4], ['warthog', 'idle', 1], ['lion', 'idle', 0.8], ['buffalo', 'idle', 0.6]],
     blocks: ['boulder', 'mound'], style: { log: 'log', gate: 'branch', rock: 'rock' },
-    trucks: true, specials: { lion: 2 },
+    trucks: true, specials: { lion: 2, greatRiver: 2.6 },
     music: { transpose: -1, tempo: 120, scale: 'minor' },
   },
   {

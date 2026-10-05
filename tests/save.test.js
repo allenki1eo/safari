@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { save, ensureMissions, checkMissions, claimMissionSet, multiplier, claimDaily } from '../app/data/save.js';
+import {
+  save, ensureMissions, checkMissions, claimMissionSet, multiplier, claimDaily,
+  collectMission, skipMission, skipCost, uncollected, missionSetReady,
+} from '../app/data/save.js';
 
 describe('progress & missions', () => {
   beforeEach(() => {
@@ -21,10 +24,50 @@ describe('progress & missions', () => {
     expect(ms).toHaveLength(3);
     const stats = Object.fromEntries(ms.map((m) => [m.stat, m.n]));
     expect(checkMissions(stats)).toHaveLength(3);
-    expect(claimMissionSet()).toBe(true);
+    // the set waits until every reward is collected
+    expect(claimMissionSet()).toBe(false);
+    expect(uncollected()).toHaveLength(3);
+    for (const m of ms) expect(collectMission(m.id)).toBe(100);
+    expect(collectMission(ms[0].id)).toBe(0); // only once
+    expect(save.seeds).toBe(300);
+    expect(claimMissionSet()).toBe(250);
     expect(multiplier()).toBe(2);
-    expect(save.seeds).toBe(250);
-    expect(ensureMissions().every((m) => !m.done)).toBe(true);
+    expect(save.seeds).toBe(550);
+    expect(ensureMissions().every((m) => !m.done && m.reward === 150)).toBe(true);
+  });
+
+  it('tracks the best run towards each mission', () => {
+    const ms = ensureMissions();
+    ms[0] = { ...ms[0], id: 'jumps', stat: 'jumps', n: 15, best: 0, done: false };
+    const m = ms[0];
+    checkMissions({ jumps: 7 });
+    checkMissions({ jumps: 1 });
+    expect(m.best).toBe(7);
+    expect(m.done).toBe(false);
+  });
+
+  it('skips a stubborn mission for a fee, without paying its reward', () => {
+    const ms = ensureMissions();
+    const cost = skipCost(ms[0]);
+    expect(cost).toBe(150);
+    expect(skipMission(ms[0].id)).toBe(false); // can't afford
+    save.seeds = 200;
+    expect(skipMission(ms[0].id)).toBe(true);
+    expect(save.seeds).toBe(50);
+    expect(ms[0]).toMatchObject({ done: true, claimed: true, skipped: true });
+    expect(skipMission(ms[0].id)).toBe(false); // already settled
+    expect(collectMission(ms[0].id)).toBe(0);
+    // finishing the other two settles the set
+    checkMissions(Object.fromEntries(ms.slice(1).map((m) => [m.stat, m.n])));
+    ms.slice(1).forEach((m) => collectMission(m.id));
+    expect(missionSetReady()).toBe(true);
+  });
+
+  it('prices missions saved before rewards existed', () => {
+    save.missions = ensureMissions().map(({ id, stat, n, text }, i) => ({ id, stat, n, text, done: i === 0 }));
+    const ms = ensureMissions();
+    expect(ms.every((m) => m.reward === 100 && m.claimed === false)).toBe(true);
+    expect(ms[0].best).toBe(ms[0].n);
   });
 
   it('pays the daily reward once per day', () => {

@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import { curve, bend, bakeRigid, finishProp, time as timeU, runnerShadowTexture } from './materials.js';
+import { makeChannel, makeRiverSpan } from './river.js';
 import { Look, detectQuality } from './look.js';
 import { Animals, makeEagle, makeHornbill, makeTruck, makeRamp, makeTotem, makePrizeBox, makeLetterToken, makeBoostGem } from './models.js';
 import { makeRunner } from './people.js';
 import { makeKidRunner, preloadKids } from './kids.js';
 import { preloadWildlife } from './wildlife.js';
+import { GhostRecorder, GhostTrack } from './ghostTrack.js';
 import {
   RegionAnimals, makeLogStyled, makeGateStyled, makeBoulderStyled, makeMoundStyled, makeCart, makeRockfall, makeBeachedCanoe, makeScooter,
 } from './regionModels.js';
@@ -12,11 +14,11 @@ import { World, Particles, LANE_W } from './world.js';
 import { audio } from './audio.js';
 import { t } from '../i18n.js';
 import { makeChunk, KINDS, TRUCK_LEN, JUMP_V, GRAVITY } from './patterns.js';
-import { RUNNERS, ALLIES, ALLY_IDS, TUTORIAL, SHOUTS, outfitId, HUNT_WORDS, HUNT_PER_LETTER, BOOSTS, BOOST_IDS } from '../data/content.js';
+import { RUNNERS, ALLIES, ALLY_IDS, TUTORIAL, SHOUTS, outfitId, HUNT_WORDS, HUNT_PER_LETTER, HUNT_COOLDOWN, BOOSTS, BOOST_IDS } from '../data/content.js';
 import { REGIONS, regionIndexAt, regionAt } from '../data/regions.js';
 import { save, persist, multiplier } from '../data/save.js';
 import {
-  chunkPlan, darDay, ghostDistance, huntWord, lionClip, nearMissSpec, rngAt, waterClear, wildebeestFill,
+  chunkPlan, darDay, newRoute, ghostDistance, huntWord, lionClip, nearMissSpec, rngAt, waterClear, wildebeestFill,
 } from '../data/daily.js';
 
 const LANES = [-LANE_W, 0, LANE_W];
@@ -55,7 +57,8 @@ export class Game {
     this.time = 0;
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: dpr < 2, powerPreference: 'high-performance' });
+    // stencil: rivers cut a real gap in the ground (river.js)
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: dpr < 2, powerPreference: 'high-performance', stencil: true });
     this.renderer.setPixelRatio(dpr);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -216,8 +219,6 @@ export class Game {
     this.coinMesh.count = 0;
     this.scene.add(this.coinMesh);
     this.dummy = new THREE.Object3D();
-    this.waterGeo = new THREE.BoxGeometry(LANE_W * 1.05, 0.16, KINDS.water.len);
-    this.waterMat = bend(new THREE.MeshLambertMaterial({ color: 0x2a9bb8, transparent: true, opacity: 0.9 }));
   }
 
   /* --------------------------------------------------------------- run */
@@ -255,7 +256,12 @@ export class Game {
     this.nextChunk = 45;
     this.chapter = -1;
     this.region = -1;
-    this.day = darDay();
+    // every run deals a fresh layout of obstacles, prizes and herds; a challenge replays the
+    // challenger's own route so both race the same trail
+    this.today = darDay();
+    this.day = this.linkedRoute ?? newRoute();
+    this.recorder = new GhostRecorder();
+    this.sinking = false;
     this.tutorialIdx = 0;
     this.cardMoment = null;
     this.freeze = 0;
@@ -263,8 +269,9 @@ export class Game {
     this.nextTotemAt = 260 + rngAt(this.day, 3, 0)() * 140;
     this.nextBoxAt = 160 + rngAt(this.day, 6, 0)() * 120;
     this.nextLetterAt = 200 + Math.random() * 160;
-    if (save.hunt?.day !== this.day) save.hunt = { day: this.day, done: 0, got: 0 };
+    if (save.hunt?.day !== this.today) save.hunt = { day: this.today, done: 0, got: 0 };
     save.hunt.done ??= 0;
+    this.huntHidden = !this.huntReady();
     this.revives = 0;
     this.deathT = 0;
     for (const a of Object.values(this.allyModels)) a.root.visible = false;
@@ -318,6 +325,8 @@ export class Game {
     for (const o of this.obstacles) if (o.wz < this.D + 50 || o.moving) o.dead = true;
     this.p.invuln = 3;
     this.p.y = Math.max(this.p.y, 0);
+    this.p.vy = 0;
+    this.sinking = false;
     this.state = 'running';
     this.chaseT = 0;
     audio.muffle(false);
@@ -582,6 +591,14 @@ export class Game {
   }
 
   /* --------------------------------------------------------- obstacles */
+  /**
+   * A river crossing: one deep channel across the whole trail and off into the bush, built by
+   * the middle lane's piece; the outer lanes only carry their share of the collision.
+   */
+  makeRiver(lane) {
+    return lane === 1 ? makeChannel(KINDS.water.len, 11) : new THREE.Group();
+  }
+
   addObstacle(kind, lane, wz, opts = {}) {
     const k = KINDS[kind];
     const style = regionAt(this.startJ + wz).style;
@@ -612,14 +629,12 @@ export class Game {
       case 'croc': anim = RegionAnimals.croc(); break;
       case 'gorilla': anim = RegionAnimals.gorilla(true); break;
       case 'crossing': anim = Animals.elephant(); break;
-      case 'water': {
-        m = new THREE.Mesh(this.waterGeo, this.waterMat);
-        m.position.y = 0.08;
-        break;
-      }
+      case 'water': m = opts.hidden ? new THREE.Group() : this.makeRiver(lane); break;
+      case 'span': m = makeRiverSpan(opts.len, opts.rafts ?? [], LANES); break;
+      case 'hippo': anim = Animals.hippo(); break;
     }
     if (anim) m = anim.root;
-    else if (!k.fall && kind !== 'water') finishProp(bakeRigid(m, true));
+    else if (!k.fall && kind !== 'water' && kind !== 'span') finishProp(bakeRigid(m, true));
     castShadows(m);
     // animals in the lane face the runner (the models face down the track, -z), so chargers
     // run head first rather than backwards
@@ -632,8 +647,8 @@ export class Game {
     m.position.x = x;
     this.scene.add(m);
     const o = {
-      kind, lane, x, wz, len: k.len, y0: k.y0, y1: k.y1, top, ramp: k.ramp, mesh: m, anim,
-      moving: opts.moving ?? 0, cross: opts.cross, dead: false, passed: false, zPrev: false,
+      kind, lane, x, wz, len: opts.len ?? k.len, y0: k.y0, y1: k.y1, top, ramp: k.ramp, mesh: m, anim,
+      moving: opts.moving ?? 0, cross: opts.cross, hidden: !!opts.hidden, dead: false, passed: false, zPrev: false,
       warned: false, rockY: kind === 'coconut' ? 6.5 : k.fall ? 18 : 0,
     };
     if (k.fall) m.userData.rock.position.y = o.rockY;
@@ -712,6 +727,14 @@ export class Game {
         continue;
       }
       if (o.flying || (o.kind === 'ramp' && pw.tai)) continue;
+      if (KINDS[o.kind].decor) {
+        // the Great Ruaha announces itself as you reach its bank
+        if (o.kind === 'span' && !o.announced && this.D > o.wz - o.len / 2 - 40) {
+          o.announced = true;
+          this.emit('shout', { text: t('The Great Ruaha!'), sub: t('Hop the logs and stones') });
+        }
+        continue;
+      }
       if (KINDS[o.kind].fall && o.rockY > 2) {
         o.zPrev = false;
         continue;
@@ -772,7 +795,7 @@ export class Game {
             this.noteNearMiss('wildebeest', o);
           }
         }
-        if (o.kind === 'water' && !o.cleared && Math.abs(p.x - o.x) < 1.3) {
+        if (o.kind === 'water' && !o.hidden && !o.cleared && Math.abs(p.x - o.x) < 1.3) {
           const bank = o.wz + o.len / 2;
           const over = this.D + 0.3 > o.wz - o.len / 2 && this.D < bank + 0.4;
           if (over && p.y > o.y1 + 0.05) o.jumped = true;
@@ -851,21 +874,24 @@ export class Game {
   }
 
   /**
-   * The faint runner ahead. Hidden unless `run` is a real finish: a name, a
-   * distance and a time. A missing ghost is not replaced with a made-up score.
+   * The shadow runner: only there when a friend's challenge is being raced. With a recording
+   * (`track`) it replays their run move for move; an older link without one just keeps their
+   * pace down the left lane. A missing ghost is never replaced with a made-up one.
    */
   setGhost(run) {
+    const name = String(run?.name || '').trim().slice(0, 16);
+    const track = run?.track ? new GhostTrack(run.track) : null;
     const distance = Math.floor(Number(run?.distance) || 0);
     const duration = Math.floor(Number(run?.duration) || 0);
-    const name = String(run?.name || '').trim().slice(0, 16);
-    if (!name || distance <= 0 || duration <= 0) {
+    if (!name || !(track?.n || (distance > 0 && duration > 0))) {
       this.ghostRun = null;
       if (this.ghost) this.ghost.root.visible = false;
       return;
     }
     const runner = RUNNERS.some((r) => r.id === run.runner) ? run.runner : 'zuri';
-    this.ghostRun = { name, distance, duration, runner };
+    this.ghostRun = { name, distance, duration, runner, track: track?.n ? track : null };
     this.ghostPassed = false;
+    this.ghostState = {};
     this.ensureGhost(runner);
   }
 
@@ -895,15 +921,31 @@ export class Game {
   updateGhost(dt) {
     const run = this.ghostRun;
     if (!run || !this.ghost) return;
-    const dist = ghostDistance(run, this.runTime);
-    if (dist == null) {
-      this.ghost.root.visible = false;
-      return;
+    const g = this.ghost;
+    let x = LANES[0];
+    let y = 0;
+    let pose = 'run';
+    let dist;
+    if (run.track) {
+      const s = run.track.at(this.runTime, this.ghostState);
+      dist = s.distance;
+      x = s.x;
+      y = s.y;
+      pose = s.done ? 'dead' : s.pose;
+    } else {
+      dist = ghostDistance(run, this.runTime);
+      if (dist == null) {
+        g.root.visible = false;
+        return;
+      }
     }
     const ahead = dist - this.D;
-    this.ghost.root.visible = ahead > -40 && ahead < 90;
-    this.ghost.root.position.set(LANES[0], 0, -ahead);
-    this.ghost.update(dt, this.speed, 'run');
+    g.root.visible = ahead > -40 && ahead < 90;
+    g.root.position.set(x, y, -ahead);
+    const vx = dt > 0 ? (x - (g.root.userData.lastX ?? x)) / dt : 0;
+    g.root.rotation.z = Math.max(-0.25, Math.min(0.25, vx * -0.012)); // lean into its lane changes
+    g.root.userData.lastX = x;
+    g.update(dt, pose === 'dead' ? 0 : this.speed, pose);
     if (!this.ghostPassed && ahead < -0.4) {
       this.ghostPassed = true;
       this.emit('shout', { text: t('Passed!'), sub: run.name });
@@ -912,6 +954,9 @@ export class Game {
 
   crash(o, caught = false) {
     this.state = 'dying';
+    // missed the far bank: down into the river with a splash
+    this.sinking = o?.kind === 'water';
+    if (this.sinking) this.fx.debris(this.p.x, 0.2, -0.5, [0xffffff, 0xcfeef0, 0x7fc4c9], 18);
     this.freeze = 0;
     this.deathT = 0;
     this.caught = caught;
@@ -931,15 +976,15 @@ export class Game {
   updateDying(dt) {
     this.deathT += dt;
     const p = this.p;
-    const ground = this.groundAt(p.x, p.y);
+    const ground = this.sinking ? -1.6 : this.groundAt(p.x, p.y);
     if (p.y > ground) {
-      p.vy -= GRAVITY * dt;
+      p.vy -= (this.sinking ? 14 : GRAVITY) * dt;
       p.y = Math.max(ground, p.y + p.vy * dt);
     }
     this.runner.update(dt, 0, 'dead');
     this.runner.root.position.set(p.x, p.y, 0);
     this.runner.shadow.position.y = 0.03;
-    this.runner.shadow.visible = true;
+    this.runner.shadow.visible = !this.sinking;
     this.runner.root.visible = true;
     this.speed = damp(this.speed, 0, 5, dt);
     this.updateChasers(dt);
@@ -965,7 +1010,9 @@ export class Game {
       lap: this.lap,
       duration: Math.max(0, Math.round(this.runTime)),
       revives: this.revives,
-      day: this.day,
+      day: this.today,
+      route: this.day,
+      track: this.recorder?.encode() ?? '',
       startRegion: this.startIndex ?? 0,
       runner: this.runnerId,
       nearMiss: this.cardMoment
@@ -976,6 +1023,11 @@ export class Game {
 
   /* ------------------------------------------------------------ spawning */
   spawn() {
+    // the rest is over: the next word's letters can turn up again
+    if (this.huntHidden && this.huntReady()) {
+      this.huntHidden = false;
+      this.emit('hunt', { word: this.huntWord().word, got: save.hunt.got, delay: 0 });
+    }
     while (this.nextChunk < this.D + 170) {
       const plan = chunkPlan(this.day, this.nextChunk);
       const chunk = makeChunk({
@@ -986,7 +1038,7 @@ export class Game {
         region: regionAt(this.startJ + plan.z),
         wantTotem: plan.z + 150 > this.nextTotemAt,
         // a slot for the next prize box, or for the next hunt letter when one is due
-        wantBox: plan.z > this.nextBoxAt || (plan.z > this.nextLetterAt && !this.letterOut && save.hunt.got < this.huntWord().word.length),
+        wantBox: plan.z > this.nextBoxAt || (plan.z > this.nextLetterAt && !this.letterOut && this.huntReady() && save.hunt.got < this.huntWord().word.length),
       });
       this.applyChunk(chunk.ops);
       this.nextChunk += chunk.len + plan.gap;
@@ -1038,7 +1090,7 @@ export class Game {
   addBox(lane, wz, y = 0) {
     // some of the open-ground slots carry the next letter of the day's word instead
     const { word } = this.huntWord();
-    if (y === 0 && wz > this.nextLetterAt && save.hunt.got < word.length && !this.letterOut) {
+    if (y === 0 && wz > this.nextLetterAt && this.huntReady() && save.hunt.got < word.length && !this.letterOut) {
       const char = word[save.hunt.got];
       const m = makeLetterToken(char);
       m.position.set(LANES[lane], 0, 0);
@@ -1146,7 +1198,7 @@ export class Game {
     let n = 0;
     for (const o of this.obstacles) {
       const dz = o.wz - this.D;
-      if (o.flying || o.dead || dz < -1 || dz > 75 || o.kind === 'ramp' || o.kind === 'water') continue;
+      if (o.flying || o.dead || dz < -1 || dz > 75 || o.kind === 'ramp' || o.kind === 'water' || o.kind === 'span') continue;
       this.smash(o);
       n++;
     }
@@ -1163,9 +1215,14 @@ export class Game {
     this.boosts = {};
   }
 
+  /** False while the hunt rests after a finished word (its letters stop turning up). */
+  huntReady() {
+    return (save.hunt.nextAt ?? 0) <= Date.now();
+  }
+
   /** The word being hunted: today's chain, after the words already spelled. */
   huntWord() {
-    return huntWord(HUNT_WORDS, save.hunt.day || this.day, save.hunt.done);
+    return huntWord(HUNT_WORDS, save.hunt.day || this.today, save.hunt.done);
   }
 
   collectLetter(b) {
@@ -1188,15 +1245,17 @@ export class Game {
     this.stats.seeds = this.seeds;
     this.stats.words++;
     save.charms = (save.charms ?? 0) + 1;
-    // on to the next word in today's chain
+    // on to the next word in today's chain, after a rest
     save.hunt.done++;
     save.hunt.got = 0;
+    save.hunt.nextAt = Date.now() + HUNT_COOLDOWN;
+    this.huntHidden = true;
     persist();
     this.emit('seed', this.seeds);
     this.emit('shield', { on: this.shield > 0 });
     audio.powerup();
     this.emit('prize', { emoji: '🏆', title: `${word}!`, sub: t('{line} · +{n} seeds & a shield', { line, n: prize }), big: true });
-    this.emit('hunt', { word: this.huntWord().word, got: 0, delay: 3000 });
+    this.emit('hunt', { word: null, got: 0, delay: 3000 });
   }
 
   /* ------------------------------------------------------------- pickups */
@@ -1369,6 +1428,7 @@ export class Game {
     else if (!p.grounded) pose = 'jump';
     r.update(dt, this.speed, pose);
     r.root.position.set(p.x, p.y + yOff, 0);
+    if (this.state === 'running') this.recorder.sample(this.runTime, this.D, p.x, p.y + yOff, pose);
     // lean into lane changes
     r.root.rotation.z = (LANES[p.lane] - p.x) * -0.12;
     r.root.rotation.y = 0;

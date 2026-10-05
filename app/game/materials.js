@@ -219,27 +219,148 @@ export function grassTexture() {
   }, [36, 4]));
 }
 
-/* ---- water: moving ripples, sparkles and a foamy shore edge ---- */
-export function waterMaterial(color) {
-  const m = new THREE.MeshLambertMaterial({ color, emissive: 0x0a2a30, transparent: true, opacity: 0.94 });
+/* ---- water: shallows to deep, lapping shore, sky reflection and sun glitter ---- */
+
+/** Sky and sun the water reflects, kept in step with the time of day by world.setTime. */
+export const waterLight = {
+  uSkyCol: { value: new THREE.Color(0xbfd8e0) },
+  uSunCol: { value: new THREE.Color(0xffffff) },
+  uSunDir: { value: new THREE.Vector3(-0.45, 0.4, -1).normalize() },
+};
+
+// Shared wave field, in world space so neighbouring tiles and lane pieces join seamlessly.
+// waveN returns the surface normal of four travelling swells plus a fine chop.
+const WATER_HEAD = /* glsl */ `
+  uniform vec3 uSkyCol;
+  uniform vec3 uSunCol;
+  uniform vec3 uSunDir;
+  varying vec3 vWaterW;
+  float wHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float wNoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(wHash(i), wHash(i + vec2(1, 0)), f.x), mix(wHash(i + vec2(0, 1)), wHash(i + vec2(1, 1)), f.x), f.y);
+  }
+  vec3 waveN(vec2 p, vec2 flow, float calm) {
+    vec2 d = vec2(0.0);
+    vec2 q = p - flow * uTime;
+    d += cos(dot(q, vec2(0.31, 0.95)) * 0.9 + uTime * 1.3) * vec2(0.31, 0.95) * 0.9 * 0.10;
+    d += cos(dot(q, vec2(-0.72, 0.69)) * 1.4 + uTime * 1.7) * vec2(-0.72, 0.69) * 1.4 * 0.06;
+    d += cos(dot(q, vec2(0.93, -0.36)) * 2.3 + uTime * 2.2) * vec2(0.93, -0.36) * 2.3 * 0.035;
+    d += cos(dot(q, vec2(-0.2, -0.98)) * 3.7 + uTime * 2.9) * vec2(-0.2, -0.98) * 3.7 * 0.02;
+    d += (vec2(wNoise(q * 1.9 + uTime * 0.6), wNoise(q.yx * 1.9 - uTime * 0.5)) - 0.5) * 0.35;
+    return normalize(vec3(-d.x * calm, 1.0, -d.y * calm));
+  }
+  // Sky reflection (Schlick fresnel) and a hard sun glitter; strength fades as the sun sets.
+  vec3 waterSurface(vec3 lit, vec3 N, out float fres) {
+    vec3 V = normalize(cameraPosition - vWaterW);
+    fres = 0.04 + 0.96 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
+    vec3 col = mix(lit, uSkyCol, clamp(fres, 0.0, 0.45));
+    float day = smoothstep(-0.05, 0.25, uSunDir.y);
+    vec3 R = reflect(-uSunDir, N);
+    float rv = max(dot(R, V), 0.0);
+    col += uSunCol * (pow(rv, 220.0) * 2.4 + pow(rv, 28.0) * 0.18) * day;
+    return col;
+  }
+`;
+
+/**
+ * Lakes, rivers and the sea beside the trail. Tinted by `color`: the shallows run pale and
+ * clear with caustics over the bed, the deep water darkens and takes the sky at grazing
+ * angles, and at the shore the swash slides up the beach and back with a frothy edge,
+ * leaving wet sand behind. `open` turns the shore off (the horizon sea).
+ */
+export function waterMaterial(color, { open = false } = {}) {
+  const m = new THREE.MeshLambertMaterial({ color, transparent: true, depthWrite: false, fog: !open });
   return bend(m, {
     key: 'water',
+    // the horizon sea stays flat: bending a 700 m disc would sink its far edge out of sight
+    uniforms: { ...waterLight, uOpen: { value: open ? 1 : 0 }, ...(open ? { uCurve: { value: new THREE.Vector2(0, 0) } } : {}) },
     vertexHead: 'varying vec3 vWaterW;\n',
     vertexBegin: 'vWaterW = (modelMatrix * vec4(transformed, 1.0)).xyz;',
-    fragmentHead: 'varying vec3 vWaterW;\n',
+    fragmentHead: 'uniform float uOpen;\n' + WATER_HEAD,
     fragmentColor: /* glsl */ `
       vec2 wp = vWaterW.xz;
-      float r1 = sin(wp.x * 0.9 + uTime * 1.3) * sin(wp.y * 0.7 - uTime * 1.1);
-      float r2 = sin((wp.x + wp.y) * 0.45 + uTime * 0.8);
-      float ripple = r1 * 0.6 + r2 * 0.4;
-      diffuseColor.rgb *= 0.9 + ripple * 0.12;
-      float glint = smoothstep(0.88, 1.0, sin(wp.x * 2.3 + uTime * 2.1) * sin(wp.y * 1.9 - uTime * 1.7));
-      diffuseColor.rgb += glint * 0.55;
-      float shore = smoothstep(4.0, 0.0, abs(abs(vWaterW.x) - 14.3));
-      float foam = shore * (0.55 + 0.45 * sin(wp.y * 0.8 + uTime * 2.4));
-      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), clamp(foam, 0.0, 0.85));
+      // metres out from the waterline (negative: up the beach)
+      float s = mix(abs(vWaterW.x) - 14.0, 60.0, uOpen);
+      float deep = smoothstep(0.0, 34.0, s);
+      vec3 base = diffuseColor.rgb;
+      vec3 shallowC = mix(base, vec3(0.62, 1.0, 0.9), 0.22) * 1.06;
+      vec3 deepC = base * vec3(0.3, 0.55, 0.72);
+      diffuseColor.rgb = mix(shallowC, deepC, deep);
+      // dancing caustics over the sandy bed
+      vec2 cq = wp * 0.9;
+      float ca = sin(cq.x * 1.7 + sin(cq.y * 1.3 + uTime * 1.1) * 1.6) * sin(cq.y * 1.9 + sin(cq.x * 1.1 - uTime * 1.2) * 1.6);
+      diffuseColor.rgb += pow(abs(ca), 6.0) * 0.32 * (1.0 - smoothstep(0.0, 9.0, s)) * (1.0 - uOpen);
+    `,
+    fragmentLight: /* glsl */ `
+      {
+        float s = mix(abs(vWaterW.x) - 14.0, 60.0, uOpen);
+        vec2 wp = vWaterW.xz;
+        vec3 N = waveN(wp, vec2(0.0, -0.15), mix(0.55, 1.0, smoothstep(0.0, 6.0, s)));
+        float fres;
+        outgoingLight = waterSurface(outgoingLight, N, fres);
+        // the swash: the waterline creeps up the beach and slips back, unevenly along the shore
+        float nz = wNoise(vec2(wp.y * 0.12, 3.7)) * 2.0;
+        float surge = 0.5 + 0.5 * sin(uTime * 0.85 + wp.y * 0.045 + nz);
+        float edge = -2.2 + surge * 1.8;
+        float froth = wNoise(wp * 2.6 + vec2(0.0, uTime * 0.4)) * 0.55 + wNoise(wp * 6.0 - uTime * 0.3) * 0.45;
+        float lip = smoothstep(edge - 0.05, edge + 0.08, s) * (1.0 - smoothstep(edge + 0.25, edge + 0.9 + froth * 0.9, s));
+        // a breaker rolling in from the deep, fading as it comes
+        float ph = fract(uTime * 0.11 + wNoise(vec2(wp.y * 0.03, 1.3)) * 0.35);
+        float lineAt = mix(11.0, edge + 0.6, ph);
+        float breaker = (1.0 - smoothstep(0.0, 0.55 + froth * 0.6, abs(s - lineAt))) * sin(ph * 3.14159) * step(froth, 0.78);
+        float foam = clamp(lip * (0.55 + froth * 0.7) + breaker * 0.75, 0.0, 1.0) * (1.0 - uOpen);
+        outgoingLight = mix(outgoingLight, vec3(1.0) * (0.55 + 0.45 * max(uSunCol.r, 0.4)), foam * 0.9);
+        // up the beach: no water, only a darker band of wet sand that dries as the swash retreats
+        float wet = (1.0 - smoothstep(edge - 2.4, edge, s)) * step(s, edge) * (1.0 - uOpen);
+        float inWater = step(edge, s);
+        float alpha = mix(0.0, 0.72 + 0.26 * smoothstep(0.0, 5.0, s), inWater);
+        alpha = max(alpha, foam);
+        alpha = mix(alpha, 0.22, wet * (1.0 - inWater));
+        outgoingLight = mix(outgoingLight, vec3(0.0), wet * (1.0 - inWater));
+        diffuseColor.a = clamp(alpha, 0.0, 1.0);
+      }
     `,
   });
+}
+
+/**
+ * Rivers cutting the trail: deep water racing sideways, foam streaked along the current and
+ * white water churning against both banks (`half` = half the river's length along the run).
+ * Opaque, since the channel sits below the ground. Same wave field as the lakes.
+ */
+const streamCache = new Map();
+export function streamMaterial(color, half = 1.6) {
+  const key = `${color}|${half}`;
+  if (streamCache.has(key)) return streamCache.get(key);
+  const m = new THREE.MeshLambertMaterial({ color });
+  const out = bend(m, {
+    key: 'stream',
+    uniforms: { ...waterLight, uHalf: { value: half } },
+    vertexHead: 'varying vec3 vWaterW;\nvarying vec3 vStreamL;\n',
+    vertexBegin: 'vWaterW = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvStreamL = position;',
+    fragmentHead: 'uniform float uHalf;\nvarying vec3 vStreamL;\n' + WATER_HEAD,
+    fragmentLight: /* glsl */ `
+      {
+        vec2 wp = vWaterW.xz;
+        vec3 N = waveN(wp * 1.4, vec2(-2.2, 0.0), 0.8);
+        float fres;
+        vec3 lit = max(outgoingLight, diffuseColor.rgb * 0.5) * 1.15; // stays readable at dusk, like the trail
+        outgoingLight = mix(lit, waterSurface(lit, N, fres), 0.35);
+        // streaks of foam carried by the current, white water against both banks
+        float streak = wNoise(vec2(wp.x * 0.7 + uTime * 2.6, wp.y * 3.2));
+        float edge = abs(vStreamL.y);
+        float bank = smoothstep(uHalf - 0.9, uHalf - 0.05, edge);
+        float foam = clamp(smoothstep(0.8, 0.95, streak) * 0.55 + bank * (0.35 + 0.65 * streak), 0.0, 1.0);
+        // deeper (darker) mid-stream, so it reads as a river you can't wade
+        outgoingLight *= mix(0.72, 1.0, bank);
+        outgoingLight = mix(outgoingLight, vec3(0.95) * (0.6 + 0.4 * max(uSunCol.r, 0.4)), foam * 0.85);
+      }
+    `,
+  });
+  streamCache.set(key, out);
+  return out;
 }
 
 const matCache = new Map();
@@ -434,12 +555,17 @@ export function bakeRigid(root, deep = false) {
       const geos = list.map((m) => {
         m.updateMatrix();
         const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone();
+        // geometry that brings its own shading (leaf clumps) keeps it, tinted by the material
+        const shade = vc && g.attributes.color ? g.attributes.color : null;
         for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && !(keepUv && k === 'uv')) g.deleteAttribute(k);
         if (vc) {
           const { r, g: gg, b } = m.material.color;
           const n = g.attributes.position.count;
           const col = new Float32Array(n * 3);
-          for (let i = 0; i < n; i++) col.set([r, gg, b], i * 3);
+          for (let i = 0; i < n; i++) {
+            const k = shade ? shade.getX(i) : 1;
+            col.set([r * k, gg * k, b * k], i * 3);
+          }
           g.setAttribute('color', new THREE.BufferAttribute(col, 3));
         }
         g.applyMatrix4(m.matrix);

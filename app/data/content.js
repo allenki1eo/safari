@@ -167,6 +167,8 @@ export const HUNT_WORDS = [
 ];
 /** Seeds paid per letter of a finished word, plus a shield charm. */
 export const HUNT_PER_LETTER = 150;
+/** After a word is spelled the hunt rests this long before the next word's letters appear. */
+export const HUNT_COOLDOWN = 10 * 60 * 1000;
 
 /**
  * Trail powerups: glowing gems that turn up in the prize-box slots (and now and then inside a

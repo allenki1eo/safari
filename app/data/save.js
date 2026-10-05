@@ -75,14 +75,36 @@ export function persist() {
 }
 
 /* ---------------------------------------------------------------- missions */
+/**
+ * Every mission pays seeds of its own, collected on the results screen after the run that
+ * finished it. A mission that's proving too hard can be skipped for a fee: it then counts
+ * towards the set (and the multiplier) but pays nothing.
+ */
+export const missionReward = (level) => 100 + 50 * Math.min(level, 20);
+export const skipCost = (m) => Math.round((m.reward * 1.5) / 50) * 50;
+/** Seeds paid on top when all three missions of a set are done. */
+export const setBonus = (level) => 250 * (level + 1);
+
 function buildMission(def, level) {
   const tier = Math.min(def.n.length - 1, Math.floor(level / 2));
   const n = def.n[tier];
-  return { id: def.id, stat: def.stat, n, text: def.text.replace('{n}', n.toLocaleString()), done: false };
+  return {
+    id: def.id, stat: def.stat, n, text: def.text.replace('{n}', n.toLocaleString()),
+    reward: missionReward(level), best: 0, done: false, claimed: false, skipped: false,
+  };
 }
 
 export function ensureMissions() {
-  if (save.missions && save.missions.length === 3) return save.missions;
+  if (save.missions && save.missions.length === 3) {
+    // missions saved before rewards existed: price them now (finished ones can be collected)
+    for (const m of save.missions) {
+      m.reward ??= missionReward(save.missionLevel);
+      m.best ??= m.done ? m.n : 0;
+      m.claimed ??= false;
+      m.skipped ??= false;
+    }
+    return save.missions;
+  }
   const pool = [...MISSION_POOL].sort(() => Math.random() - 0.5).slice(0, 3);
   save.missions = pool.map((d) => buildMission(d, save.missionLevel));
   persist();
@@ -93,7 +115,9 @@ export function ensureMissions() {
 export function checkMissions(stats) {
   const fresh = [];
   for (const m of ensureMissions()) {
-    if (!m.done && (stats[m.stat] ?? 0) >= m.n) {
+    if (m.done) continue;
+    m.best = Math.max(m.best, Math.min(m.n, stats[m.stat] ?? 0));
+    if ((stats[m.stat] ?? 0) >= m.n) {
       m.done = true;
       fresh.push(m);
     }
@@ -102,16 +126,44 @@ export function checkMissions(stats) {
   return fresh;
 }
 
-/** If all three missions are complete, level up and roll a new set. */
-export function claimMissionSet() {
-  const ms = ensureMissions();
-  if (!ms.every((m) => m.done)) return false;
-  save.missionLevel = Math.min(29, save.missionLevel + 1);
-  save.missions = null;
-  save.seeds += 250 * save.missionLevel;
-  ensureMissions();
+/** Missions done but not yet paid out. */
+export const uncollected = () => ensureMissions().filter((m) => m.done && !m.claimed);
+
+/** Pays out a finished mission. Returns the seeds paid (0 if there was nothing to collect). */
+export function collectMission(id) {
+  const m = ensureMissions().find((x) => x.id === id);
+  if (!m || !m.done || m.claimed) return 0;
+  m.claimed = true;
+  save.seeds += m.reward;
+  persist();
+  return m.reward;
+}
+
+/** Buys a skip on an unfinished mission. Returns false if it can't be skipped or afforded. */
+export function skipMission(id) {
+  const m = ensureMissions().find((x) => x.id === id);
+  if (!m || m.done) return false;
+  const cost = skipCost(m);
+  if (save.seeds < cost) return false;
+  save.seeds -= cost;
+  Object.assign(m, { done: true, claimed: true, skipped: true, best: m.n });
   persist();
   return true;
+}
+
+/** True when the set's bonus is waiting: all three missions done and paid out. */
+export const missionSetReady = () => ensureMissions().every((m) => m.done && m.claimed);
+
+/** If all three missions are done and collected, level up and roll a new set. */
+export function claimMissionSet() {
+  if (!missionSetReady()) return false;
+  const bonus = setBonus(save.missionLevel);
+  save.missionLevel = Math.min(29, save.missionLevel + 1);
+  save.missions = null;
+  save.seeds += bonus;
+  ensureMissions();
+  persist();
+  return bonus;
 }
 
 export const multiplier = () => 1 + save.missionLevel;
