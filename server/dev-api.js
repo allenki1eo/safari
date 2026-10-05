@@ -1,9 +1,22 @@
 import { handleScoreRequest } from './leaderboard.js';
+import { readFileSync } from 'node:fs';
 import { handleChallengeRequest } from './challenges.js';
+import { cleanCode, handleTransferRequest, manifestFor } from './transfers.js';
 
-const ROUTES = { '/api/scores': handleScoreRequest, '/api/challenges': handleChallengeRequest };
+/** Dev twin of api/transfer.js: GET ?manifest=CODE serves the manifest with the code in it. */
+function transferRoute(method, body, query) {
+  if (method === 'GET') {
+    const code = cleanCode(query?.manifest);
+    if (!code) return { status: 400, body: { error: 'Code is not valid.' } };
+    const base = JSON.parse(readFileSync(new URL('../static/manifest.webmanifest', import.meta.url), 'utf8'));
+    return { status: 200, body: manifestFor(code, base) };
+  }
+  return handleTransferRequest(method, body);
+}
+
+const ROUTES = { '/api/scores': handleScoreRequest, '/api/challenges': handleChallengeRequest, '/api/transfer': transferRoute };
 // a challenge carries its shadow-runner recording, so it may be bigger than a score
-const LIMITS = { '/api/scores': 4096, '/api/challenges': 65536 };
+const LIMITS = { '/api/scores': 4096, '/api/challenges': 65536, '/api/transfer': 40960 };
 
 function send(res, status, body) {
   res.statusCode = status;

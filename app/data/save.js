@@ -74,6 +74,37 @@ export function persist() {
   }
 }
 
+/* ---------------------------------------------------------- moving progress */
+// settings that belong to this device rather than to the player
+const DEVICE_ONLY = ['quality', 'iosNudge', 'restoreAsked', 'restoredCode'];
+
+/** The player's progress, ready to carry to another browser. */
+export function exportSave() {
+  const out = JSON.parse(JSON.stringify(save));
+  for (const k of DEVICE_ONLY) delete out[k];
+  return out;
+}
+
+/** True when this browser has progress of its own worth keeping. */
+export const hasProgress = () => (save.runs ?? 0) > 0 || (save.seeds ?? 0) > 0 || !!save.name;
+
+/**
+ * Replaces this browser's progress with `data` (from exportSave elsewhere). Device settings
+ * stay; unknown or broken values fall back to defaults. The caller reloads afterwards.
+ */
+export function importSave(data, extra = {}) {
+  if (data == null || typeof data !== 'object' || Array.isArray(data)) return false;
+  const keep = Object.fromEntries(DEVICE_ONLY.filter((k) => k in save).map((k) => [k, save[k]]));
+  const incoming = { ...data };
+  for (const k of DEVICE_ONLY) delete incoming[k];
+  const merged = { ...defaults(), ...incoming, ...keep, ...extra };
+  if (typeof merged.seeds !== 'number' || !Number.isFinite(merged.seeds) || merged.seeds < 0) merged.seeds = 0;
+  for (const k of Object.keys(save)) delete save[k];
+  Object.assign(save, merged);
+  persist();
+  return true;
+}
+
 /* ---------------------------------------------------------------- missions */
 /**
  * Every mission pays seeds of its own, collected on the results screen after the run that
