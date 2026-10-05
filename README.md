@@ -52,7 +52,8 @@ After Bwindi the run loops into a *legend lap*. Regions you reach unlock on the 
 
 - **A story told across eleven regions.** Each one has its own narrator, and the sun moves with you: morning on the Serengeti, sunset on Kilimanjaro, dusk in Ruaha, night on the Rufiji, a bright day on the Zanzibar coast.
 - **English and Kiswahili.** The game picks Kiswahili on phones set to it and can be switched in Settings. Menus, the story, every region's narrator, missions, word-hunt facts and powerups are translated (`app/i18n.js`; a test checks nothing new ships without its Kiswahili).
-- **Missions** in sets of three that raise a permanent score multiplier.
+- **Missions** in sets of three. Each one pays seeds, collected on the results screen with a coin shower; a mission you're stuck on can be skipped for a fee (it counts towards the set but pays nothing). Settle all three for the set bonus and a permanent +1 score multiplier.
+- **Living water.** Lakes, rivers and the Zanzibar sea run from clear, caustic-lit shallows to deep water, reflect the sky and the sun (or moon), and lap up the beach with foam and wet sand. River crossings on the trail race sideways between muddy banks and reeds.
 - **Six unlockable runners** (Zuri, Juma, Neema, Baraka, Amani, Kito) and ally upgrades.
 - **Daily rewards** with a 7-day streak.
 - **Challenge sharing**: the game renders a score card image and a link (`/?c=<score>&n=<name>`) that greets your friend with *"Allen challenges you to beat 12,000!"*

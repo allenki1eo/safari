@@ -1,6 +1,9 @@
 import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO, OUTFITS, outfitId, HUNT_WORDS, BOOSTS } from '../data/content.js';
 import { REGIONS, COUNTRIES } from '../data/regions.js';
-import { save, persist, ensureMissions, checkMissions, claimMissionSet, multiplier, claimDaily } from '../data/save.js';
+import {
+  save, persist, ensureMissions, checkMissions, claimMissionSet, multiplier, claimDaily,
+  collectMission, skipMission, skipCost, setBonus, missionSetReady, uncollected,
+} from '../data/save.js';
 import { audio } from '../game/audio.js';
 import { challengeUrl, makeCard, shareText, whatsAppHref } from './share.js';
 import { fetchBoard, leaveDecision, postScore, renderRows, runnerName, scoreSavePlan } from './leaderboard.js';
@@ -144,7 +147,7 @@ export class UI {
     this.removeHud();
     this.game.toMenu('menu');
     const missions = ensureMissions();
-    const missionsReady = missions.every((m) => m.done);
+    const missionsReady = missions.some((m) => m.done && !m.claimed) || missionSetReady();
     const start = REGIONS[Math.min(save.startRegion ?? 0, save.regionMax ?? 0)];
     const canAfford = RUNNERS.some((r) => !save.owned.includes(r.id) && r.cost <= save.seeds) || ALLY_IDS.some((id) => (save.upgrades[id] ?? 0) < 5 && UPGRADE_COSTS[save.upgrades[id] ?? 0] <= save.seeds);
     const el = $(`
@@ -420,7 +423,7 @@ export class UI {
     }
     // missions — checked a few times per second
     if ((this.missionTick += 1) % 20 === 0) {
-      for (const done of checkMissions(g.stats)) this.toast('🎯', `<b>${t('Mission complete!')}</b><br>${esc(missionText(done))}`);
+      for (const done of checkMissions(g.stats)) this.toast('🎯', `<b>${t('Mission complete!')}</b><br>${esc(missionText(done))}<br><span class="toast-reward">+${fmt(done.reward)} <span class="seed"></span> ${t('to collect at the finish')}</span>`);
     }
   }
 
@@ -706,7 +709,6 @@ export class UI {
     const ri = Math.max(0, run.chapter);
     const reg = REGIONS[ri];
     const next = REGIONS[ri + 1];
-    const ms = ensureMissions();
     const beatChallenge = this.challenge && run.score > this.challenge.score;
     const el = $(`
       <div class="screen over scrim-full">
@@ -727,9 +729,7 @@ export class UI {
             <div class="lb-slot"><p class="muted">${t('Saving your run…')}</p></div>
           </div>
           <div class="story-unlock"><span class="e">${COUNTRIES[reg.country].flag}</span><div><b>${esc(reg.name)} · ${esc(reg.title)}</b><br><span class="muted">${next ? t('Next: {place}', { place: `${COUNTRIES[next.country].flag} ${esc(next.name)}` }) : t('You crossed all three countries!')}</span></div></div>
-          <div class="mission-mini">
-            ${ms.map((m) => `<div><span class="tick ${m.done ? 'done' : ''}">${m.done ? '✓' : ''}</span>${esc(missionText(m))}</div>`).join('')}
-          </div>
+          <div class="chal-slot"></div>
           <div style="display:flex;flex-direction:column;gap:12px">
             <button class="btn big" type="button" data-act="again">${t('↻ Run again')}</button>
             <div class="row2">
@@ -754,7 +754,7 @@ export class UI {
     this.overlay(el);
     this.cardFor(run); // draw the score card now, so the share can happen inside the tap
     this.recordFinishedRun(el, run);
-    if (ms.every((m) => m.done)) setTimeout(() => this.missionSetComplete(), 900);
+    this.mountChallenges(el.querySelector('.chal-slot'));
   }
 
   shareCardHtml(run) {
@@ -1049,9 +1049,172 @@ export class UI {
   }
 
   missionSetComplete() {
-    if (!claimMissionSet()) return;
+    const bonus = claimMissionSet();
+    if (!bonus) return false;
     audio.buy();
-    this.toast('🎉', `<b>${t('Mission set complete!')}</b><br>${t('Multiplier is now ×{m} · +{s} seeds', { m: multiplier(), s: fmt(250 * save.missionLevel) })}`, 3600);
+    this.toast('🎉', `<b>${t('Mission set complete!')}</b><br>${t('Multiplier is now ×{m} · +{s} seeds', { m: multiplier(), s: fmt(bonus) })}`, 3600);
+    return true;
+  }
+
+  /* -------------------------------------------------------- challenges */
+  /**
+   * The three missions with live progress. Finished ones are collected here for their seeds
+   * (coins fly into the bank); unfinished ones can be skipped for a fee, confirmed with a
+   * second tap. Once all three are settled the set bonus raises the multiplier.
+   */
+  mountChallenges(slot, onSet) {
+    if (!slot) return;
+    const render = (fresh = false) => {
+      slot.innerHTML = this.challengesHtml(fresh);
+      // keep the sheet's own bank chip in step
+      document.querySelectorAll('.sheet-head .bank').forEach((b) => (b.textContent = fmt(save.seeds)));
+    };
+    render();
+    let confirmTimer = 0;
+    slot.addEventListener('click', async (e) => {
+      const btn = e.target.closest('button');
+      if (!btn || btn.disabled || slot.dataset.busy) return;
+      const bank = slot.querySelector('.bank');
+      if (btn.dataset.collect || btn.hasAttribute('data-collect-all')) {
+        const ids = btn.dataset.collect ? [btn.dataset.collect] : uncollected().map((m) => m.id);
+        const from = save.seeds;
+        let paid = 0;
+        for (const id of ids) paid += collectMission(id);
+        if (!paid) return render();
+        slot.dataset.busy = '1';
+        btn.disabled = true;
+        await this.flySeeds(btn, slot.querySelector('.bank-chip'), Math.min(12, 4 + ids.length * 3), from, save.seeds, bank);
+        delete slot.dataset.busy;
+        render();
+      } else if (btn.dataset.skip) {
+        if (!btn.classList.contains('confirm')) {
+          // first tap arms it, so a stray tap never spends seeds
+          slot.querySelectorAll('.chal-skip.confirm').forEach((b) => { b.classList.remove('confirm'); b.innerHTML = b.dataset.label; });
+          btn.dataset.label = btn.innerHTML;
+          btn.classList.add('confirm');
+          btn.innerHTML = `${t('Pay {n}?', { n: fmt(skipCost(ensureMissions().find((m) => m.id === btn.dataset.skip))) })} <span class="seed"></span>`;
+          clearTimeout(confirmTimer);
+          confirmTimer = setTimeout(() => { if (btn.isConnected) { btn.classList.remove('confirm'); btn.innerHTML = btn.dataset.label; } }, 3000);
+          return;
+        }
+        clearTimeout(confirmTimer);
+        const from = save.seeds;
+        if (!skipMission(btn.dataset.skip)) return render();
+        audio.buy();
+        this.countTo(bank, from, save.seeds, 500);
+        btn.closest('.chal')?.classList.add('skipping');
+        setTimeout(render, 420);
+      } else if (btn.hasAttribute('data-set-bonus')) {
+        const from = save.seeds;
+        if (!this.missionSetComplete()) return render();
+        slot.dataset.busy = '1';
+        await this.flySeeds(btn, slot.querySelector('.bank-chip'), 14, from, save.seeds, bank);
+        delete slot.dataset.busy;
+        render(true);
+        onSet?.();
+      }
+    });
+  }
+
+  challengesHtml(fresh = false) {
+    const ms = ensureMissions();
+    const waiting = uncollected();
+    const owed = waiting.reduce((n, m) => n + m.reward, 0);
+    return `
+      <div class="chal-wrap">
+        <div class="chal-head">
+          <b>${t('Challenges')}</b>
+          <span class="chal-mult">×${multiplier()}</span>
+          <span class="chip bank-chip"><span class="seed"></span><span class="bank">${fmt(save.seeds)}</span></span>
+        </div>
+        ${ms.map((m, i) => this.challengeRow(m, fresh, i)).join('')}
+        ${waiting.length > 1 ? `<button class="btn wide chal-all" data-collect-all>${t('Collect all')} · +${fmt(owed)} <span class="seed"></span></button>` : ''}
+        ${missionSetReady() ? `<button class="btn flame wide chal-set" data-set-bonus>🎉 ${t('Set bonus')} · +${fmt(setBonus(save.missionLevel))} <span class="seed"></span></button>` : ''}
+      </div>`;
+  }
+
+  challengeRow(m, fresh, i) {
+    const best = Math.min(m.n, m.best ?? 0);
+    const pct = m.done ? 100 : Math.round((100 * best) / m.n);
+    let act;
+    let meta;
+    if (m.skipped) {
+      act = `<span class="chal-tag">${t('Skipped')}</span>`;
+      meta = t('Counts towards the set');
+    } else if (m.claimed) {
+      act = `<span class="chal-tag paid">✓ +${fmt(m.reward)}</span>`;
+      meta = t('Collected');
+    } else if (m.done) {
+      act = `<button class="btn small chal-collect" type="button" data-collect="${m.id}">${t('Collect')} +${fmt(m.reward)} <span class="seed"></span></button>`;
+      meta = `<b>${t('Done!')}</b>`;
+    } else {
+      const cost = skipCost(m);
+      act = `<button class="btn small ghost chal-skip" type="button" data-skip="${m.id}" ${save.seeds < cost ? 'disabled' : ''}>${t('Skip')} · ${fmt(cost)} <span class="seed"></span></button>`;
+      meta = `<span><b>${fmt(best)}</b> / ${fmt(m.n)}</span><span class="pays"><b>+${fmt(m.reward)}</b><span class="seed"></span></span>`;
+    }
+    const cls = m.skipped ? 'skipped' : m.claimed ? 'claimed' : m.done ? 'ready' : '';
+    return `
+      <div class="chal ${cls}" style="${fresh ? `animation:rise .45s ${i * 0.08}s ease both` : ''}">
+        <span class="chal-ico">${m.skipped ? '⏭' : m.done ? '✓' : '🎯'}</span>
+        <div class="chal-body">
+          <div class="chal-txt">${esc(missionText(m))}</div>
+          <div class="chal-bar"><i style="width:${pct}%"></i></div>
+          <div class="chal-foot"><div class="chal-meta">${meta}</div><div class="chal-act">${act}</div></div>
+        </div>
+      </div>`;
+  }
+
+  /** Counts a number up (or down) in place. */
+  countTo(el, from, to, ms = 700) {
+    if (!el) return;
+    const t0 = performance.now();
+    const step = (now) => {
+      const k = Math.min(1, (now - t0) / ms);
+      el.textContent = fmt(from + (to - from) * (1 - Math.pow(1 - k, 3)));
+      if (k < 1 && el.isConnected) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  /** Coins burst from `fromEl` and arc into `toEl`, the bank ticking up as each lands. */
+  flySeeds(fromEl, toEl, n, from, to, numEl) {
+    const a = fromEl.getBoundingClientRect();
+    const b = (toEl ?? fromEl).getBoundingClientRect();
+    const ax = a.left + a.width / 2;
+    const ay = a.top + a.height / 2;
+    const bx = b.left + 18;
+    const by = b.top + b.height / 2;
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || !toEl) {
+      this.countTo(numEl, from, to, 400);
+      audio.coin(3);
+      return new Promise((r) => setTimeout(r, 400));
+    }
+    const jobs = [];
+    for (let i = 0; i < n; i++) {
+      const c = document.createElement('span');
+      c.className = 'seed fly-seed';
+      document.body.appendChild(c);
+      const sx = (Math.random() - 0.5) * 90;
+      const sy = -30 - Math.random() * 60;
+      const anim = c.animate(
+        [
+          { transform: `translate(${ax}px, ${ay}px) scale(0.4)`, opacity: 0 },
+          { transform: `translate(${ax + sx}px, ${ay + sy}px) scale(1.15)`, opacity: 1, offset: 0.35 },
+          { transform: `translate(${bx}px, ${by}px) scale(0.7)`, opacity: 1 },
+        ],
+        { duration: 720 + i * 18, delay: i * 55, easing: 'cubic-bezier(.45,0,.3,1)', fill: 'forwards' },
+      );
+      jobs.push(anim.finished.then(() => {
+        c.remove();
+        audio.coin(i);
+        if (numEl) numEl.textContent = fmt(from + ((to - from) * (i + 1)) / n);
+        toEl.classList.remove('bump');
+        void toEl.offsetWidth;
+        toEl.classList.add('bump');
+      }));
+    }
+    return Promise.all(jobs).then(() => numEl && (numEl.textContent = fmt(to)));
   }
 
   /* ------------------------------------------------------------ sheets */
@@ -1129,19 +1292,15 @@ export class UI {
   }
 
   missions() {
-    const ms = ensureMissions();
-    const ready = ms.every((m) => m.done);
     const el = this.sheet(t('Missions'), `
       <div class="panel mult-hero">
         <div class="x">×${multiplier()}</div>
-        <div><b style="font-size:18px">${t('Score multiplier')}</b><div class="muted" style="font-size:14px">${t('Complete all three missions to raise it by one and earn bonus seeds.')}</div></div>
+        <div><b style="font-size:18px">${t('Score multiplier')}</b><div class="muted" style="font-size:14px">${t('Each mission pays seeds. Settle all three — finish them or skip them — to raise your multiplier and win the set bonus.')}</div></div>
       </div>
-      ${ms.map((m, i) => `<div class="panel mission ${m.done ? 'done' : ''}" style="animation:rise .4s ${i * 0.06}s ease both"><span class="tick ${m.done ? 'done' : ''}">${m.done ? '✓' : '🎯'}</span><div class="txt">${esc(missionText(m))}</div></div>`).join('')}
-      ${ready ? `<button class="btn big" data-act="claim" data-click>${t('🎉 Claim reward')}</button>` : ''}
+      <div class="panel chal-panel"><div class="chal-slot"></div></div>
     `);
-    el.querySelector('[data-act=claim]')?.addEventListener('click', () => {
-      this.missionSetComplete();
-      this.missions();
+    this.mountChallenges(el.querySelector('.chal-slot'), () => {
+      el.querySelector('.mult-hero .x').textContent = `×${multiplier()}`;
     });
   }
 

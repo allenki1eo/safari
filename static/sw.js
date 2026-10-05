@@ -1,6 +1,6 @@
 // Kimbia service worker — network-first pages, cache-first hashed assets.
 // Replaces the previous "safari-v1" worker and clears its cache on activate.
-const CACHE = 'kimbia-v6';
+const CACHE = 'kimbia-v7';
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(['/'])).then(() => self.skipWaiting()));

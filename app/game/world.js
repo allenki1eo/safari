@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { bend, mat, G, mesh, bakeRigid, finishProp, pathTexture, grassTexture, waterMaterial, SWAY_EXT, GROUND_LIGHT, setBlobStrength } from './materials.js';
+import { bend, mat, G, mesh, bakeRigid, finishProp, pathTexture, grassTexture, waterMaterial, waterLight, SWAY_EXT, GROUND_LIGHT, setBlobStrength } from './materials.js';
 import {
   Animals, makeAcacia, makeBaobab, makeKopje, makeTermiteMound, makeGrass, makeBush, makeKilimanjaro,
 } from './models.js';
@@ -328,7 +328,7 @@ export class World {
     this.scene.add(this.forest);
 
     // horizon ocean for the coast
-    this.oceanMat = new THREE.MeshLambertMaterial({ color: 0x3fc1c9, fog: false, emissive: 0x0a3a40 });
+    this.oceanMat = waterMaterial(0x3fc1c9, { open: true });
     this.ocean = new THREE.Mesh(new THREE.CircleGeometry(700, 32, Math.PI * 0.5, Math.PI), this.oceanMat);
     this.ocean.rotation.x = -Math.PI / 2;
     this.ocean.position.y = -8;
@@ -357,11 +357,9 @@ export class World {
     const trailGeo = new THREE.PlaneGeometry(LANE_W * 3 + 0.9, SEG_LEN, 1, 12);
     trailGeo.rotateX(-Math.PI / 2);
     pathTexture().repeat.set(1, SEG_LEN / (LANE_W * 3 + 0.9));
-    const waterGeo = new THREE.PlaneGeometry(110, SEG_LEN, 4, 12);
+    // reaches a few metres up the beach so the swash and the wet sand can show
+    const waterGeo = new THREE.PlaneGeometry(116, SEG_LEN, 4, 12);
     waterGeo.rotateX(-Math.PI / 2);
-    const foamGeo = new THREE.PlaneGeometry(1.2, SEG_LEN, 1, 12);
-    foamGeo.rotateX(-Math.PI / 2);
-    const foamMat = bend(new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75 }));
 
     const shade = (v) => mat(new THREE.Color(v, v, v).getHex());
     this.segments = [];
@@ -400,13 +398,11 @@ export class World {
 
       const waterMat = waterMaterial(0x3fc1c9);
       const water = new THREE.Mesh(waterGeo, waterMat);
-      water.position.y = 0.46;
+      water.position.y = 0.44; // just over the gentle swell of the lake bed (±0.4)
+      water.renderOrder = 1;
       g.add(water);
-      const foam = new THREE.Mesh(foamGeo, foamMat);
-      foam.position.y = 0.48;
-      g.add(foam);
 
-      g.userData = { wz: 0, grassMat, pathMat, trailMat, waterMat, water, foam, region: -1 };
+      g.userData = { wz: 0, grassMat, pathMat, trailMat, waterMat, water, region: -1 };
       this.segments.push(g);
       this.scene.add(g);
     }
@@ -422,12 +418,10 @@ export class World {
     const rb = REGIONS[m.b].ground;
     const wr = m.t < 0.5 ? ra : rb;
     const hasWater = !!wr.water;
-    u.water.visible = u.foam.visible = hasWater;
+    u.water.visible = hasWater;
     if (hasWater) {
       u.waterMat.color.set(wr.water);
-      const side = wr.waterSide ?? -1;
-      u.water.position.x = side * (14 + 55);
-      u.foam.position.x = side * 14.3;
+      u.water.position.x = (wr.waterSide ?? -1) * (14 - 4.5 + 58);
     }
   }
 
@@ -685,6 +679,10 @@ export class World {
     this.cloudMat.color.copy(P.cloud);
     this.cloudMat.emissive.copy(P.cloud).multiplyScalar(0.35);
     this.oceanMat.color.set(rb.ocean && m.t > 0.5 ? rb.ground.water : ra.ground.water ?? '#3fc1c9').lerp(P.fog, 0.25);
+    // what the water reflects: the sky near the horizon, and the sun (fading at night)
+    waterLight.uSkyCol.value.copy(P.hor).lerp(P.top, 0.6);
+    waterLight.uSunDir.value.copy(sd);
+    waterLight.uSunCol.value.copy(P.sun).multiplyScalar(Math.min(1.2, P.sunI * 0.6));
 
     // backdrop pieces glide in and out between regions
     const k = this.snapBackdrop ? 1 : 1 - Math.exp(-1.5 * dt);

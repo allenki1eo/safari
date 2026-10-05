@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { curve, bend, bakeRigid, finishProp, time as timeU, runnerShadowTexture } from './materials.js';
+import { curve, bend, bakeRigid, finishProp, time as timeU, runnerShadowTexture, streamMaterial, mesh, mat, G } from './materials.js';
 import { Look, detectQuality } from './look.js';
 import { Animals, makeEagle, makeHornbill, makeTruck, makeRamp, makeTotem, makePrizeBox, makeLetterToken, makeBoostGem } from './models.js';
 import { makeRunner } from './people.js';
@@ -217,7 +217,7 @@ export class Game {
     this.scene.add(this.coinMesh);
     this.dummy = new THREE.Object3D();
     this.waterGeo = new THREE.BoxGeometry(LANE_W * 1.05, 0.16, KINDS.water.len);
-    this.waterMat = bend(new THREE.MeshLambertMaterial({ color: 0x2a9bb8, transparent: true, opacity: 0.9 }));
+    this.waterMat = streamMaterial(0x3d7f7a);
   }
 
   /* --------------------------------------------------------------- run */
@@ -582,6 +582,39 @@ export class Game {
   }
 
   /* --------------------------------------------------------- obstacles */
+  /**
+   * One lane's piece of a river crossing: racing water between two muddy banks, with
+   * pebbles on the lips and reeds where the river meets the bush on the outer lanes.
+   */
+  makeRiver(lane) {
+    const g = new THREE.Group();
+    const water = new THREE.Mesh(this.waterGeo, this.waterMat);
+    water.position.y = 0.06;
+    g.add(water);
+    const banks = new THREE.Group();
+    const half = KINDS.water.len / 2;
+    const w = LANE_W * 1.05;
+    for (const s of [-1, 1]) {
+      banks.add(mesh(G.box, mat(0x6b4a2e), w, 0.12, 0.7, 0, 0.04, s * (half + 0.2)));
+      banks.add(mesh(G.box, mat(0x4a3220), w, 0.1, 0.35, 0, 0.02, s * (half - 0.05)));
+      for (let i = 0; i < 3; i++) {
+        const r = rand(0.12, 0.24);
+        banks.add(mesh(G.dodec, mat(i % 2 ? 0x8a8478 : 0x6f6a60), r, r * 0.6, r, rand(-w / 2, w / 2), 0.1, s * (half + rand(0.05, 0.4))));
+      }
+    }
+    if (lane !== 1) {
+      const out = lane === 0 ? -1 : 1;
+      for (let i = 0; i < 6; i++) {
+        const h = rand(0.5, 1.0);
+        const reed = mesh(G.cone4, mat(i % 2 ? 0x6f8a3a : 0x8a9a48), 0.05, h, 0.05, out * (w / 2 - rand(0, 0.25)), h / 2, rand(-half, half));
+        reed.rotation.z = rand(-0.25, 0.25);
+        banks.add(reed);
+      }
+    }
+    g.add(finishProp(bakeRigid(banks, true)));
+    return g;
+  }
+
   addObstacle(kind, lane, wz, opts = {}) {
     const k = KINDS[kind];
     const style = regionAt(this.startJ + wz).style;
@@ -612,11 +645,7 @@ export class Game {
       case 'croc': anim = RegionAnimals.croc(); break;
       case 'gorilla': anim = RegionAnimals.gorilla(true); break;
       case 'crossing': anim = Animals.elephant(); break;
-      case 'water': {
-        m = new THREE.Mesh(this.waterGeo, this.waterMat);
-        m.position.y = 0.08;
-        break;
-      }
+      case 'water': m = this.makeRiver(lane); break;
     }
     if (anim) m = anim.root;
     else if (!k.fall && kind !== 'water') finishProp(bakeRigid(m, true));
