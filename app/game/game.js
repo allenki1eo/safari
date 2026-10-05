@@ -14,7 +14,7 @@ import { World, Particles, LANE_W } from './world.js';
 import { audio } from './audio.js';
 import { t } from '../i18n.js';
 import { makeChunk, KINDS, TRUCK_LEN, JUMP_V, GRAVITY } from './patterns.js';
-import { RUNNERS, ALLIES, ALLY_IDS, TUTORIAL, SHOUTS, outfitId, HUNT_WORDS, HUNT_PER_LETTER, BOOSTS, BOOST_IDS } from '../data/content.js';
+import { RUNNERS, ALLIES, ALLY_IDS, TUTORIAL, SHOUTS, outfitId, HUNT_WORDS, HUNT_PER_LETTER, HUNT_COOLDOWN, BOOSTS, BOOST_IDS } from '../data/content.js';
 import { REGIONS, regionIndexAt, regionAt } from '../data/regions.js';
 import { save, persist, multiplier } from '../data/save.js';
 import {
@@ -271,6 +271,7 @@ export class Game {
     this.nextLetterAt = 200 + Math.random() * 160;
     if (save.hunt?.day !== this.today) save.hunt = { day: this.today, done: 0, got: 0 };
     save.hunt.done ??= 0;
+    this.huntHidden = !this.huntReady();
     this.revives = 0;
     this.deathT = 0;
     for (const a of Object.values(this.allyModels)) a.root.visible = false;
@@ -1022,6 +1023,11 @@ export class Game {
 
   /* ------------------------------------------------------------ spawning */
   spawn() {
+    // the rest is over: the next word's letters can turn up again
+    if (this.huntHidden && this.huntReady()) {
+      this.huntHidden = false;
+      this.emit('hunt', { word: this.huntWord().word, got: save.hunt.got, delay: 0 });
+    }
     while (this.nextChunk < this.D + 170) {
       const plan = chunkPlan(this.day, this.nextChunk);
       const chunk = makeChunk({
@@ -1032,7 +1038,7 @@ export class Game {
         region: regionAt(this.startJ + plan.z),
         wantTotem: plan.z + 150 > this.nextTotemAt,
         // a slot for the next prize box, or for the next hunt letter when one is due
-        wantBox: plan.z > this.nextBoxAt || (plan.z > this.nextLetterAt && !this.letterOut && save.hunt.got < this.huntWord().word.length),
+        wantBox: plan.z > this.nextBoxAt || (plan.z > this.nextLetterAt && !this.letterOut && this.huntReady() && save.hunt.got < this.huntWord().word.length),
       });
       this.applyChunk(chunk.ops);
       this.nextChunk += chunk.len + plan.gap;
@@ -1084,7 +1090,7 @@ export class Game {
   addBox(lane, wz, y = 0) {
     // some of the open-ground slots carry the next letter of the day's word instead
     const { word } = this.huntWord();
-    if (y === 0 && wz > this.nextLetterAt && save.hunt.got < word.length && !this.letterOut) {
+    if (y === 0 && wz > this.nextLetterAt && this.huntReady() && save.hunt.got < word.length && !this.letterOut) {
       const char = word[save.hunt.got];
       const m = makeLetterToken(char);
       m.position.set(LANES[lane], 0, 0);
@@ -1209,6 +1215,11 @@ export class Game {
     this.boosts = {};
   }
 
+  /** False while the hunt rests after a finished word (its letters stop turning up). */
+  huntReady() {
+    return (save.hunt.nextAt ?? 0) <= Date.now();
+  }
+
   /** The word being hunted: today's chain, after the words already spelled. */
   huntWord() {
     return huntWord(HUNT_WORDS, save.hunt.day || this.today, save.hunt.done);
@@ -1234,15 +1245,17 @@ export class Game {
     this.stats.seeds = this.seeds;
     this.stats.words++;
     save.charms = (save.charms ?? 0) + 1;
-    // on to the next word in today's chain
+    // on to the next word in today's chain, after a rest
     save.hunt.done++;
     save.hunt.got = 0;
+    save.hunt.nextAt = Date.now() + HUNT_COOLDOWN;
+    this.huntHidden = true;
     persist();
     this.emit('seed', this.seeds);
     this.emit('shield', { on: this.shield > 0 });
     audio.powerup();
     this.emit('prize', { emoji: '🏆', title: `${word}!`, sub: t('{line} · +{n} seeds & a shield', { line, n: prize }), big: true });
-    this.emit('hunt', { word: this.huntWord().word, got: 0, delay: 3000 });
+    this.emit('hunt', { word: null, got: 0, delay: 3000 });
   }
 
   /* ------------------------------------------------------------- pickups */

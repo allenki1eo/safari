@@ -227,6 +227,7 @@ input { font: inherit; }
 @keyframes flash { from { opacity: 1; } to { opacity: 0; } }
 
 /* daily word hunt: K I M B I A along the top, lit as the letters are found */
+.hunt[hidden] { display: none; }
 .hunt { position: absolute; left: 50%; top: calc(66px + var(--safe-t)); transform: translateX(-50%); display: flex; gap: 3px; pointer-events: none; }
 .hunt i { width: 20px; height: 22px; display: grid; place-items: center; border-radius: 6px; font-style: normal; font-family: var(--display); font-size: 14px; color: rgba(255,255,255,0.45); background: rgba(40,22,8,0.35); border: 1px solid rgba(255,255,255,0.12); }
 .hunt i.on { color: #5a2d00; background: linear-gradient(180deg, #fff3b0, #ffb703); border-color: #ffe58a; box-shadow: 0 0 10px rgba(255,190,40,0.6); }

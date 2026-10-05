@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { cutGround } from './river.js';
-import { bend, mat, G, mesh, bakeRigid, finishProp, pathTexture, grassTexture, waterMaterial, waterLight, SWAY_EXT, GROUND_LIGHT, groundExt, setBlobStrength } from './materials.js';
+import { bend, mat, G, mesh, bakeRigid, finishProp, pathTexture, grassTexture, waterMaterial, waterLight, SWAY_EXT, GROUND_LIGHT, setBlobStrength } from './materials.js';
 import {
   Animals, makeAcacia, makeBaobab, makeKopje, makeTermiteMound, makeGrass, makeBush, makeKilimanjaro,
 } from './models.js';
@@ -339,8 +339,7 @@ export class World {
   /* --------------------------------------------------------------- ground */
   buildGround() {
     // brightness-only vertex colours; hue comes from each segment's region tint
-    // fine enough for knobbly, uneven ground beside the trail (flat-shaded, so every clod shows)
-    const grassGeo = new THREE.PlaneGeometry(220, SEG_LEN, 88, 16);
+    const grassGeo = new THREE.PlaneGeometry(220, SEG_LEN, 22, 12);
     grassGeo.rotateX(-Math.PI / 2);
     const gc = [];
     const p = grassGeo.attributes.position;
@@ -351,12 +350,7 @@ export class World {
       let v = 0.88 + (n * 0.5 + 0.5) * 0.2;
       if (Math.abs(x) < 6) v *= 0.92;
       gc.push(v, v, v);
-      // lumps and hollows, repeating every segment so neighbours join without a seam
-      const ax = Math.abs(x);
-      const ph = (z / SEG_LEN) * Math.PI * 2;
-      const lumps = Math.sin(x * 1.9 + Math.cos(ph * 2) * 1.3) * Math.cos(ph * 3 + x * 0.7) * 0.6 + Math.sin(x * 4.3 + ph * 5) * 0.4;
-      const shoulder = THREE.MathUtils.smoothstep(ax, 5.6, 8.5) * (ax > 14 ? 0.25 : 1);
-      p.setY(i, (ax > 14 ? Math.sin(x * 0.2) * 0.4 : 0) + lumps * 0.17 * shoulder);
+      p.setY(i, Math.abs(x) > 14 ? Math.sin(x * 0.2) * 0.4 : 0);
     }
     grassGeo.setAttribute('color', new THREE.Float32BufferAttribute(gc, 3));
     grassGeo.computeVertexNormals();
@@ -372,13 +366,13 @@ export class World {
     this.segments = [];
     for (let i = 0; i < SEG_COUNT; i++) {
       const g = new THREE.Group();
-      const grassMat = cutGround(bend(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, map: grassTexture() }), groundExt('grass')));
+      const grassMat = cutGround(bend(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, map: grassTexture() }), { key: 'grass', ...GROUND_LIGHT }));
       const grass = new THREE.Mesh(grassGeo, grassMat);
       grass.userData.keep = true;
       grass.receiveShadow = true;
       g.add(grass);
       // the trail surface itself: a textured strip with worn lanes, tyre tracks and footprints
-      const trailMat = cutGround(bend(new THREE.MeshLambertMaterial({ map: pathTexture() }), groundExt('trail')));
+      const trailMat = cutGround(bend(new THREE.MeshLambertMaterial({ map: pathTexture() }), { key: 'trail', ...GROUND_LIGHT }));
       const trail = new THREE.Mesh(trailGeo, trailMat);
       trail.position.y = 0.035;
       trail.receiveShadow = true;
@@ -396,7 +390,7 @@ export class World {
         path.add(mesh(G.dodec, shade(0.7), rand(0.1, 0.22), rand(0.08, 0.15), rand(0.1, 0.2), s * rand(4.1, 5.2), 0.06, rand(-SEG_LEN / 2, SEG_LEN / 2)));
       }
       bakeRigid(path, true);
-      const pathMat = cutGround(bend(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), groundExt('path')));
+      const pathMat = cutGround(bend(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), { key: 'path', ...GROUND_LIGHT }));
       path.children.forEach((c) => {
         c.material = pathMat;
         c.receiveShadow = true;

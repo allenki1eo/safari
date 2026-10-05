@@ -68,65 +68,6 @@ export const GROUND_LIGHT = {
   uniforms: { uGroundLift: groundLiftUniform },
 };
 
-/**
- * Rough ground: the trail and the grass get grit, clods and pebbles from layered noise in world
- * space, with a hint of relief lit from the sun, so the land reads as dry, uneven earth rather
- * than a smooth sheet. Used together with GROUND_LIGHT through `groundExt`.
- */
-const GROUND_ROUGH = {
-  vertexHead: 'varying vec3 vGroundW;\n',
-  vertexBegin: 'vGroundW = (modelMatrix * vec4(transformed, 1.0)).xyz;',
-  fragmentHead: /* glsl */ `
-    varying vec3 vGroundW;
-    uniform vec3 uSunDirG;
-    float gRough = 1.0;
-    float gHash(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 15731.7); }
-    float gNoise(vec2 p) {
-      vec2 i = floor(p), f = fract(p);
-      f = f * f * (3.0 - 2.0 * f);
-      return mix(mix(gHash(i), gHash(i + vec2(1, 0)), f.x), mix(gHash(i + vec2(0, 1)), gHash(i + vec2(1, 1)), f.x), f.y);
-    }
-  `,
-  // worked out before lighting, applied after it (the sunlit ground is bright enough that
-  // tone mapping would flatten it otherwise)
-  fragmentColor: /* glsl */ `
-    {
-      vec2 gp = vGroundW.xz;
-      float n1 = gNoise(gp * 0.55);
-      float n2 = gNoise(gp * 2.3 + 7.1);
-      float n3 = gNoise(gp * 7.9 - 3.3);
-      float grit = n1 * 0.45 + n2 * 0.35 + n3 * 0.2;
-      gRough = 0.72 + grit * 0.5;
-      // clods catching the sun on one side and shadowed on the other
-      float e = 0.18;
-      vec2 d = vec2(gNoise(gp * 2.3 + 7.1 + vec2(e, 0.0)) - n2, gNoise(gp * 2.3 + 7.1 + vec2(0.0, e)) - n2) / e;
-      gRough *= 1.0 + clamp(dot(d, normalize(uSunDirG.xz + 1e-4)) * 0.1, -0.2, 0.2);
-      // pebbles and grit: sparse light and dark specks
-      vec2 cell = floor(gp * 5.0);
-      float sp = gHash(cell);
-      vec2 inCell = fract(gp * 5.0) - 0.5;
-      float pr = 0.05 + 0.16 * gHash(cell + 1.7); // pebbles of every size
-      vec2 po = (vec2(gHash(cell + 3.1), gHash(cell + 7.7)) - 0.5) * 0.6;
-      float dot1 = 1.0 - smoothstep(pr * 0.55, pr, length((inCell + po) * vec2(1.0, 0.75 + 0.5 * gHash(cell + 9.2))));
-      gRough *= 1.0 - dot1 * step(0.91, sp) * (0.25 + 0.25 * gHash(cell + 5.5));
-      gRough *= 1.0 + dot1 * step(sp, 0.05) * 0.22;
-    }
-  `,
-};
-
-/** The full ground recipe (rough + lit) for one surface, keyed so each compiles once. */
-export function groundExt(key) {
-  return {
-    key,
-    vertexHead: GROUND_ROUGH.vertexHead,
-    vertexBegin: GROUND_ROUGH.vertexBegin,
-    fragmentHead: GROUND_LIGHT.fragmentHead + GROUND_ROUGH.fragmentHead,
-    fragmentColor: GROUND_ROUGH.fragmentColor,
-    fragmentLight: `${GROUND_LIGHT.fragmentLight}\noutgoingLight *= gRough;`,
-    uniforms: { ...GROUND_LIGHT.uniforms, uSunDirG: waterLight.uSunDir },
-  };
-}
-
 /* ---- wind: plants carry a per-vertex sway weight (0 at the roots, 1 at the tips) ---- */
 const SWAY = {
   key: 'sway',

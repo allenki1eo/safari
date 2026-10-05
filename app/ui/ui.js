@@ -357,7 +357,8 @@ export class UI {
     this.last = {};
     this.overlay(el);
     const today = save.hunt?.day === darDay();
-    this.paintHunt(huntWord(HUNT_WORDS, darDay(), today ? save.hunt.done ?? 0 : 0).word, today ? save.hunt.got : 0);
+    const resting = today && (save.hunt.nextAt ?? 0) > Date.now();
+    this.paintHunt(resting ? null : huntWord(HUNT_WORDS, darDay(), today ? save.hunt.done ?? 0 : 0).word, today ? save.hunt.got : 0);
   }
 
   removeHud() {
@@ -535,6 +536,8 @@ export class UI {
   paintHunt(word, got, fresh = false) {
     const row = this.hud?.querySelector('.hunt');
     if (!row) return;
+    row.hidden = !word; // no word while the hunt rests after one is spelled
+    if (!word) return;
     if (row.dataset.word !== word) {
       row.dataset.word = word;
       row.innerHTML = [...word].map((c) => `<i>${c}</i>`).join('');
