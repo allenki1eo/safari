@@ -65,7 +65,7 @@ After Bwindi the run loops into a *legend lap*. Regions you reach unlock on the 
 - **Powerups** in glowing gems on the trail (and sometimes in a Zawadi box): 🌟 Dhahabu golden seeds worth 3, ⚡ Pointi ×2 double points, 🐢 Pole Pole slows the chase, and 🌪️ Kimbunga, a whirlwind that sweeps the next stretch clear. The first time you find each one, a narrator explains it, and timed ones show a labelled chip.
 - **Score cards**: the WhatsApp button shares an image of your run with the challenge link (the phone's share sheet where it can share files; a WhatsApp text link elsewhere).
 - **Seed combos, slow-motion close calls**, and music that builds as you speed up.
-- **Installable PWA** that works offline. An Install button on the title screen (and in Settings) uses the browser's own prompt where there is one, and shows step-by-step help on iPhone and in in-app browsers like WhatsApp (`app/ui/install.js`). The score API is network-only; the rest of the game still plays offline.
+- **Installable PWA** that works offline. An Install button on the title screen (and in Settings) uses the browser's own prompt where there is one, and on iPhone and iPad (where Apple allows no install prompt) it detects the browser and walks the player through its own Share → Add to Home Screen, with an arrow at the Share button: Safari (Share at the bottom, top right on iPad), Safari 26 (behind •••), Chrome/Edge/Firefox on iOS 16.4+ (Share in the address bar), or, from older iOS browsers and in-app browsers like WhatsApp and Instagram, a copy-link to open it in Safari. Returning iPhone players get a one-time nudge (`app/ui/install.js`). The score API is network-only; the rest of the game still plays offline.
 
 ## Tech
 

@@ -594,3 +594,35 @@ input { font: inherit; }
 .bet-result.won { background: linear-gradient(90deg, rgba(127, 174, 58, 0.9), rgba(60, 199, 181, 0.75)); color: #fff; }
 .bet-result.lost { background: rgba(255, 244, 222, 0.08); border: 1px solid var(--line); }
 .bet-result.pending { font-size: 15px; font-weight: 800; background: rgba(255, 244, 222, 0.06); }
+
+/* ------------------------------------------------- installing on iPhone/iPad */
+.device-chip { display: inline-block; margin: 2px 0 2px; padding: 3px 10px; border-radius: 99px; font-size: 12px; font-weight: 900; letter-spacing: 0.3px; color: var(--sun-2); background: rgba(255, 201, 64, 0.14); border: 1px solid rgba(255, 201, 64, 0.35); }
+.install-steps .key { color: #4aa3ff; background: #fff; box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25); }
+.ios-row { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px 2px 3px; border-radius: 8px; background: rgba(255, 255, 255, 0.92); color: #1c1c1e; font-weight: 800; white-space: nowrap; }
+.ios-row .key { box-shadow: none; background: transparent; color: #1c1c1e; width: 20px; height: 20px; }
+
+/* a bouncing arrow at the browser's own Share button, outside the page */
+.share-pointer { position: fixed; z-index: 1200; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: auto; animation: fadeIn 0.3s ease both; }
+.share-pointer.bottom { left: 50%; bottom: calc(10px + var(--safe-b)); transform: translateX(-50%); }
+.share-pointer.bottom-right { right: 14px; bottom: calc(10px + var(--safe-b)); align-items: flex-end; }
+.share-pointer.top-right { right: 14px; top: calc(8px + var(--safe-t)); flex-direction: column-reverse; align-items: flex-end; }
+.share-pointer .bubble { display: flex; align-items: center; gap: 8px; max-width: min(78vw, 300px); padding: 10px 14px; border-radius: 16px; background: #fff; color: #1c1c1e; font-weight: 800; font-size: 14px; line-height: 1.3; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35); }
+.share-pointer .bubble svg { flex: none; width: 22px; height: 22px; color: #4aa3ff; }
+.share-pointer .arrow { font-size: 40px; line-height: 1; color: #fff; text-shadow: 0 3px 10px rgba(0, 0, 0, 0.5); animation: pointBounce 0.9s ease-in-out infinite; }
+.share-pointer.top-right .arrow { animation-name: pointBounceUp; margin-right: 18px; }
+.share-pointer.bottom-right .arrow { margin-right: 6px; }
+@keyframes pointBounce { 50% { transform: translateY(10px); } }
+@keyframes pointBounceUp { 50% { transform: translateY(-10px); } }
+
+/* the one-time "play it like an app" nudge on iPhone */
+.install-nudge {
+  position: fixed; z-index: 900; left: 12px; right: 12px; bottom: calc(12px + var(--safe-b)); margin: 0 auto; max-width: 440px;
+  display: grid; grid-template-columns: 48px 1fr; gap: 10px 12px; align-items: center; padding: 16px 14px 12px; border-radius: 20px;
+  animation: rise 0.45s ease both;
+}
+.install-nudge img { border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35); }
+.install-nudge .txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.install-nudge .txt b { font-family: var(--display); font-weight: 400; font-size: 18px; color: var(--sun-2); }
+.install-nudge .txt span { font-size: 13px; font-weight: 700; color: rgba(255, 244, 222, 0.8); line-height: 1.3; }
+.install-nudge .acts { grid-column: 1 / -1; display: flex; justify-content: flex-end; align-items: center; gap: 14px; }
+.install-nudge .later { font-weight: 900; color: rgba(255, 244, 222, 0.7); padding: 6px 4px; }
