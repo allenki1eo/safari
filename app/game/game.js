@@ -22,6 +22,10 @@ import {
 } from '../data/daily.js';
 
 const LANES = [-LANE_W, 0, LANE_W];
+/** Settings → Player size, 0.8–1.8 (1 = the original framing). */
+export const VIEW_MIN = 0.8;
+export const VIEW_MAX = 1.8;
+const viewScale = () => THREE.MathUtils.clamp(Number(save.view) || 1, VIEW_MIN, VIEW_MAX);
 const castShadows = (root) => root.traverse((o) => o.isMesh && !o.material.transparent && (o.castShadow = true));
 const SLIDE_T = 0.62;
 const SHIELD_T = 30;
@@ -436,7 +440,8 @@ export class Game {
     }
     // gentle sway of the curved horizon, like the real thing
     curve.value.x = Math.sin(this.time * 0.08) * 0.00035;
-    this.updateCamera(dt);
+    // the camera keeps easing while paused, so Player size can be tried out from the pause menu
+    this.updateCamera(this.state === 'paused' ? realDt : dt);
     this.look.update(dt, this.p.x, this.world.palette.night);
     this.look.render();
   }
@@ -1603,7 +1608,12 @@ export class Game {
     } else {
       const fly = this.powers.tai ? Math.min(1, p.y / 7.5) : 0;
       const ride = this.powers.tembo ? 0.8 : 0;
-      tp.set(p.x * 0.72, lerp(4.3 + p.y * 0.55, p.y + 3.4, fly) + ride, 7.4 + fly * 0.4);
+      // Settings → Player size: a closer camera makes the runner bigger; it also follows
+      // them across the lanes more so the side lanes stay on screen
+      const view = viewScale();
+      const near = 1 / view;
+      const follow = THREE.MathUtils.clamp(0.72 + (view - 1) * 0.6, 0.6, 0.95);
+      tp.set(p.x * follow, lerp(1.3 + 3.0 * near + p.y * 0.55, p.y + 3.4, fly) + ride, 7.4 * near + fly * 0.4);
       tl.set(p.x * 0.85, lerp(1.25 + p.y * 0.6, p.y - 1.2, fly), -9);
       k = 8;
       if (this.state === 'dying' || this.state === 'over') {

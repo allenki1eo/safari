@@ -10,6 +10,7 @@ import { fetchBoard, leaveDecision, postScore, renderRows, runnerName, scoreSave
 import { darDay, ghostFrom, huntWord, parseShareLink, routeForLink } from '../data/daily.js';
 import { STAKES, acceptBet, collectBets, createChallenge, fetchChallenge, finishBet, linkOrigin } from './challenges.js';
 import { install, device, standalone } from './install.js';
+import { VIEW_MIN, VIEW_MAX } from '../game/game.js';
 import { applyProgress, carryCodeIntoInstall, cleanCode, createProgressCode, fetchProgress, prettyCode, restoreLink } from './transfer.js';
 import { onLoading } from '../game/loading.js';
 import { t, missionText, shareMessage, lang, LANGS, setLang } from '../i18n.js';
@@ -147,6 +148,7 @@ export class UI {
   }
 
   toast(emoji, html, ms = 2800) {
+    if (this.hud && this.game.state === 'running') return this.feed({ icon: emoji, html, ms });
     const t = $(`<div class="toast"><span class="e">${emoji}</span><div>${html}</div></div>`);
     document.body.appendChild(t);
     setTimeout(() => t.remove(), ms);
@@ -337,6 +339,7 @@ export class UI {
         <div class="combo"></div>
         <div class="powers"></div>
         <div class="warns"></div>
+        <div class="feed" aria-live="polite"></div>
         <button class="shield-btn" data-act="shield" aria-label="${t('Use Ngao shield')}"><span class="i">🛡️</span><b class="n">${save.charms ?? 0}</b><i class="ring"></i></button>
       </div>`);
     el.querySelector('[data-act=pause]').addEventListener('click', () => this.game.pause());
@@ -358,6 +361,7 @@ export class UI {
       powers: el.querySelector('.powers'),
       combo: el.querySelector('.combo'),
       warns: el.querySelector('.warns'),
+      feed: el.querySelector('.feed'),
       shield: sb,
     };
     this.powerEls = {};
@@ -464,29 +468,33 @@ export class UI {
     }
   }
 
+  /**
+   * Everything said during a run goes to one slim strip high in the sky: below the score and
+   * the lane warnings, above the trail, never over the runner. Two lines at most; a new one
+   * pushes the oldest out.
+   */
+  feed({ icon = '', title = '', text = '', html = '', kind = '', ms = 2600, color }) {
+    const box = this.hudEls?.feed;
+    if (!box) return;
+    const el = $(`<div class="feed-item ${kind}" ${color ? `style="--c:${color}"` : ''}>${icon ? `<span class="ic">${icon}</span>` : ''}<div class="tx">${title ? `<b>${esc(title)}</b>` : ''}${text ? `<span>${esc(text)}</span>` : ''}${html ? `<span>${html}</span>` : ''}</div></div>`);
+    box.prepend(el);
+    while (box.children.length > 2) box.lastElementChild.remove();
+    setTimeout(() => {
+      el.classList.add('out');
+      setTimeout(() => el.remove(), 300);
+    }, ms);
+  }
+
   speech(emoji, who, what, color = 'var(--sun)') {
-    if (!this.hud) return;
-    this.hud.querySelector('.speech')?.remove();
-    const el = $(`<div class="speech" style="--c:${color}"><div class="face">${emoji}</div><div><div class="who">${esc(who)}</div><div class="what">${esc(what)}</div></div></div>`);
-    this.hud.appendChild(el);
-    setTimeout(() => el.remove(), 3300);
+    this.feed({ icon: emoji, title: who, text: what, color, kind: 'say', ms: 3600 });
   }
 
   onChapter(c) {
     if (!this.hud) return;
-    this.hud.querySelector('.banner')?.remove();
     const country = COUNTRIES[c.country];
-    const el = $(`
-      <div class="banner">
-        <div class="kicker">${country.flag} ${esc(country.name)}${c.lap ? ` · ${t('Legend lap {n}', { n: c.lap + 1 })}` : ''}</div>
-        <h2>${esc(c.name)}</h2>
-        <div class="place">${esc(c.title)}</div>
-        ${c.unlocked ? `<div class="unlocked">${t('✨ New region unlocked')}</div>` : ''}
-      </div>`);
-    this.hud.appendChild(el);
-    setTimeout(() => el.remove(), 3700);
-    this.later(() => this.speech(c.emoji, c.speaker, c.line), c.index === 0 && !c.lap ? 3800 : 2600);
-    if (c.unlocked) this.toast(country.flag, t('{name} unlocked — start your next run here from the Journey map!', { name: `<b>${esc(c.name)}</b>` }), 3400);
+    // just the place name, in the strip; the narrator's story lives on the Journey map
+    const sub = [c.title, c.lap ? t('Legend lap {n}', { n: c.lap + 1 }) : '', c.unlocked ? t('✨ New region unlocked') : ''].filter(Boolean).join(' · ');
+    this.feed({ icon: country.flag, title: c.name, text: sub, kind: 'region', ms: 3400 });
   }
 
   onWarn({ lane, icon }) {
@@ -532,12 +540,8 @@ export class UI {
     setTimeout(() => f.remove(), 650);
   }
 
-  tip(t) {
-    if (!this.hud) return;
-    this.hud.querySelector('.tip')?.remove();
-    const el = $(`<div class="tip"><span class="i">${t.icon}</span>${esc(t.text)}</div>`);
-    this.hud.appendChild(el);
-    setTimeout(() => el.remove(), 3300);
+  tip(tp) {
+    this.feed({ icon: tp.icon, text: tp.text, kind: 'tip', ms: 3200 });
   }
 
   /** Shows the word being hunted, its found letters lit; a new word slides in fresh. */
@@ -561,19 +565,11 @@ export class UI {
 
   /** A Zawadi box bursts open: the prize pops up over the trail. */
   onPrize({ emoji, title, sub, big }) {
-    if (!this.hud) return;
-    this.hud.querySelector('.prize')?.remove();
-    const el = $(`<div class="prize ${big ? 'big' : ''}"><div class="gift">🎁</div><div class="e">${emoji}</div><b>${esc(title)}</b><span>${esc(sub ?? '')}</span></div>`);
-    this.hud.appendChild(el);
-    setTimeout(() => el.remove(), big ? 2400 : 1800);
+    this.feed({ icon: emoji, title, text: sub ?? '', kind: 'gold', ms: big ? 3000 : 2000 });
   }
 
   shout({ text, sub, warn }) {
-    if (!this.hud) return;
-    this.hud.querySelector('.shout')?.remove();
-    const el = $(`<div class="shout ${warn ? 'warn' : ''}"><b>${esc(text)}</b><span>${esc(sub ?? '')}</span></div>`);
-    this.hud.appendChild(el);
-    setTimeout(() => el.remove(), 1250);
+    this.feed({ title: text, text: sub ?? '', kind: warn ? 'warn' : 'shout', ms: 1500 });
     if (warn) {
       const f = $('<div class="flash"></div>');
       document.body.appendChild(f);
@@ -581,17 +577,50 @@ export class UI {
     }
   }
 
+  /** Settings → Player size: a slider from 80% to 180%, applied live. */
+  sizeControl() {
+    const pct = Math.round((Number(save.view) || 1) * 100);
+    return `
+      <div class="size-row">
+        <div class="size-head"><span>${t('🔍 Player size')}</span><b data-size-val>${pct}%</b></div>
+        <div class="size-ctl">
+          <button class="size-step" data-size-step="-10" aria-label="${t('Smaller')}">−</button>
+          <input type="range" min="${VIEW_MIN * 100}" max="${VIEW_MAX * 100}" step="5" value="${pct}" data-size aria-label="${t('Player size')}" />
+          <button class="size-step" data-size-step="10" aria-label="${t('Bigger')}">+</button>
+        </div>
+      </div>`;
+  }
+
+  bindSizeControl(el) {
+    const input = el.querySelector('[data-size]');
+    if (!input) return;
+    const set = (pct) => {
+      const v = Math.min(VIEW_MAX * 100, Math.max(VIEW_MIN * 100, Math.round(pct / 5) * 5));
+      input.value = v;
+      el.querySelector('[data-size-val]').textContent = `${v}%`;
+      save.view = v / 100;
+      persist();
+    };
+    input.addEventListener('input', () => set(Number(input.value)));
+    el.querySelectorAll('[data-size-step]').forEach((b) => b.addEventListener('click', () => {
+      set(Number(input.value) + Number(b.dataset.sizeStep));
+      audio.click();
+    }));
+  }
+
   /* ------------------------------------------------------------- pause */
   showPause() {
     const ms = ensureMissions();
+    // sits at the top over a light scrim, so the runner stays in view while Player size changes
     const el = $(`
-      <div class="screen modal-wrap scrim-full">
+      <div class="screen modal-wrap pause-wrap">
         <div class="panel modal">
           <h2>${t('Paused')}</h2>
           <div class="muted">${t('Fisi is waiting… catch your breath.')}</div>
           <div class="mission-mini" style="margin-top:16px">
             ${ms.map((m) => `<div><span class="tick ${m.done ? 'done' : ''}">${m.done ? '✓' : ''}</span>${esc(missionText(m))}</div>`).join('')}
           </div>
+          ${this.sizeControl()}
           <div class="stack">
             <button class="btn" data-act="resume" data-click>${t('▶ Keep running')}</button>
             <div class="row2">
@@ -619,6 +648,7 @@ export class UI {
         this.title();
       }
     });
+    this.bindSizeControl(el);
     this.overlay(el);
   }
 
@@ -1913,6 +1943,7 @@ export class UI {
           ${row('sound', '🔊 Sound effects')}
           ${row('haptics', '📳 Vibration')}
           <div class="toggle-row"><span>${t('✨ Graphics')}</span><div class="seg" role="group">${['auto', 'high', 'low'].map((q) => `<button class="${(save.quality ?? 'auto') === q ? 'on' : ''}" data-q="${q}">${t(q[0].toUpperCase() + q.slice(1))}</button>`).join('')}</div></div>
+          ${this.sizeControl()}
           <div class="toggle-row"><span>${t('🌍 Language')}</span><div class="seg" role="group">${Object.entries(LANGS).map(([k, n]) => `<button class="${lang === k ? 'on' : ''}" data-lang="${k}">${n}</button>`).join('')}</div></div>
           ${install.offered ? `<div class="toggle-row"><span>${t('📲 Play from your home screen')}</span><button class="btn small" data-act="install" data-click>${t('Install')}</button></div>` : ''}
           <div class="toggle-row"><span>${t('📦 Move my progress')}</span><button class="btn small ghost" data-act="progress" data-click>${t('Open')}</button></div>
@@ -1950,6 +1981,7 @@ export class UI {
         if (name && name !== save.name) this.claimName(name);
       }
     });
+    this.bindSizeControl(el);
     this.overlay(el);
   }
 
