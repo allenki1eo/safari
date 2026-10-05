@@ -11,6 +11,7 @@ import { darDay, ghostFrom, huntWord, parseShareLink, routeForLink } from '../da
 import { STAKES, acceptBet, collectBets, createChallenge, fetchChallenge, finishBet, linkOrigin } from './challenges.js';
 import { install, device, standalone } from './install.js';
 import { VIEW_MIN, VIEW_MAX } from '../game/game.js';
+import { recoverRunner, setRecoveryPin, syncSave } from './account.js';
 import { applyProgress, carryCodeIntoInstall, cleanCode, createProgressCode, fetchProgress, prettyCode, restoreLink } from './transfer.js';
 import { onLoading } from '../game/loading.js';
 import { t, missionText, shareMessage, lang, LANGS, setLang } from '../i18n.js';
@@ -215,6 +216,7 @@ export class UI {
     this.collectWinnings();
     this.maybeNudgeInstall();
     this.maybeOfferRestore();
+    this.maybeAskForPin();
     // the pill glows once the browser says it can install; it leaves once installed
     this.offInstall?.();
     this.offInstall = install.on((ev) => {
@@ -732,6 +734,7 @@ export class UI {
     save.bestDistance = Math.max(save.bestDistance, run.distance);
     checkMissions(run.stats);
     persist();
+    syncSave(); // the cloud copy, for players who set a recovery PIN
     this.lastBank = { newBest };
     return this.lastBank;
   }
@@ -1136,11 +1139,16 @@ export class UI {
           try { top = (await fetchBoard()).top || top; } catch { /* keep the card usable */ }
           this.lastTop = top;
           const message = err.code === 'NAME_TAKEN'
-            ? `${t('“{name}” is taken. Pick another name.', { name })} ${t('Is it yours from another browser? Bring your progress over in Settings → Move my progress.')}`
+            ? t('“{name}” is taken. Pick another name.', { name })
             : (err.message || t('Could not save your score'));
           this.paintBoard(root, top, null, message, run, true);
           this.paintDailyRank(root, null, true);
-          root.querySelector('[data-lb-name]')?.focus();
+          if (err.code === 'NAME_TAKEN') {
+            // maybe it's theirs, from another browser or phone: offer to get it back
+            const btn = $(`<button class="btn small lb-recover" type="button">🔑 ${t("It's me — get my runner back")}</button>`);
+            btn.addEventListener('click', () => this.recoverSheet(name, () => this.submitRun(root, run, save.name)));
+            root.querySelector('.lb-msg')?.after(btn);
+          } else root.querySelector('[data-lb-name]')?.focus();
         }
         finish(false);
       }
@@ -1818,6 +1826,115 @@ export class UI {
     }, 1800);
   }
 
+  /* ------------------------------------------------ getting a runner back */
+  /** Runners with a name but no recovery PIN are asked once to protect it. */
+  maybeAskForPin() {
+    if (!save.name || save.pinSet || save.pinAsked || (save.runs ?? 0) < 1) return;
+    save.pinAsked = true;
+    persist();
+    setTimeout(() => {
+      if (!this.screen?.classList.contains('title')) return;
+      this.pinSheet(false, true);
+    }, 2200);
+  }
+
+  /** Set (or change) the recovery PIN for this device's runner. */
+  pinSheet(afterRecovery = false, nudge = false) {
+    const el = $(`
+      <div class="screen modal-wrap scrim-full">
+        <div class="panel modal pin-card">
+          <div style="font-size:50px">🔐</div>
+          <h2>${afterRecovery ? t('Lock it in') : t('Protect your runner')}</h2>
+          <p class="muted">${t('Choose a 4–6 digit PIN. With your runner name and this PIN you can get <b>{name}</b> — coins, runners and best score — back on any phone, any time.', { name: esc(save.name) })}</p>
+          <div class="pin-fields">
+            <input class="name-input pin-input" data-pin type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="${t('PIN')}" autocomplete="new-password" />
+            <input class="name-input pin-input" data-pin2 type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="${t('Again')}" autocomplete="new-password" />
+          </div>
+          <p class="pin-err" data-err></p>
+          <div class="stack">
+            <button class="btn" data-act="save" data-click>${t('Save PIN')}</button>
+            <button class="btn ghost" data-act="close" data-click>${nudge ? t('Later') : t('Close')}</button>
+          </div>
+        </div>
+      </div>`);
+    const err = el.querySelector('[data-err]');
+    el.addEventListener('click', async (e) => {
+      const act = e.target.closest('[data-act]')?.dataset.act;
+      if (act === 'close' || e.target === el) return el.remove();
+      if (act !== 'save') return;
+      const pin = el.querySelector('[data-pin]').value.trim();
+      if (!/^\d{4,6}$/.test(pin)) return (err.textContent = t('Use 4 to 6 numbers.'));
+      if (pin !== el.querySelector('[data-pin2]').value.trim()) return (err.textContent = t("The two PINs don't match."));
+      const btn = e.target.closest('button');
+      btn.disabled = true;
+      try {
+        await setRecoveryPin(pin);
+        el.remove();
+        audio.buy();
+        this.toast('🔐', t('PIN saved. Your runner is safe — remember it!'), 3600);
+        if (this.screen?.classList.contains('title')) this.title();
+      } catch (ex) {
+        err.textContent = ex.code === 'NO_RUNNER' ? t('Finish a run and save your score with your name first.') : ex.message;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+    this.overlay(el);
+    setTimeout(() => el.querySelector('[data-pin]')?.focus(), 350);
+  }
+
+  /** Runner name + PIN (or a recovery code from the admin) on any phone or browser. */
+  recoverSheet(name = '', onDone) {
+    const el = $(`
+      <div class="screen modal-wrap scrim-full">
+        <div class="panel modal pin-card">
+          <div style="font-size:50px">🔑</div>
+          <h2>${t('Get my runner back')}</h2>
+          <p class="muted">${t('Type your runner name and the PIN you set. Your name, coins and runners come back to this phone.')}</p>
+          <input class="name-input" data-name maxlength="16" placeholder="${t('Runner name')}" value="${esc(name)}" autocomplete="nickname" />
+          <input class="name-input pin-input" data-pin maxlength="9" placeholder="${t('PIN or recovery code')}" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+          <p class="pin-err" data-err></p>
+          <div class="stack">
+            <button class="btn" data-act="go" data-click>${t('Get it back')}</button>
+            <button class="btn ghost" data-act="close" data-click>${t('Close')}</button>
+          </div>
+        </div>
+      </div>`);
+    const err = el.querySelector('[data-err]');
+    el.addEventListener('click', async (e) => {
+      const act = e.target.closest('[data-act]')?.dataset.act;
+      if (act === 'close' || e.target === el) return el.remove();
+      if (act !== 'go') return;
+      const nm = runnerName(el.querySelector('[data-name]').value);
+      const pin = el.querySelector('[data-pin]').value.trim();
+      if (!nm) return (err.textContent = t('Type your runner name.'));
+      if (!pin) return (err.textContent = t('Type your PIN.'));
+      const btn = e.target.closest('button');
+      btn.disabled = true;
+      err.textContent = '';
+      try {
+        const res = await recoverRunner(nm, pin);
+        el.remove();
+        audio.buy();
+        this.toast('🎉', t('Karibu tena, <b>{name}</b>! Your runner is back.', { name: esc(res.name) }), 4000);
+        onDone?.(res);
+        if (res.needsPin) setTimeout(() => this.pinSheet(true), 600);
+        else if (this.screen?.classList.contains('title')) this.title();
+      } catch (ex) {
+        if (ex.code === 'NO_PIN') {
+          err.innerHTML = t("This runner never set a recovery PIN, so it can't be checked yet. Ask the game's admin for a <b>recovery code</b> and type it here instead of a PIN.");
+        } else if (ex.code === 'WRONG_PIN') {
+          err.textContent = ex.triesLeft > 0 ? t('That PIN is not right. {n} tries left.', { n: ex.triesLeft }) : t('That PIN is not right. Try again in 15 minutes.');
+        } else if (ex.code === 'NO_RUNNER') err.textContent = t('No runner has that name.');
+        else err.textContent = ex.message;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+    this.overlay(el);
+    setTimeout(() => el.querySelector(name ? '[data-pin]' : '[data-name]')?.focus(), 350);
+  }
+
   /* ------------------------------------------------- moving progress */
   /** Opened with ?restore=CODE: take the progress parked under it (once). */
   async restoreFromLink(code) {
@@ -1946,6 +2063,8 @@ export class UI {
           ${this.sizeControl()}
           <div class="toggle-row"><span>${t('🌍 Language')}</span><div class="seg" role="group">${Object.entries(LANGS).map(([k, n]) => `<button class="${lang === k ? 'on' : ''}" data-lang="${k}">${n}</button>`).join('')}</div></div>
           ${install.offered ? `<div class="toggle-row"><span>${t('📲 Play from your home screen')}</span><button class="btn small" data-act="install" data-click>${t('Install')}</button></div>` : ''}
+          ${save.name ? `<div class="toggle-row"><span>${t('🔐 Recovery PIN')}${save.pinSet ? ` <em class="pin-on">${t('on')}</em>` : ''}</span><button class="btn small ${save.pinSet ? 'ghost' : ''}" data-act="pin" data-click>${save.pinSet ? t('Change') : t('Set PIN')}</button></div>` : ''}
+          <div class="toggle-row"><span>${t('🔑 Get my runner back')}</span><button class="btn small ghost" data-act="recover" data-click>${t('Open')}</button></div>
           <div class="toggle-row"><span>${t('📦 Move my progress')}</span><button class="btn small ghost" data-act="progress" data-click>${t('Open')}</button></div>
           <div style="margin:18px 0 6px" class="muted">${t('Your runner name (shown on challenges)')}</div>
           <input class="name-input" maxlength="16" placeholder="${t('e.g. Zuri')}" value="${esc(save.name)}" />
@@ -1957,6 +2076,8 @@ export class UI {
     el.addEventListener('click', (e) => {
       if (e.target.closest('[data-act=install]')) return this.installApp();
       if (e.target.closest('[data-act=progress]')) return this.progressSheet();
+      if (e.target.closest('[data-act=pin]')) return this.pinSheet();
+      if (e.target.closest('[data-act=recover]')) return this.recoverSheet();
       const lb = e.target.closest('[data-lang]');
       if (lb) return setLang(lb.dataset.lang);
       const qb = e.target.closest('[data-q]');
@@ -1995,8 +2116,10 @@ export class UI {
       persist();
       this.toast('✅', t("You're now <b>{name}</b> on the leaderboard.", { name: esc(save.name) }));
     } catch (err) {
-      if (err.code === 'NAME_TAKEN') this.toast('🙅', t('<b>{name}</b> is already taken. Try another name.', { name: esc(name) }), 3200);
-      else if (err.status === 503) {
+      if (err.code === 'NAME_TAKEN') {
+        this.toast('🙅', t('<b>{name}</b> is already taken. Try another name.', { name: esc(name) }), 3200);
+        this.recoverSheet(name);
+      } else if (err.status === 503) {
         // no leaderboard configured (e.g. local dev): keep the name locally
         save.name = name;
         persist();

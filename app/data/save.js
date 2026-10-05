@@ -105,6 +105,23 @@ export function importSave(data, extra = {}) {
   return true;
 }
 
+/**
+ * Two saves of the same player (cloud and this phone) folded into one, so getting a runner
+ * back never throws away what was earned on either side: the higher of every count, every
+ * runner owned anywhere, the better upgrade level.
+ */
+export function mergeSaves(local, cloud) {
+  if (!cloud || typeof cloud !== 'object') return { ...local };
+  const out = { ...local, ...cloud };
+  const MAX = ['seeds', 'best', 'bestDistance', 'runs', 'missionLevel', 'regionMax', 'charms', 'chapterSeen', 'mapSeen'];
+  for (const k of MAX) out[k] = Math.max(Number(local?.[k]) || 0, Number(cloud?.[k]) || 0);
+  const union = (a, b) => [...new Set([...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])])];
+  out.owned = union(local?.owned, cloud?.owned);
+  out.upgrades = { ...(local?.upgrades ?? {}) };
+  for (const [k, v] of Object.entries(cloud?.upgrades ?? {})) out.upgrades[k] = Math.max(Number(out.upgrades[k]) || 0, Number(v) || 0);
+  return out;
+}
+
 /* ---------------------------------------------------------------- missions */
 /**
  * Every mission pays seeds of its own, collected on the results screen after the run that

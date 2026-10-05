@@ -13,6 +13,10 @@ const canvas = document.getElementById('scene');
 const game = new Game(canvas);
 const ui = new UI(game, document.getElementById('ui'));
 
+// ask the browser to keep the game's storage (the device key that owns the runner name lives
+// there) instead of clearing it when the phone runs low on space
+navigator.storage?.persist?.().catch(() => {});
+
 audio.musicOn = save.music;
 audio.soundOn = save.sound;
 
