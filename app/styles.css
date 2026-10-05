@@ -650,3 +650,42 @@ input { font: inherit; }
 .restore-cmp b { font-family: var(--display); font-weight: 400; font-size: 19px; color: #fff; }
 .restore-cmp em { display: inline-flex; align-items: center; justify-content: center; gap: 4px; font-style: normal; font-size: 13px; font-weight: 800; color: var(--sun-2); }
 .restore-cmp .seed { width: 14px; height: 14px; }
+
+/* ---------------------------------------------------- in-run message strip */
+/* everything said during a run sits up in the sky, below the lane warnings, never on the runner */
+.feed { position: absolute; left: 50%; top: calc(196px + var(--safe-t)); transform: translateX(-50%); width: min(86vw, 360px); display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+.feed-item {
+  display: flex; align-items: center; gap: 9px; max-width: 100%; padding: 6px 13px 6px 8px; border-radius: 14px;
+  background: rgba(43, 26, 14, 0.66); border: 1px solid var(--line); color: var(--cream);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+  animation: feedIn 0.28s cubic-bezier(.2, 1.3, .4, 1) both; transition: opacity 0.3s, transform 0.3s;
+}
+.feed-item.out { opacity: 0; transform: translateY(-6px); }
+@keyframes feedIn { from { opacity: 0; transform: translateY(-8px) scale(0.94); } }
+.feed-item .ic { flex: none; width: 28px; height: 28px; display: grid; place-items: center; font-size: 19px; border-radius: 50%; background: var(--c, rgba(255, 244, 222, 0.14)); }
+.feed-item .tx { display: flex; flex-direction: column; min-width: 0; line-height: 1.22; }
+.feed-item .tx b { font-family: var(--display); font-weight: 400; font-size: 15px; color: var(--sun-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.feed-item .tx span { font-size: 12.5px; font-weight: 700; color: rgba(255, 244, 222, 0.9); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.feed-item .tx span b { font-family: var(--body); font-size: inherit; color: #fff; }
+.feed-item.shout { padding: 4px 14px; }
+.feed-item.shout .tx { flex-direction: row; align-items: baseline; gap: 8px; }
+.feed-item.shout .tx b { font-size: 19px; }
+.feed-item.warn .tx b { color: #ff9a8a; }
+.feed-item.gold { border-color: rgba(255, 201, 64, 0.55); background: rgba(70, 44, 10, 0.72); }
+.feed-item.region .tx b { font-size: 18px; color: #fff; }
+.feed-item.region { border-color: rgba(255, 224, 138, 0.4); }
+.feed-item .seed { width: 13px; height: 13px; }
+
+/* pause sits at the top over a light scrim so Player size changes can be seen behind it */
+.pause-wrap { align-items: center; justify-content: flex-start; padding-top: calc(10px + var(--safe-t)); background: rgba(26, 12, 4, 0.28); }
+.pause-wrap .modal { padding: 18px 18px 16px; }
+.pause-wrap .mission-mini { margin-bottom: 8px; }
+
+/* Player size */
+.size-row { margin: 14px 0 4px; text-align: left; }
+.size-head { display: flex; justify-content: space-between; align-items: baseline; font-weight: 800; }
+.size-head b { font-family: var(--display); font-weight: 400; font-size: 18px; color: var(--sun-2); }
+.size-ctl { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.size-step { flex: none; width: 40px; height: 40px; border-radius: 12px; font-family: var(--display); font-size: 24px; color: var(--earth); background: linear-gradient(180deg, var(--sun-2), var(--sun)); box-shadow: 0 3px 0 #a8620a; }
+.size-step:active { transform: translateY(2px); box-shadow: 0 1px 0 #a8620a; }
+.size-ctl input[type=range] { flex: 1; min-width: 0; height: 30px; accent-color: var(--sun); touch-action: pan-x; }

@@ -168,6 +168,10 @@ const SW = {
   'Each mission pays seeds. Settle all three — finish them or skip them — to raise your multiplier and win the set bonus.':
     'Kila jukumu lina zawadi ya mbegu. Maliza au ruka yote matatu ili kuongeza kizidishi chako na kushinda bonasi ya seti.',
   Challenges: 'Changamoto',
+  '🔍 Player size': '🔍 Ukubwa wa mkimbiaji',
+  'Player size': 'Ukubwa wa mkimbiaji',
+  Smaller: 'Punguza',
+  Bigger: 'Ongeza',
   'Is it yours from another browser? Bring your progress over in Settings → Move my progress.': 'Ni lako kutoka kivinjari kingine? Hamisha maendeleo yako kwenye Mipangilio → Hamisha maendeleo yangu.',
   '📦 Move my progress': '📦 Hamisha maendeleo yangu',
   Open: 'Fungua',
