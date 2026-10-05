@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>Kimbia! · Runner recovery</title>
+  <style>
+    :root { --sun: #ffc940; --earth: #2b1a0e; --cream: #fff4de; --line: rgba(255, 228, 170, 0.2); }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 20px; background: radial-gradient(circle at 50% 0%, #6b3a17, #1c1008 70%); color: var(--cream); font: 16px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+    main { width: min(100%, 440px); padding: 26px 22px 22px; border-radius: 22px; background: rgba(43, 26, 14, 0.82); border: 1px solid var(--line); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45); }
+    h1 { margin: 0 0 6px; font-size: 24px; color: var(--sun); }
+    p { margin: 0 0 16px; color: rgba(255, 244, 222, 0.8); font-size: 14px; }
+    label { display: block; margin: 12px 0 6px; font-weight: 700; font-size: 14px; }
+    input { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.3); color: var(--cream); font-size: 16px; }
+    input:focus { outline: 2px solid var(--sun); }
+    button { width: 100%; margin-top: 18px; padding: 14px; border: 0; border-radius: 14px; background: linear-gradient(180deg, #ffe08a, var(--sun)); color: var(--earth); font-weight: 900; font-size: 17px; cursor: pointer; }
+    button:disabled { opacity: 0.6; }
+    .out { margin-top: 18px; padding: 14px; border-radius: 14px; background: rgba(255, 244, 222, 0.07); border: 1px solid var(--line); font-size: 14px; }
+    .out code { display: block; margin: 8px 0; font-size: 30px; letter-spacing: 4px; color: var(--sun); font-weight: 900; text-align: center; }
+    .err { color: #ffb4a8; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Runner recovery</h1>
+    <p>For a player who lost their runner and never set a recovery PIN. Make sure it's really them first (for example, ask for a screenshot of their old score). The code works once, for 7 days: they open <b>Settings → Get my runner back</b> and type it in place of a PIN.</p>
+    <form id="f">
+      <label for="key">Admin key</label>
+      <input id="key" type="password" autocomplete="current-password" required />
+      <label for="name">Runner name</label>
+      <input id="name" maxlength="16" autocomplete="off" required />
+      <button type="submit">Make a recovery code</button>
+    </form>
+    <div class="out" id="out" hidden></div>
+  </main>
+  <script>
+    const f = document.getElementById('f');
+    const out = document.getElementById('out');
+    const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = f.querySelector('button');
+      btn.disabled = true;
+      out.hidden = false;
+      out.textContent = 'Working…';
+      try {
+        const res = await fetch('/api/account', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ action: 'adminCode', adminKey: document.getElementById('key').value, name: document.getElementById('name').value }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Something went wrong.');
+        const pretty = `${data.code.slice(0, 4)}-${data.code.slice(4)}`;
+        out.innerHTML = `Recovery code for <b>${esc(data.name)}</b> (best ${Number(data.best).toLocaleString()}):<code>${pretty}</code>Send it to the player privately. It works once and expires in 7 days.`;
+      } catch (err) {
+        out.innerHTML = `<span class="err">${esc(err.message)}</span>`;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

@@ -689,3 +689,16 @@ input { font: inherit; }
 .size-step { flex: none; width: 40px; height: 40px; border-radius: 12px; font-family: var(--display); font-size: 24px; color: var(--earth); background: linear-gradient(180deg, var(--sun-2), var(--sun)); box-shadow: 0 3px 0 #a8620a; }
 .size-step:active { transform: translateY(2px); box-shadow: 0 1px 0 #a8620a; }
 .size-ctl input[type=range] { flex: 1; min-width: 0; height: 30px; accent-color: var(--sun); touch-action: pan-x; }
+
+/* ---------------------------------------------------- getting a runner back */
+.lb-recover { display: block; margin: 2px auto 12px; --c1: #fff4de; --c2: #ffd9a0; --edge: #9a4a12; --ink: var(--earth); }
+.pin-card { text-align: center; }
+.pin-card > .muted { margin: 4px 4px 14px; line-height: 1.4; }
+.pin-card .name-input + .name-input { margin-top: 10px; }
+.pin-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pin-fields .name-input + .name-input { margin-top: 0; }
+.pin-input { text-align: center; font-family: var(--display); font-size: 22px; letter-spacing: 6px; }
+.pin-input::placeholder { letter-spacing: 1px; font-family: var(--body); font-size: 16px; }
+.pin-err { min-height: 20px; margin: 10px 2px 0; font-size: 13.5px; font-weight: 800; line-height: 1.35; color: #ffb4a8; }
+.pin-err b { color: var(--sun-2); }
+.pin-on { margin-left: 6px; padding: 1px 7px; border-radius: 8px; font-style: normal; font-size: 11px; font-weight: 900; letter-spacing: 0.5px; text-transform: uppercase; color: #c8ec92; background: rgba(127, 174, 58, 0.25); }

@@ -14,7 +14,7 @@ import { loadLocalEnv } from './env.js';
 loadLocalEnv();
 
 // Applied in order on first use; every statement is idempotent.
-const SCHEMA_SQL = ['001_scores.sql', '002_players.sql', '003_daily.sql', '004_challenges.sql', '005_transfers.sql']
+const SCHEMA_SQL = ['001_scores.sql', '002_players.sql', '003_daily.sql', '004_challenges.sql', '005_transfers.sql', '006_accounts.sql']
   .map((file) => readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8'))
   .join('\n');
 export const TOKEN_RE = /^[a-f0-9]{64}$/;
@@ -195,6 +195,17 @@ export async function listTop() {
 }
 
 /**
+ * The player a device key belongs to: the key they registered with, or one added when they
+ * got their runner back on another device (accounts.js).
+ */
+export async function playerIdForToken(db, th) {
+  const own = (await db.execute({ sql: 'SELECT id FROM players WHERE token_hash = ?', args: [th] })).rows[0];
+  if (own) return Number(own.id);
+  const extra = (await db.execute({ sql: 'SELECT player_id FROM player_keys WHERE token_hash = ?', args: [th] })).rows[0];
+  return extra ? Number(extra.player_id) : null;
+}
+
+/**
  * Finds (or creates) the player behind `token`, makes sure they own `name`,
  * then keeps the run only if it beats their best.
  */
@@ -206,7 +217,8 @@ export async function submitScore(body) {
   const th = hashToken(v.token);
   const key = nameKey(v.name);
 
-  let player = (await db.execute({ sql: `SELECT ${COLS}, name_key FROM players WHERE token_hash = ?`, args: [th] })).rows[0];
+  const pid = await playerIdForToken(db, th);
+  let player = pid == null ? null : (await db.execute({ sql: `SELECT ${COLS}, name_key FROM players WHERE id = ?`, args: [pid] })).rows[0];
   const owner = (await db.execute({ sql: 'SELECT id, token_hash FROM players WHERE name_key = ?', args: [key] })).rows[0];
 
   try {
@@ -230,7 +242,8 @@ export async function submitScore(body) {
     throw err;
   }
 
-  player = (await db.execute({ sql: `SELECT ${COLS} FROM players WHERE token_hash = ?`, args: [th] })).rows[0];
+  const id0 = await playerIdForToken(db, th);
+  player = id0 == null ? null : (await db.execute({ sql: `SELECT ${COLS} FROM players WHERE id = ?`, args: [id0] })).rows[0];
   if (!player) return taken(); // lost a race for the name
   const id = Number(player.id);
 

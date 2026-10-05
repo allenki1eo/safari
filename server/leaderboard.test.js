@@ -378,3 +378,80 @@ test('a progress code carries a save to another browser, for a week', async () =
     assert.deepEqual(manifestFor('ABCD2345', { name: 'K', start_url: '/' }), { name: 'K', start_url: '/?restore=ABCD2345' });
   });
 });
+
+/* ------------------------------------------------------------ getting a runner back */
+import { handleAccountRequest, LOCK_MS } from './accounts.js';
+
+const acc = (body) => handleAccountRequest('POST', body);
+const NEW_PHONE = tok(77);
+const SECOND_PHONE = tok(88);
+
+test('a runner protected with a PIN comes back on a new phone with their save', async () => {
+  await withDb(async () => {
+    setLeaderboardClock(() => new Date(Date.parse('2026-10-05T08:00:00Z')));
+    await post({ token: T.hanki, name: 'Gee🥀', score: 77533, distance: 4623 });
+    assert.equal((await acc({ action: 'status', token: T.hanki })).body.pin, false);
+    assert.equal((await acc({ action: 'setPin', token: T.hanki, pin: '12' })).body.code, 'PIN_FORMAT');
+    assert.equal((await acc({ action: 'setPin', token: T.juma, pin: '1234' })).body.code, 'NO_RUNNER');
+    const set = await acc({ action: 'setPin', token: T.hanki, pin: '2580', save: { seeds: 2506, name: 'Gee🥀', playerToken: T.hanki } });
+    assert.equal(set.status, 200);
+    assert.equal((await acc({ action: 'sync', token: T.hanki, save: { seeds: 3000, owned: ['zuri', 'neema'] } })).status, 200);
+
+    // the new phone can't post under the name...
+    assert.equal((await post({ token: NEW_PHONE, name: 'Gee🥀', score: 46 })).body.code, 'NAME_TAKEN');
+    // ...until it recovers it (the name matches case-insensitively)
+    assert.equal((await acc({ action: 'recover', token: NEW_PHONE, name: 'gee🥀', pin: '0000' })).body.code, 'WRONG_PIN');
+    const got = await acc({ action: 'recover', token: NEW_PHONE, name: 'gee🥀', pin: '2580' });
+    assert.equal(got.status, 200);
+    assert.equal(got.body.name, 'Gee🥀');
+    assert.deepEqual(got.body.save, { seeds: 3000, owned: ['zuri', 'neema'] });
+    assert.equal(JSON.stringify(got.body).includes(T.hanki), false); // device keys never leave
+    // both phones now post as Gee
+    const p1 = await post({ token: NEW_PHONE, name: 'Gee🥀', score: 90000 });
+    assert.equal(p1.status, 200);
+    assert.equal(p1.body.entry.score, 90000);
+    assert.equal((await post({ token: T.hanki, name: 'Gee🥀', score: 10 })).status, 200);
+    assert.equal((await handleScoreRequest('GET', undefined, {})).body.top.filter((r) => r.name === 'Gee🥀').length, 1);
+  });
+});
+
+test('wrong PINs lock recovery for a while', async () => {
+  await withDb(async () => {
+    const t0 = Date.parse('2026-10-05T08:00:00Z');
+    setLeaderboardClock(() => new Date(t0));
+    await post({ token: T.neema, name: 'Neema', score: 500 });
+    await acc({ action: 'setPin', token: T.neema, pin: '4321' });
+    for (let i = 0; i < 5; i++) await acc({ action: 'recover', token: NEW_PHONE, name: 'Neema', pin: String(1000 + i) });
+    assert.equal((await acc({ action: 'recover', token: NEW_PHONE, name: 'Neema', pin: '4321' })).body.code, 'LOCKED');
+    setLeaderboardClock(() => new Date(t0 + LOCK_MS + 1000));
+    assert.equal((await acc({ action: 'recover', token: NEW_PHONE, name: 'Neema', pin: '4321' })).status, 200);
+  });
+});
+
+test('a runner who never set a PIN gets back in with a one-time admin code', async () => {
+  await withDb(async () => {
+    const prev = process.env.KIMBIA_ADMIN_KEY;
+    try {
+      await post({ token: T.amani, name: 'Ritha', score: 45346 });
+      assert.equal((await acc({ action: 'recover', token: NEW_PHONE, name: 'Ritha', pin: '1234' })).body.code, 'NO_PIN');
+      delete process.env.KIMBIA_ADMIN_KEY;
+      assert.equal((await acc({ action: 'adminCode', adminKey: 'x', name: 'Ritha' })).status, 503);
+      process.env.KIMBIA_ADMIN_KEY = 'super-secret-admin-key';
+      assert.equal((await acc({ action: 'adminCode', adminKey: 'nope', name: 'Ritha' })).status, 403);
+      const issued = await acc({ action: 'adminCode', adminKey: 'super-secret-admin-key', name: 'ritha' });
+      assert.match(issued.body.code, /^[A-HJ-NP-Z2-9]{8}$/);
+      const code = `${issued.body.code.slice(0, 4)}-${issued.body.code.slice(4).toLowerCase()}`;
+      const got = await acc({ action: 'recover', token: NEW_PHONE, name: 'Ritha', pin: code });
+      assert.equal(got.status, 200);
+      assert.equal(got.body.needsPin, true);
+      // the code is spent
+      assert.equal((await acc({ action: 'recover', token: SECOND_PHONE, name: 'Ritha', pin: code })).status, 409);
+      assert.equal((await post({ token: NEW_PHONE, name: 'Ritha', score: 50000 })).status, 200);
+      // and the recovered phone can now set its own PIN
+      assert.equal((await acc({ action: 'setPin', token: NEW_PHONE, pin: '9999' })).status, 200);
+    } finally {
+      if (prev == null) delete process.env.KIMBIA_ADMIN_KEY;
+      else process.env.KIMBIA_ADMIN_KEY = prev;
+    }
+  });
+});
