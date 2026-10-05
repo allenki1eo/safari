@@ -90,3 +90,25 @@ describe('journey migration', () => {
     expect(id(99)).toBe('bwindi');
   });
 });
+
+describe('moving progress', () => {
+  it('exports the player and imports them elsewhere, keeping device settings', async () => {
+    const { exportSave, importSave, hasProgress } = await import('../app/data/save.js');
+    save.seeds = 777;
+    save.name = 'Allen';
+    save.quality = 'low';
+    save.playerToken = 'a'.repeat(64);
+    const out = exportSave();
+    expect(out.quality).toBeUndefined();
+    expect(out).toMatchObject({ seeds: 777, name: 'Allen', playerToken: 'a'.repeat(64) });
+    // a fresh install elsewhere
+    save.seeds = 0;
+    save.name = '';
+    save.quality = 'high';
+    expect(importSave({ ...out, seeds: -5, quality: 'low' }, { restoredCode: 'ABCD2345' })).toBe(true);
+    expect(save).toMatchObject({ name: 'Allen', playerToken: 'a'.repeat(64), quality: 'high', restoredCode: 'ABCD2345', seeds: 0 });
+    expect(hasProgress()).toBe(true);
+    expect(importSave(null)).toBe(false);
+    expect(importSave([1, 2])).toBe(false);
+  });
+});

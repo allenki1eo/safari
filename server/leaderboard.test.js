@@ -354,3 +354,27 @@ test('untaken bets are refunded and abandoned ones are forfeited', async () => {
     assert.equal((await chGet(free)).body.challenge.status, 'open');
   });
 });
+
+/* ------------------------------------------------------------ progress codes */
+import { handleTransferRequest, cleanCode, manifestFor, TRANSFER_TTL } from './transfers.js';
+
+test('a progress code carries a save to another browser, for a week', async () => {
+  await withDb(async () => {
+    const t0 = Date.parse('2026-10-05T08:00:00Z');
+    setLeaderboardClock(() => new Date(t0));
+    const data = { name: 'Allen', seeds: 1234, playerToken: T.juma, missions: [{ id: 'jumps', n: 15 }] };
+    const made = await handleTransferRequest('POST', { action: 'create', data });
+    assert.equal(made.status, 200);
+    assert.match(made.body.code, /^[A-HJ-NP-Z2-9]{8}$/);
+    const pretty = `${made.body.code.slice(0, 4).toLowerCase()}-${made.body.code.slice(4)}`;
+    const got = await handleTransferRequest('POST', { action: 'claim', code: pretty });
+    assert.deepEqual(got.body.data, data);
+    setLeaderboardClock(() => new Date(t0 + TRANSFER_TTL + 1000));
+    assert.equal((await handleTransferRequest('POST', { action: 'claim', code: made.body.code })).status, 404);
+    assert.equal((await handleTransferRequest('POST', { action: 'claim', code: 'nope' })).status, 400);
+    assert.equal((await handleTransferRequest('POST', { action: 'create', data: [1] })).status, 400);
+    assert.equal((await handleTransferRequest('POST', { action: 'create', data: { big: 'x'.repeat(40000) } })).status, 400);
+    assert.equal(cleanCode('ab0d-2345'), null); // 0 is never used
+    assert.deepEqual(manifestFor('ABCD2345', { name: 'K', start_url: '/' }), { name: 'K', start_url: '/?restore=ABCD2345' });
+  });
+});

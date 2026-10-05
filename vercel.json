@@ -31,6 +31,9 @@
     },
     "api/challenges.js": {
       "includeFiles": "migrations/**"
+    },
+    "api/transfer.js": {
+      "includeFiles": "{migrations/**,static/manifest.webmanifest}"
     }
   }
 }

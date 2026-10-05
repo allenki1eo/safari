@@ -1,7 +1,7 @@
 import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO, OUTFITS, outfitId, HUNT_WORDS, BOOSTS } from '../data/content.js';
 import { REGIONS, COUNTRIES } from '../data/regions.js';
 import {
-  save, persist, ensureMissions, checkMissions, claimMissionSet, multiplier, claimDaily,
+  save, persist, ensureMissions, checkMissions, claimMissionSet, multiplier, claimDaily, hasProgress,
   collectMission, skipMission, skipCost, setBonus, missionSetReady, uncollected,
 } from '../data/save.js';
 import { audio } from '../game/audio.js';
@@ -9,7 +9,8 @@ import { challengeUrl, makeCard, shareText } from './share.js';
 import { fetchBoard, leaveDecision, postScore, renderRows, runnerName, scoreSavePlan } from './leaderboard.js';
 import { darDay, ghostFrom, huntWord, parseShareLink, routeForLink } from '../data/daily.js';
 import { STAKES, acceptBet, collectBets, createChallenge, fetchChallenge, finishBet, linkOrigin } from './challenges.js';
-import { install, device } from './install.js';
+import { install, device, standalone } from './install.js';
+import { applyProgress, carryCodeIntoInstall, cleanCode, createProgressCode, fetchProgress, prettyCode, restoreLink } from './transfer.js';
 import { onLoading } from '../game/loading.js';
 import { t, missionText, shareMessage, lang, LANGS, setLang } from '../i18n.js';
 
@@ -92,6 +93,9 @@ export class UI {
     this.remote = null; // the challenge as the server has it (recording, bet)
     this.bet = null; // a bet taken on this device, settled when the next run ends
     if (this.route.id) this.loadChallenge(this.route.id);
+    // progress carried over from another browser (the iPhone home-screen app opens with this)
+    const restore = cleanCode(this.params.get('restore'));
+    if (restore) this.restoreFromLink(restore);
     this.missionTick = 0;
     this.selIdx = Math.max(0, RUNNERS.findIndex((r) => r.id === save.runner));
     this.postedRunId = null;
@@ -208,6 +212,7 @@ export class UI {
     this.show(el);
     this.collectWinnings();
     this.maybeNudgeInstall();
+    this.maybeOfferRestore();
     // the pill glows once the browser says it can install; it leaves once installed
     this.offInstall?.();
     this.offInstall = install.on((ev) => {
@@ -1101,7 +1106,7 @@ export class UI {
           try { top = (await fetchBoard()).top || top; } catch { /* keep the card usable */ }
           this.lastTop = top;
           const message = err.code === 'NAME_TAKEN'
-            ? t('“{name}” is taken. Pick another name.', { name })
+            ? `${t('“{name}” is taken. Pick another name.', { name })} ${t('Is it yours from another browser? Bring your progress over in Settings → Move my progress.')}`
             : (err.message || t('Could not save your score'));
           this.paintBoard(root, top, null, message, run, true);
           this.paintDailyRank(root, null, true);
@@ -1699,6 +1704,7 @@ export class UI {
           <h2>${t(ios ? 'Add to Home Screen' : 'Install Kimbia!')}</h2>
           <p class="muted">${how === 'ios-open' ? t('iPhone can only add games to the home screen from Safari.') : t('Play from your home screen: full screen, quicker to open, and it works offline.')}</p>
           <ol class="install-steps">${steps.join('')}</ol>
+          ${ios ? `<div class="carry-box" data-carry><span class="spin"></span>${t('Packing your progress for the home-screen app…')}</div>` : ''}
           <div class="stack">
             ${canPoint ? `<button class="btn" data-act="point" data-click>👆 ${t('Show me where')}</button>` : ''}
             ${how === 'ios-open' ? `<button class="btn" data-act="copy" data-click>🔗 ${t('Copy game link')}</button>` : ''}
@@ -1712,7 +1718,7 @@ export class UI {
         el.remove();
         this.pointAtShare(how);
       } else if (act === 'copy') {
-        const url = location.origin + location.pathname;
+        const url = carried ? restoreLink(carried) : location.origin + location.pathname;
         try {
           await navigator.clipboard.writeText(url);
           this.toast('🔗', t('Link copied — now open Safari and paste it'));
@@ -1722,6 +1728,19 @@ export class UI {
       } else if (act === 'close' || e.target === el) el.remove();
     });
     this.overlay(el);
+    // iPhone keeps the home-screen app's storage apart from Safari's: carry the progress over
+    let carried = null;
+    if (ios) {
+      const box = el.querySelector('[data-carry]');
+      createProgressCode().then((code) => {
+        carried = code;
+        if (how !== 'ios-open') carryCodeIntoInstall(code);
+        box.innerHTML = `<b>🎒 ${t('Your progress comes too')}</b><span>${t('The home-screen app opens with your coins, runners and name. If it ever asks, your code is')}</span><code>${prettyCode(code)}</code>`;
+        box.classList.add('ready');
+      }, () => {
+        box.innerHTML = `<span>${t('Offline? Your progress stays in this browser — you can move it later in Settings → Move my progress.')}</span>`;
+      });
+    }
   }
 
   /** A bouncing arrow at the browser's Share (or •••) button, which lives outside the page. */
@@ -1769,6 +1788,121 @@ export class UI {
     }, 1800);
   }
 
+  /* ------------------------------------------------- moving progress */
+  /** Opened with ?restore=CODE: take the progress parked under it (once). */
+  async restoreFromLink(code) {
+    const strip = () => {
+      const url = new URL(location.href);
+      url.searchParams.delete('restore');
+      history.replaceState(history.state, '', url.pathname + url.search + url.hash);
+    };
+    if (save.restoredCode === code) return strip();
+    let data;
+    try {
+      data = await fetchProgress(code);
+    } catch {
+      return strip(); // expired or offline: play on with what's here
+    }
+    if (!hasProgress()) return applyProgress(data, code);
+    this.confirmRestore(data, code, strip);
+  }
+
+  /** This browser already has progress: ask before swapping it for the incoming one. */
+  confirmRestore(data, code, onKeep = () => {}) {
+    const el = $(`
+      <div class="screen modal-wrap scrim-full">
+        <div class="panel modal restore-card">
+          <div style="font-size:52px">🎒</div>
+          <h2>${t('Bring your progress over?')}</h2>
+          <div class="restore-cmp">
+            <div><span>${t('Incoming')}</span><b>${esc(data.name || t('Runner'))}</b><em><span class="seed"></span>${fmt(data.seeds ?? 0)} · ${t('best {n}', { n: fmt(data.best ?? 0) })}</em></div>
+            <div><span>${t('On this app now')}</span><b>${esc(save.name || t('Runner'))}</b><em><span class="seed"></span>${fmt(save.seeds ?? 0)} · ${t('best {n}', { n: fmt(save.best ?? 0) })}</em></div>
+          </div>
+          <div class="stack">
+            <button class="btn" data-act="take" data-click>${t('Use the incoming progress')}</button>
+            <button class="btn ghost" data-act="keep" data-click>${t('Keep this one')}</button>
+          </div>
+        </div>
+      </div>`);
+    el.addEventListener('click', (e) => {
+      const act = e.target.closest('[data-act]')?.dataset.act;
+      if (act === 'take') applyProgress(data, code);
+      else if (act === 'keep') {
+        save.restoredCode = code; // don't ask again on the next launch
+        persist();
+        el.remove();
+        onKeep();
+      }
+    });
+    this.overlay(el);
+  }
+
+  /**
+   * A brand-new home-screen app on iPhone (normally restored from its start link) asks once
+   * whether the player has progress elsewhere, in case the link didn't carry it.
+   */
+  maybeOfferRestore() {
+    if (device.platform !== 'ios' || !standalone() || save.restoreAsked || hasProgress() || this.params.get('restore')) return;
+    save.restoreAsked = true;
+    persist();
+    setTimeout(() => this.progressSheet(true), 900);
+  }
+
+  /** Settings → Move my progress: get a code here, or type one from elsewhere. */
+  progressSheet(welcome = false) {
+    const el = $(`
+      <div class="screen modal-wrap scrim-full">
+        <div class="panel modal progress-card">
+          <div style="font-size:48px">${welcome ? '👋' : '📦'}</div>
+          <h2>${welcome ? t('Karibu to the app!') : t('Move my progress')}</h2>
+          <p class="muted">${welcome
+            ? t('Played in Safari before? Type the code from Safari (Settings → Move my progress) to bring your coins, runners and name here.')
+            : t('Take your coins, runners, missions and name to another browser or to the home-screen app. Codes last 7 days.')}</p>
+          ${welcome ? '' : `<button class="btn teal" data-act="get" data-click>${t('Get my code')}</button><div class="code-out" hidden></div>`}
+          <div class="code-in">
+            <input class="name-input" data-code maxlength="9" placeholder="ABCD-2345" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+            <button class="btn" data-act="use" data-click>${t('Restore')}</button>
+          </div>
+          <div class="stack"><button class="btn ghost" data-act="close" data-click>${welcome ? t('Start fresh') : t('Done')}</button></div>
+        </div>
+      </div>`);
+    el.addEventListener('click', async (e) => {
+      const act = e.target.closest('[data-act]')?.dataset.act;
+      if (act === 'close' || e.target === el) return el.remove();
+      if (act === 'get') {
+        const out = el.querySelector('.code-out');
+        const btn = e.target.closest('button');
+        btn.disabled = true;
+        try {
+          const code = await createProgressCode();
+          out.hidden = false;
+          out.innerHTML = `<code>${prettyCode(code)}</code><span>${t('Type this code in the other browser, or open this link there:')}</span><button class="link-copy" data-act="copylink">${esc(restoreLink(code).replace(/^https?:\/\//, ''))}</button>`;
+          out.dataset.code = code;
+        } catch (err) {
+          this.toast('⚠️', esc(err.message));
+        } finally {
+          btn.disabled = false;
+        }
+      } else if (act === 'copylink') {
+        const link = restoreLink(el.querySelector('.code-out').dataset.code);
+        navigator.clipboard?.writeText(link).then(() => this.toast('🔗', t('Link copied')), () => {});
+      } else if (act === 'use') {
+        const code = cleanCode(el.querySelector('[data-code]').value);
+        if (!code) return this.toast('✏️', t('Codes look like ABCD-2345.'));
+        try {
+          const data = await fetchProgress(code);
+          el.remove();
+          if (hasProgress()) this.confirmRestore(data, code);
+          else applyProgress(data, code);
+        } catch (err) {
+          this.toast('⚠️', esc(err.message));
+        }
+      }
+    });
+    this.overlay(el);
+    if (welcome) setTimeout(() => el.querySelector('[data-code]')?.focus(), 400);
+  }
+
   settings() {
     const row = (key, en) => { const label = t(en); return `<div class="toggle-row"><span>${label}</span><button class="switch ${save[key] ? 'on' : ''}" data-key="${key}" aria-label="${label}"></button></div>`; };
     const el = $(`
@@ -1781,6 +1915,7 @@ export class UI {
           <div class="toggle-row"><span>${t('✨ Graphics')}</span><div class="seg" role="group">${['auto', 'high', 'low'].map((q) => `<button class="${(save.quality ?? 'auto') === q ? 'on' : ''}" data-q="${q}">${t(q[0].toUpperCase() + q.slice(1))}</button>`).join('')}</div></div>
           <div class="toggle-row"><span>${t('🌍 Language')}</span><div class="seg" role="group">${Object.entries(LANGS).map(([k, n]) => `<button class="${lang === k ? 'on' : ''}" data-lang="${k}">${n}</button>`).join('')}</div></div>
           ${install.offered ? `<div class="toggle-row"><span>${t('📲 Play from your home screen')}</span><button class="btn small" data-act="install" data-click>${t('Install')}</button></div>` : ''}
+          <div class="toggle-row"><span>${t('📦 Move my progress')}</span><button class="btn small ghost" data-act="progress" data-click>${t('Open')}</button></div>
           <div style="margin:18px 0 6px" class="muted">${t('Your runner name (shown on challenges)')}</div>
           <input class="name-input" maxlength="16" placeholder="${t('e.g. Zuri')}" value="${esc(save.name)}" />
           <div class="stack"><button class="btn" data-act="close" data-click>${t('Done')}</button></div>
@@ -1790,6 +1925,7 @@ export class UI {
       </div>`);
     el.addEventListener('click', (e) => {
       if (e.target.closest('[data-act=install]')) return this.installApp();
+      if (e.target.closest('[data-act=progress]')) return this.progressSheet();
       const lb = e.target.closest('[data-lang]');
       if (lb) return setLang(lb.dataset.lang);
       const qb = e.target.closest('[data-q]');
