@@ -5,9 +5,10 @@ import {
   collectMission, skipMission, skipCost, setBonus, missionSetReady, uncollected,
 } from '../data/save.js';
 import { audio } from '../game/audio.js';
-import { challengeUrl, makeCard, shareText, whatsAppHref } from './share.js';
+import { challengeUrl, makeCard, shareText } from './share.js';
 import { fetchBoard, leaveDecision, postScore, renderRows, runnerName, scoreSavePlan } from './leaderboard.js';
 import { darDay, ghostFrom, huntWord, parseShareLink, routeForLink } from '../data/daily.js';
+import { STAKES, acceptBet, collectBets, createChallenge, fetchChallenge, finishBet, linkOrigin } from './challenges.js';
 import { install } from './install.js';
 import { onLoading } from '../game/loading.js';
 import { t, missionText, shareMessage, lang, LANGS, setLang } from '../i18n.js';
@@ -82,10 +83,13 @@ export class UI {
     this.hud = null;
     this.params = new URLSearchParams(location.search);
     this.link = parseShareLink(this.params);
-    this.route = routeForLink(this.link, darDay());
+    this.route = routeForLink(this.link);
     this.challenge = this.route.challenge;
-    this.ghostRun = ghostFrom(this.route.friend, null);
-    if (!this.ghostRun) this.loadYesterday();
+    // the shadow runner only ever comes from a friend's challenge
+    this.ghostRun = ghostFrom(this.route.friend);
+    this.remote = null; // the challenge as the server has it (recording, bet)
+    this.bet = null; // a bet taken on this device, settled when the next run ends
+    if (this.route.id) this.loadChallenge(this.route.id);
     this.missionTick = 0;
     this.selIdx = Math.max(0, RUNNERS.findIndex((r) => r.id === save.runner));
     this.postedRunId = null;
@@ -168,10 +172,7 @@ export class UI {
           <div class="sub">${t('SPIRIT OF THE SERENGETI')}</div>
         </div>
         <div class="title-bottom">
-          ${this.challenge ? `<div class="challenge"><span style="font-size:28px">🔥</span><div>${this.challenge.sameDay === false
-            ? t("{name} ran that on an earlier route. Today's trail is a new one.", { name: `<b>${esc(this.challenge.name)}</b>` })
-            : t("{name} challenges you to beat {score} on today's route!", { name: `<b>${esc(this.challenge.name)}</b>`, score: `<b>${fmt(this.challenge.score)}</b>` })}</div></div>` : ''}
-          ${this.ghostRun ? `<div class="best-line">${t('{name} is a faint runner ahead — pass them.', { name: esc(this.ghostRun.name) })}</div>` : ''}
+          ${this.challengeCardHtml()}
           ${save.best ? `<div class="best-line">${t('Best run {score} pts · {dist}m', { score: `<b>${fmt(save.best)}</b>`, dist: `<b>${fmt(save.bestDistance)}` })}</b></div>` : ''}
           <button class="start-chip" data-act="journey" data-click>
             <span class="flag">${COUNTRIES[start.country].flag}</span>
@@ -200,8 +201,10 @@ export class UI {
       else if (act === 'journey') this.journey();
       else if (act === 'board') this.showBoard();
       else if (act === 'install') this.installApp();
+      else if (act === 'take-bet') this.takeBet(e.target.closest('button'));
     });
     this.show(el);
+    this.collectWinnings();
     // the pill glows once the browser says it can install; it leaves once installed
     this.offInstall?.();
     this.offInstall = install.on((ev) => {
@@ -296,25 +299,12 @@ export class UI {
   startRun() {
     audio.unlock();
     this.game.linkedStart = this.route.startRegion;
+    this.game.linkedRoute = this.route.route;
     this.game.setGhost(this.ghostRun);
     this.show($('<div class="screen" style="pointer-events:none"></div>'));
     this.buildHud();
     this.game.start();
     this.missionTick = 0;
-  }
-
-  /** Yesterday's best, when the server has one. A friend link already set the ghost. */
-  async loadYesterday() {
-    try {
-      const data = await fetchBoard('daily');
-      if (this.route.friend) return;
-      const ghost = ghostFrom(null, data.yesterday);
-      if (!ghost) return;
-      this.ghostRun = ghost;
-      this.game.setGhost(ghost);
-    } catch {
-      /* no ghost rather than a made-up one */
-    }
   }
 
   buildHud() {
@@ -612,7 +602,9 @@ export class UI {
         e.target.closest('button').textContent = save.music ? t('🔊 Music') : t('🔇 Music');
       } else if (act === 'home') {
         el.remove();
-        this.bankRun(this.game.summary());
+        const run = this.game.summary();
+        this.bankRun(run);
+        if (this.bet) this.settleBet(null, run); // leaving a bet run counts as its finish
         this.title();
       }
     });
@@ -729,6 +721,7 @@ export class UI {
             <div class="lb-slot"><p class="muted">${t('Saving your run…')}</p></div>
           </div>
           <div class="story-unlock"><span class="e">${COUNTRIES[reg.country].flag}</span><div><b>${esc(reg.name)} · ${esc(reg.title)}</b><br><span class="muted">${next ? t('Next: {place}', { place: `${COUNTRIES[next.country].flag} ${esc(next.name)}` }) : t('You crossed all three countries!')}</span></div></div>
+          <div class="bet-slot"></div>
           <div class="chal-slot"></div>
           <div style="display:flex;flex-direction:column;gap:12px">
             <button class="btn big" type="button" data-act="again">${t('↻ Run again')}</button>
@@ -746,7 +739,7 @@ export class UI {
       } else if (act === 'post') {
         this.postRun(el, run);
       } else if (act === 'share') {
-        this.shareOnWhatsApp(run);
+        this.challengeSheet(run);
       } else if (act === 'board') {
         this.showBoard();
       }
@@ -755,6 +748,212 @@ export class UI {
     this.cardFor(run); // draw the score card now, so the share can happen inside the tap
     this.recordFinishedRun(el, run);
     this.mountChallenges(el.querySelector('.chal-slot'));
+    if (this.bet) this.settleBet(el, run);
+  }
+
+  /* ------------------------------------------------------ friend challenges */
+  /** Opens a friend's challenge from the server: their route, shadow-runner recording and bet. */
+  async loadChallenge(id) {
+    try {
+      const ch = await fetchChallenge(id);
+      this.remote = ch;
+      this.route = { ...this.route, id: ch.id, route: ch.route, startRegion: ch.startRegion };
+      this.challenge = { name: ch.name, score: ch.score };
+      this.ghostRun = ghostFrom(ch);
+      if (this.screen?.classList.contains('title')) this.title();
+    } catch {
+      /* the link's own numbers still make a challenge, just without the recording or bet */
+    }
+  }
+
+  challengeCardHtml() {
+    if (!this.challenge) return '';
+    const ch = this.remote;
+    const name = `<b>${esc(this.challenge.name)}</b>`;
+    let bet = '';
+    if (ch?.stake > 0) {
+      const own = (save.betsOut ?? []).includes(ch.id);
+      const pot = `<b>${fmt(ch.stake * 2)}</b>&nbsp;<span class="seed"></span>`;
+      if (this.bet?.id === ch.id) {
+        bet = `<div class="bet-line on">🤝 ${t('Bet on! Beat {score} to win {pot}', { score: `<b>${fmt(ch.score)}</b>`, pot })}</div>`;
+      } else if (own) {
+        bet = `<div class="bet-line">${t('Your bet: {stake} coins on this run', { stake: fmt(ch.stake) })}</div>`;
+      } else if (ch.status === 'open') {
+        const short = save.seeds < ch.stake;
+        bet = `
+          <div class="bet-line">${t('Bet {stake} coins · winner takes {pot}', { stake: `<b>${fmt(ch.stake)}</b>`, pot })}</div>
+          <button class="btn small flame bet-take" data-act="take-bet" data-click ${short ? 'disabled' : ''}>🤝 ${t('Take the bet')} · ${fmt(ch.stake)} <span class="seed"></span></button>
+          ${short ? `<div class="bet-note">${t('You need {n} coins to take this bet.', { n: fmt(ch.stake) })}</div>` : ''}`;
+      } else {
+        bet = `<div class="bet-line">${ch.rivalName ? t('{name} already took this bet — race the shadow anyway.', { name: esc(ch.rivalName) }) : t('This bet is closed — race the shadow anyway.')}</div>`;
+      }
+    }
+    return `
+      <div class="challenge challenge-card">
+        <span class="ch-ico">🔥</span>
+        <div class="ch-body">
+          <div>${t('{name} challenges you to beat {score}!', { name, score: `<b>${fmt(this.challenge.score)}</b>` })}</div>
+          ${this.ghostRun ? `<div class="ch-sub">👻 ${t('Their shadow runner races you on the same route.')}</div>` : ''}
+          ${bet}
+        </div>
+      </div>`;
+  }
+
+  async takeBet(btn) {
+    const ch = this.remote;
+    if (!ch || this.bet) return;
+    btn.disabled = true;
+    try {
+      await acceptBet(ch.id, save.name || t('A friend'));
+      this.bet = { id: ch.id, stake: ch.stake, pot: ch.stake * 2, score: ch.score, name: ch.name };
+      audio.buy();
+      this.toast('🤝', t('Bet on! Beat {score} to win {pot} coins.', { score: fmt(ch.score), pot: fmt(ch.stake * 2) }));
+      this.startRun();
+    } catch (err) {
+      if (err.code === 'TAKEN' || err.code === 'OWN') this.remote = { ...ch, status: 'taken' };
+      this.toast('⚠️', esc(err.message));
+      this.title();
+    }
+  }
+
+  /** Reports a bet run and shows who took the pot. `root` is the results card (or null). */
+  async settleBet(root, run) {
+    const bet = this.bet;
+    this.bet = null;
+    const slot = root?.querySelector('.bet-slot');
+    if (slot) slot.innerHTML = `<div class="bet-result pending">🤝 ${t('Checking the bet…')}</div>`;
+    try {
+      const res = await finishBet(bet.id, run.score);
+      if (this.remote?.id === bet.id) this.remote = { ...this.remote, status: 'settled' };
+      const won = res.winner === 'rival';
+      const html = won
+        ? `<div class="bet-result won">🏆 <div><b>${t('You won the bet!')}</b><span>${t('+{pot} coins from {name}', { pot: fmt(res.pot), name: esc(res.hostName) })}</span></div></div>`
+        : `<div class="bet-result lost">😬 <div><b>${t('{name} keeps the pot', { name: esc(res.hostName) })}</b><span>${t('You needed more than {score}.', { score: fmt(res.hostScore) })}</span></div></div>`;
+      if (slot?.isConnected) {
+        slot.innerHTML = html;
+        root.querySelectorAll('.bank').forEach((b) => (b.textContent = fmt(save.seeds)));
+      }
+      else this.toast(won ? '🏆' : '😬', won ? t('You won the bet! +{pot} coins', { pot: fmt(res.pot) }) : t('{name} keeps the pot', { name: esc(res.hostName) }));
+      if (won) audio.buy();
+    } catch (err) {
+      if (slot?.isConnected) slot.innerHTML = `<div class="bet-result lost">⚠️ <div><b>${t('The bet could not be settled')}</b><span>${esc(err.message)}</span></div></div>`;
+    }
+  }
+
+  /** Winnings, refunds and news from your own bets, collected quietly in the background. */
+  async collectWinnings() {
+    if (this.collecting || Date.now() - (this.collectedAt ?? 0) < 20000) return;
+    this.collecting = true;
+    try {
+      const payouts = await collectBets();
+      this.collectedAt = Date.now();
+      payouts.forEach((p, i) => setTimeout(() => {
+        if (p.kind === 'won') this.toast('🏆', `<b>${t('{name} could not beat you!', { name: esc(p.rivalName) })}</b><br>${t('+{n} coins from your bet', { n: fmt(p.amount) })}`, 4200);
+        else if (p.kind === 'forfeit') this.toast('🏆', `<b>${t('{name} never finished your challenge', { name: esc(p.rivalName ?? '') })}</b><br>${t('+{n} coins from your bet', { n: fmt(p.amount) })}`, 4200);
+        else if (p.kind === 'refund') this.toast('↩️', t('Nobody took your bet — {n} coins back', { n: fmt(p.amount) }), 4200);
+        else if (p.kind === 'lost') this.toast('😬', t('{name} beat your challenge and took the pot', { name: esc(p.rivalName) }), 4200);
+      }, i * 4400));
+      if (payouts.some((p) => p.amount > 0)) {
+        audio.buy();
+        if (this.screen?.classList.contains('title')) {
+          const chip = this.screen.querySelector('.title-top .chip span:last-child');
+          if (chip) chip.textContent = fmt(save.seeds);
+        }
+      }
+    } catch {
+      /* try again next time */
+    } finally {
+      this.collecting = false;
+    }
+  }
+
+  /**
+   * The challenge sheet: send your run to a friend, with an optional coin bet. A free
+   * challenge is posted the moment the sheet opens, so Send works in one tap; a bet is locked
+   * in first (the coins leave your bank), then sent.
+   */
+  challengeSheet(run) {
+    const base = { ...run, runner: run.runner || save.runner };
+    const links = new Map(); // stake → link
+    let stake = 0;
+    const el = $(`
+      <div class="screen modal-wrap scrim-full">
+        <div class="panel modal challenge-sheet">
+          <h2>${t('Challenge a friend')}</h2>
+          <div class="muted">${t('They race your shadow on this exact route.')}</div>
+          ${save.name ? '' : `<input class="name-input" data-name maxlength="16" placeholder="${t('Your runner name')}" autocomplete="nickname">`}
+          <div class="bet-head"><b>${t('Bet coins?')}</b><span>${t('Winner takes all')}</span></div>
+          <div class="stakes">
+            ${STAKES.map((n) => `<button class="stake ${n === 0 ? 'on' : ''}" data-stake="${n}" ${n > save.seeds ? 'disabled' : ''}>${n ? `${fmt(n)}<span class="seed"></span>` : t('Free')}</button>`).join('')}
+          </div>
+          <div class="pot-line" data-pot></div>
+          <div class="stack">
+            <button class="btn teal big send" data-send>${ICON.share.replace('<svg', '<svg width="24" height="24"')} ${t('Send on WhatsApp')}</button>
+            <button class="btn ghost" data-close data-click>${t('Not now')}</button>
+          </div>
+        </div>
+      </div>`);
+    const send = el.querySelector('[data-send]');
+    const pot = el.querySelector('[data-pot]');
+    const nameOf = () => runnerName(el.querySelector('[data-name]')?.value ?? '') || save.name;
+    const paint = () => {
+      el.querySelectorAll('[data-stake]').forEach((b) => b.classList.toggle('on', Number(b.dataset.stake) === stake));
+      const ready = links.has(stake);
+      pot.innerHTML = stake
+        ? `${t('You put in {n}. If they take the bet and lose, you win {pot}.', { n: `<b>${fmt(stake)}</b>`, pot: `<b>${fmt(stake * 2)}</b>` })}`
+        : t('Just for bragging rights.');
+      const label = stake && !ready ? `🔒 ${t('Lock bet')} · ${fmt(stake)} <span class="seed"></span>` : `${ICON.share.replace('<svg', '<svg width="24" height="24"')} ${t('Send on WhatsApp')}`;
+      send.innerHTML = label;
+      send.classList.toggle('flame', !!stake && !ready);
+      send.classList.toggle('teal', !stake || ready);
+    };
+    const make = async (n) => {
+      const name = nameOf();
+      if (!name) throw Object.assign(new Error(t('Pick a runner name first.')), { code: 'NAME' });
+      if (!save.name) {
+        save.name = name;
+        persist();
+      }
+      const { id } = await createChallenge(base, n, name);
+      const url = challengeUrl({ ...base, name, challengeId: id }).replace(/^https?:\/\/[^/]+/, linkOrigin());
+      links.set(n, url);
+      return url;
+    };
+    // a free challenge, ready before the first tap
+    if (save.name) make(0).then(paint, () => {});
+    el.addEventListener('click', async (e) => {
+      if (e.target.closest('[data-close]') || e.target === el) return el.remove();
+      const chip = e.target.closest('[data-stake]');
+      if (chip && !chip.disabled) {
+        stake = Number(chip.dataset.stake);
+        audio.click();
+        return paint();
+      }
+      if (!e.target.closest('[data-send]') || send.disabled) return;
+      const url = links.get(stake);
+      if (url) {
+        this.shareOnWhatsApp({ ...base, stake }, url);
+        return;
+      }
+      send.disabled = true;
+      try {
+        await make(stake);
+        if (stake) {
+          audio.buy();
+          el.querySelectorAll('[data-stake]').forEach((b) => (b.disabled = Number(b.dataset.stake) !== stake));
+          this.toast('🔒', t('Bet locked: {n} coins. Now send it!', { n: fmt(stake) }));
+        } else this.shareOnWhatsApp(base, links.get(0));
+      } catch (err) {
+        if (stake) this.toast('⚠️', `${esc(err.message)}<br>${t('Bets need a connection.')}`);
+        else if (err.code === 'NAME') this.toast('✏️', esc(err.message));
+        else this.shareOnWhatsApp(base); // offline: the plain link still makes a challenge
+      } finally {
+        send.disabled = false;
+        paint();
+      }
+    });
+    paint();
+    this.overlay(el);
   }
 
   shareCardHtml(run) {
@@ -797,20 +996,21 @@ export class UI {
    * Shares the score card image with the challenge link. Phones that can share files open the
    * share sheet (WhatsApp is right there); anything else falls back to a WhatsApp text link.
    */
-  async shareOnWhatsApp(run) {
+  async shareOnWhatsApp(run, url) {
     const r = { ...run, name: save.name || run.name, runner: run.runner || save.runner };
+    url ??= challengeUrl(r);
     const card = this.cardFor(r);
     // usually ready already; waiting briefly keeps us inside the tap that allows sharing
     const file = card.file ?? (await Promise.race([card.ready, new Promise((ok) => setTimeout(ok, 900))]));
     if (file && navigator.canShare?.({ files: [file] })) {
       try {
-        await navigator.share({ files: [file], text: `${shareMessage(r, shareText(r))} ${challengeUrl(r)}`, title: 'KIMBIA!' });
+        await navigator.share({ files: [file], text: `${shareMessage(r, shareText(r))} ${url}`, title: 'KIMBIA!' });
         return;
       } catch (e) {
         if (e?.name === 'AbortError') return; // closed the sheet
       }
     }
-    const href = whatsAppHref(r);
+    const href = `https://wa.me/?text=${encodeURIComponent(`${shareMessage(r, shareText(r))} ${url}`)}`;
     const opened = window.open(href, '_blank', 'noopener,noreferrer');
     if (!opened) {
       navigator.clipboard?.writeText(href).then(

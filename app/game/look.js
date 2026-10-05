@@ -119,7 +119,7 @@ export class Look {
   buildComposer() {
     const r = this.renderer;
     const size = r.getSize(new THREE.Vector2());
-    const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: r.getPixelRatio() < 2 ? 2 : 0 });
+    const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: r.getPixelRatio() < 2 ? 2 : 0, stencilBuffer: true });
     this.composer = new EffectComposer(r, target);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.55, 0.55, 0.86);

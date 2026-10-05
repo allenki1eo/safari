@@ -264,53 +264,154 @@ export function makeHornbill() {
  * ========================================================================== */
 const leafCols = [0x5f7d2c, 0x6f8c33, 0x56722a, 0x7b9638];
 
+/*
+ * Foliage is built from knobbly leaf clumps: jittered icospheres whose vertices carry their own
+ * shading (sunlit above, deep green underneath, a little variation face to face). bakeRigid
+ * keeps that shading and tints it with the clump's material colour.
+ */
+const CLUMPS = [];
+function clumpGeometry() {
+  if (CLUMPS.length < 4) {
+    const geo = new THREE.IcosahedronGeometry(1, 1);
+    const pos = geo.attributes.position;
+    const seed = CLUMPS.length * 17.3;
+    const jit = (x, y, z) => {
+      const h = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719 + seed) * 43758.5453;
+      return h - Math.floor(h);
+    };
+    const v = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i);
+      const k = 0.78 + jit(v.x, v.y, v.z) * 0.38; // same jitter for shared corners: no cracks
+      pos.setXYZ(i, v.x * k, v.y * k * (v.y < 0 ? 0.7 : 1), v.z * k);
+    }
+    const shade = [];
+    for (let f = 0; f < pos.count; f += 3) {
+      const cy = (pos.getY(f) + pos.getY(f + 1) + pos.getY(f + 2)) / 3;
+      const tone = 0.55 + 0.55 * THREE.MathUtils.clamp((cy + 0.7) / 1.6, 0, 1) + (jit(f, cy, 3.1) - 0.5) * 0.16;
+      for (let k = 0; k < 3; k++) shade.push(tone, tone, tone);
+    }
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(shade, 3));
+    geo.computeVertexNormals();
+    CLUMPS.push(geo);
+  }
+  return CLUMPS[(Math.random() * CLUMPS.length) | 0];
+}
+function leafClump(color, sx, sy, sz, x, y, z) {
+  const m = mesh(clumpGeometry(), mat(color), sx, sy, sz, x, y, z);
+  m.rotation.y = rand(0, Math.PI * 2);
+  return m;
+}
+
+const UP = new THREE.Vector3(0, 1, 0);
+/** A tapering limb from `a` to `b` (radii r0 at the base, r1 at the tip). */
+function limb(material, a, b, r0, r1 = r0 * 0.6) {
+  const dir = new THREE.Vector3().subVectors(b, a);
+  const len = dir.length();
+  const m = new THREE.Mesh(taper(r1 / r0, 6), material);
+  m.scale.set(r0, len, r0);
+  m.position.copy(a).addScaledVector(dir, 0.5);
+  m.quaternion.setFromUnitVectors(UP, dir.normalize());
+  return m;
+}
+
+/**
+ * The umbrella thorn: a trunk that forks into a few rising limbs, each spreading into a flat,
+ * layered crown of leaf clumps — the silhouette of the savanna.
+ */
 export function makeAcacia(scale = 1) {
   const g = new Group();
-  const bark = mat(0x5b3d26);
-  const h = rand(3.2, 4.4);
-  const lean = rand(-0.12, 0.12);
-  const trunk = mesh(taper(0.55), bark, 0.22, h, 0.22, 0, h / 2, 0);
-  trunk.rotation.z = lean;
-  g.add(trunk);
-  const top = new THREE.Vector3(-Math.sin(lean) * h, h, 0);
-  const n = 3 + ((Math.random() * 2) | 0);
+  const bark = mat(pick([0x5b3d26, 0x4f3524, 0x65452c]));
+  const h = rand(2.0, 2.8); // fork height
+  const lean = rand(-0.25, 0.25);
+  const base = new THREE.Vector3(0, 0, 0);
+  const fork = new THREE.Vector3(lean * h, h, rand(-0.2, 0.2));
+  g.add(limb(bark, base, fork, 0.26, 0.17));
+  const crownY = h + rand(1.6, 2.4);
+  const spread = rand(2.4, 3.3);
+  const leaf = pick(leafCols);
+  const leaf2 = pick(leafCols);
+  const nLimbs = 2 + ((Math.random() * 2) | 0);
+  const a0 = rand(0, Math.PI * 2);
+  for (let i = 0; i < nLimbs; i++) {
+    const a = a0 + (i / nLimbs) * Math.PI * 2 + rand(-0.4, 0.4);
+    const r = spread * rand(0.45, 0.7);
+    const tip = new THREE.Vector3(fork.x + Math.cos(a) * r, crownY - rand(0.1, 0.5), fork.z + Math.sin(a) * r);
+    g.add(limb(bark, fork, tip, 0.15, 0.07));
+    // twigs fanning out under the crown
+    for (let k = 0; k < 2; k++) {
+      const b = a + rand(-0.9, 0.9);
+      const tw = new THREE.Vector3(tip.x + Math.cos(b) * rand(0.6, 1.2), crownY + rand(-0.1, 0.15), tip.z + Math.sin(b) * rand(0.6, 1.2));
+      g.add(limb(bark, tip, tw, 0.06, 0.03));
+    }
+  }
+  // the flat crown: a wide ring of clumps, a fuller middle and a few sunlit tufts on top
+  const n = 7 + ((Math.random() * 4) | 0);
   for (let i = 0; i < n; i++) {
-    const a = (i / n) * Math.PI * 2 + rand(0, 1);
-    const len = rand(1.2, 2.0);
-    const br = mesh(taper(0.5), bark, 0.09, len, 0.09);
-    br.position.set(top.x + Math.cos(a) * len * 0.35, top.y + len * 0.35, Math.sin(a) * len * 0.35);
-    br.rotation.set(Math.sin(a) * 0.9, 0, -Math.cos(a) * 0.9);
-    g.add(br);
+    const a = (i / n) * Math.PI * 2 + rand(-0.2, 0.2);
+    const r = spread * rand(0.55, 0.95);
+    g.add(leafClump(i % 3 ? leaf : leaf2, rand(1.0, 1.5), rand(0.38, 0.55), rand(1.0, 1.5), fork.x + Math.cos(a) * r, crownY + rand(-0.15, 0.2), fork.z + Math.sin(a) * r * 0.85));
   }
-  const canopyY = top.y + rand(1.0, 1.4);
-  const leaf = mat(pick(leafCols));
-  const leaf2 = mat(pick(leafCols));
-  g.add(mesh(G.ico1, leaf, rand(2.6, 3.4), 0.55, rand(2.2, 3.0), top.x, canopyY, 0));
-  for (let i = 0; i < 4; i++) {
+  g.add(leafClump(leaf, spread * 0.75, 0.55, spread * 0.65, fork.x, crownY + 0.1, fork.z));
+  for (let i = 0; i < 3; i++) {
     const a = rand(0, Math.PI * 2);
-    const r = rand(1.2, 2.2);
-    g.add(mesh(G.ico1, i % 2 ? leaf2 : leaf, rand(1.1, 1.7), rand(0.35, 0.5), rand(1.0, 1.5), top.x + Math.cos(a) * r, canopyY + rand(-0.15, 0.25), Math.sin(a) * r));
+    const r = spread * rand(0.1, 0.5);
+    g.add(leafClump(leaf2, rand(0.8, 1.1), 0.35, rand(0.8, 1.1), fork.x + Math.cos(a) * r, crownY + 0.45, fork.z + Math.sin(a) * r));
   }
-  g.add(blobShadow(7, 6));
+  g.add(blobShadow(spread * 2.4, spread * 2.1));
   g.scale.setScalar(scale);
   return g;
 }
 
+/** A turned bottle-shaped trunk with bark grooves, for the baobab. */
+let baobabGeo;
+function baobabTrunk() {
+  if (!baobabGeo) {
+    const prof = [];
+    for (let i = 0; i <= 10; i++) {
+      const t = i / 10;
+      // wide root flare, a fat belly, then a neck where the branches start
+      const r = 1.25 - 0.35 * t + 0.25 * Math.sin(t * Math.PI) - (t > 0.85 ? (t - 0.85) * 1.6 : 0) + (t < 0.08 ? (0.08 - t) * 4 : 0);
+      prof.push(new THREE.Vector2(r, t));
+    }
+    const geo = new THREE.LatheGeometry(prof, 14);
+    const pos = geo.attributes.position;
+    const col = [];
+    for (let i = 0; i < pos.count; i++) {
+      const ang = Math.atan2(pos.getZ(i), pos.getX(i));
+      const groove = 0.9 + 0.1 * Math.sin(ang * 9 + pos.getY(i) * 2.0); // vertical folds in the bark
+      pos.setX(i, pos.getX(i) * groove);
+      pos.setZ(i, pos.getZ(i) * groove);
+      const k = 0.78 + 0.28 * groove;
+      col.push(k, k, k);
+    }
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    geo.computeVertexNormals();
+    baobabGeo = geo;
+  }
+  return baobabGeo;
+}
+
+/** The baobab: a swollen grey trunk with stubby, root-like branches and a sparse crown. */
 export function makeBaobab(scale = 1) {
   const g = new Group();
   const bark = mat(pick([0x9b8775, 0x8f7d6b, 0xa58f7a]));
-  const h = rand(3.6, 4.6);
-  g.add(mesh(taper(0.62, 9), bark, 1.15, h, 1.15, 0, h / 2, 0));
-  g.add(mesh(G.ico1, bark, 1.2, 0.6, 1.2, 0, 0.3, 0));
-  const top = h;
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2;
-    const len = rand(1.0, 1.8);
-    const br = mesh(taper(0.4), bark, 0.18, len, 0.18);
-    br.position.set(Math.cos(a) * 0.5, top + len * 0.3, Math.sin(a) * 0.5);
-    br.rotation.set(Math.sin(a) * 0.8, 0, -Math.cos(a) * 0.8);
-    g.add(br);
-    g.add(mesh(G.ico, mat(pick(leafCols)), 0.5, 0.35, 0.5, Math.cos(a) * (0.5 + len * 0.6), top + len * 0.75, Math.sin(a) * (0.5 + len * 0.6)));
+  const h = rand(3.8, 4.8);
+  g.add(mesh(baobabTrunk(), bark, 1, h, 1, 0, 0, 0));
+  const top = new THREE.Vector3(0, h - 0.1, 0);
+  const n = 6 + ((Math.random() * 3) | 0);
+  const leaf = pick(leafCols);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + rand(-0.3, 0.3);
+    const len = rand(1.2, 2.0);
+    const tip = new THREE.Vector3(Math.cos(a) * (0.5 + len * 0.7), top.y + len * rand(0.45, 0.8), Math.sin(a) * (0.5 + len * 0.7));
+    const from = new THREE.Vector3(Math.cos(a) * 0.45, top.y, Math.sin(a) * 0.45);
+    g.add(limb(bark, from, tip, 0.22, 0.09));
+    // a forked tip with a little tuft of leaves
+    const b = a + rand(-0.7, 0.7);
+    const tw = new THREE.Vector3(tip.x + Math.cos(b) * 0.6, tip.y + rand(0.2, 0.5), tip.z + Math.sin(b) * 0.6);
+    g.add(limb(bark, tip, tw, 0.09, 0.04));
+    if (Math.random() < 0.7) g.add(leafClump(leaf, rand(0.45, 0.7), rand(0.3, 0.42), rand(0.45, 0.7), tw.x, tw.y + 0.1, tw.z));
   }
   g.add(blobShadow(5, 5));
   g.scale.setScalar(scale);
@@ -359,11 +460,22 @@ export function makeGrass(scale = 1) {
   return g;
 }
 
+/** A savanna bush: overlapping leaf clumps, darker at the base, sometimes in flower or berry. */
 export function makeBush(scale = 1) {
   const g = new Group();
-  const m = mat(pick([0x6b7f2f, 0x5c6f28, 0x7a8a3a]));
-  for (let i = 0; i < 4; i++) g.add(mesh(G.ico1, m, rand(0.5, 0.8), rand(0.4, 0.6), rand(0.5, 0.8), rand(-0.6, 0.6), 0.35, rand(-0.5, 0.5)));
-  if (Math.random() < 0.4) for (let i = 0; i < 5; i++) g.add(mesh(G.sphere, mat(pick([0xe94f37, 0xf6c445, 0xf2f2f2])), 0.07, 0.07, 0.07, rand(-0.7, 0.7), rand(0.5, 0.85), rand(-0.6, 0.6)));
+  const leaf = pick([0x6b7f2f, 0x5c6f28, 0x7a8a3a, 0x667a2c]);
+  const leaf2 = pick([0x6b7f2f, 0x7f9140, 0x58692a]);
+  const n = 4 + ((Math.random() * 4) | 0);
+  for (let i = 0; i < n; i++) {
+    const a = rand(0, Math.PI * 2);
+    const r = rand(0.1, 0.65);
+    const s = rand(0.45, 0.8);
+    g.add(leafClump(i % 2 ? leaf2 : leaf, s, s * rand(0.7, 0.95), s, Math.cos(a) * r, s * 0.55, Math.sin(a) * r));
+  }
+  if (Math.random() < 0.4) {
+    const c = pick([0xe94f37, 0xf6c445, 0xf2f2f2, 0xd96aa7]);
+    for (let i = 0; i < 7; i++) g.add(mesh(G.sphere, mat(c), 0.06, 0.06, 0.06, rand(-0.7, 0.7), rand(0.55, 0.95), rand(-0.6, 0.6)));
+  }
   g.scale.setScalar(scale);
   return g;
 }

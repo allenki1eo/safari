@@ -43,7 +43,8 @@ export function shareMessage(run, english) {
   if (lang !== 'sw') return english;
   const d = Math.max(0, Math.floor(Number(run?.distance) || 0)).toLocaleString();
   const rank = run?.rank ? ` (#${run.rank})` : '';
-  return `Nimekimbia ${d}m${rank} kwenye njia ya leo ya KIMBIA! Unaweza kunishinda?`;
+  const bet = run?.stake > 0 ? ` Nimeweka sarafu ${run.stake}, mshindi anachukua zote!` : '';
+  return `Nimekimbia ${d}m${rank} kwenye KIMBIA! Kimbia na kivuli changu kwenye njia ile ile. Unaweza kunishinda?${bet}`;
 }
 
 /* ------------------------------------------------------------------ interface */
@@ -167,6 +168,45 @@ const SW = {
   'Each mission pays seeds. Settle all three — finish them or skip them — to raise your multiplier and win the set bonus.':
     'Kila jukumu lina zawadi ya mbegu. Maliza au ruka yote matatu ili kuongeza kizidishi chako na kushinda bonasi ya seti.',
   Challenges: 'Changamoto',
+  'The Great Ruaha!': 'Mto Mkuu Ruaha!',
+  'Hop the logs and stones': 'Ruka kwenye magogo na mawe',
+  '{name} challenges you to beat {score}!': '{name} anakupa changamoto ya kushinda {score}!',
+  'Their shadow runner races you on the same route.': 'Kivuli chake kinakimbia nawe kwenye njia ile ile.',
+  'Bet on! Beat {score} to win {pot}': 'Dau limewekwa! Shinda {score} upate {pot}',
+  'Your bet: {stake} coins on this run': 'Dau lako: sarafu {stake} kwenye mbio hizi',
+  'Bet {stake} coins · winner takes {pot}': 'Dau la sarafu {stake} · mshindi anachukua {pot}',
+  'Take the bet': 'Kubali dau',
+  'You need {n} coins to take this bet.': 'Unahitaji sarafu {n} kukubali dau hili.',
+  '{name} already took this bet — race the shadow anyway.': '{name} ameshakubali dau hili — kimbia na kivuli hata hivyo.',
+  'This bet is closed — race the shadow anyway.': 'Dau hili limefungwa — kimbia na kivuli hata hivyo.',
+  'A friend': 'Rafiki',
+  'Bet on! Beat {score} to win {pot} coins.': 'Dau limewekwa! Shinda {score} upate sarafu {pot}.',
+  'Checking the bet…': 'Tunaangalia dau…',
+  'You won the bet!': 'Umeshinda dau!',
+  '+{pot} coins from {name}': '+{pot} sarafu kutoka kwa {name}',
+  '{name} keeps the pot': '{name} anachukua zote',
+  'You needed more than {score}.': 'Ulihitaji zaidi ya {score}.',
+  'You won the bet! +{pot} coins': 'Umeshinda dau! +{pot} sarafu',
+  'The bet could not be settled': 'Dau halikuweza kumalizwa',
+  '{name} could not beat you!': '{name} hakuweza kukushinda!',
+  '+{n} coins from your bet': '+{n} sarafu kutoka kwenye dau lako',
+  '{name} never finished your challenge': '{name} hakumaliza changamoto yako',
+  'Nobody took your bet — {n} coins back': 'Hakuna aliyekubali dau lako — sarafu {n} zimerudi',
+  '{name} beat your challenge and took the pot': '{name} ameshinda changamoto yako na kuchukua zote',
+  'Challenge a friend': 'Mpe rafiki changamoto',
+  'They race your shadow on this exact route.': 'Atakimbia na kivuli chako kwenye njia hii hii.',
+  'Your runner name': 'Jina lako la mkimbiaji',
+  'Bet coins?': 'Weka dau la sarafu?',
+  'Winner takes all': 'Mshindi anachukua zote',
+  Free: 'Bure',
+  'Send on WhatsApp': 'Tuma kwa WhatsApp',
+  'Not now': 'Sio sasa',
+  'You put in {n}. If they take the bet and lose, you win {pot}.': 'Unaweka {n}. Akikubali dau na akashindwa, unapata {pot}.',
+  'Just for bragging rights.': 'Kwa sifa tu.',
+  'Lock bet': 'Funga dau',
+  'Pick a runner name first.': 'Chagua jina la mkimbiaji kwanza.',
+  'Bet locked: {n} coins. Now send it!': 'Dau limefungwa: sarafu {n}. Sasa tuma!',
+  'Bets need a connection.': 'Dau linahitaji mtandao.',
   'Collect all': 'Kusanya zote',
   'Set bonus': 'Bonasi ya seti',
   Skipped: 'Imerukwa',

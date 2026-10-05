@@ -20,6 +20,10 @@ export const TRUCK_LEN = 7;
 export const KINDS = {
   log: { y0: 0, y1: 0.85, len: 0.9, pass: 'jump' },
   croc: { y0: 0, y1: 0.75, len: 2.6, pass: 'jump' },
+  // a hippo standing in the shallows: too big to jump, change lanes
+  hippo: { y0: 0, y1: 1.7, len: 2.8, pass: 'hard' },
+  // the Great Ruaha's channel itself (scenery: the lanes' water gaps do the colliding)
+  span: { y0: 0, y1: 0, len: 1, pass: 'none', decor: true },
   gate: { y0: 1.12, y1: 3.4, len: 0.4, pass: 'slide' },
   boulder: { y0: 0, y1: 2.7, len: 2.0, pass: 'hard' },
   mound: { y0: 0, y1: 2.9, len: 1.5, pass: 'hard' },
@@ -34,7 +38,8 @@ export const KINDS = {
   buffalo: { y0: 0, y1: 1.8, len: 2.2, pass: 'hard', charger: true },
   wildebeest: { y0: 0, y1: 1.7, len: 1.8, pass: 'hard', charger: true },
   lion: { y0: 0, y1: 1.55, len: 2.1, pass: 'hard', charger: true },
-  water: { y0: 0, y1: 0.42, len: 6, pass: 'jump', water: true },
+  // a river is a single jump: about half the distance a jump stays clear of it at the start
+  water: { y0: 0, y1: 0.42, len: 3.2, pass: 'jump', water: true },
   crossing: { y0: 0, y1: 3.2, len: 1.8, pass: 'hard', crosser: true },
   canoe: { y0: 0, y1: 1.6, len: 3.0, pass: 'hard' },
   scooter: { y0: 0, y1: 1.75, len: 1.9, pass: 'hard', charger: true },
@@ -218,6 +223,55 @@ export function makeChunk({ z, D, speed, region, wantTotem = false, wantBox = fa
       obs('crossing', 1, z + 6, { cross: { dir: fromLeft ? 1 : -1, v: rand(1.8, 2.6) } });
       line(randi(3), z - 4, z + 14);
       return { len: 14, ops, pat };
+    }
+    case 'greatRiver': {
+      // The Great Ruaha: the trail drops into the river and you cross it on floating logs and
+      // stepping stones, a jump between each. Every lane is its own crossing (so switching
+      // lanes is a choice, not a must), hippos block the odd stone and crocs bask on long logs.
+      const span = Math.round(Math.min(120, Math.max(60, speed * 3.6)));
+      const start = z + 6;
+      const gapMin = 2.2;
+      const gapMax = 3.0;
+      const platMid = Math.max(8, speed * 0.62);
+      const n = Math.max(3, Math.floor((span - gapMax) / (platMid + (gapMin + gapMax) / 2)));
+      const rafts = [];
+      const lanes = L.map((l) => {
+        const gaps = Array.from({ length: n + 1 }, () => rand(gapMin, gapMax));
+        const weights = Array.from({ length: n }, () => rand(0.7, 1.35));
+        const platTotal = span - gaps.reduce((a, b) => a + b, 0);
+        const wsum = weights.reduce((a, b) => a + b, 0);
+        const plats = [];
+        let w = start;
+        for (let i = 0; i <= n; i++) {
+          obs('water', l, w + gaps[i] / 2, { len: gaps[i], hidden: true });
+          w += gaps[i];
+          if (i === n) break;
+          const p = (platTotal * weights[i]) / wsum;
+          plats.push({ lane: l, from: w, to: w + p });
+          w += p;
+        }
+        return plats;
+      });
+      for (const plats of lanes) {
+        for (const pl of plats) {
+          const len = pl.to - pl.from;
+          const kind = len < 7 && rng() < 0.6 ? 'rock' : 'log';
+          rafts.push({ ...pl, kind });
+          // a croc basking on a long log: hop it and land on the same log
+          if (kind === 'log' && len >= Math.max(14, speed * 0.95) && rng() < 0.5) obs('croc', pl.lane, pl.from + 3.6);
+          else if (rng() < 0.55) line(pl.lane, pl.from + 1, pl.to - 1, 2);
+        }
+      }
+      // hippos stand on the odd stone where a neighbouring lane offers somewhere to go
+      for (const pl of rafts) {
+        if (pl.kind !== 'rock' || rng() > 0.35) continue;
+        const mid = (pl.from + pl.to) / 2;
+        const escape = rafts.some((o) => Math.abs(o.lane - pl.lane) === 1 && o.from < mid - 5 && o.to > mid + 2);
+        if (escape) obs('hippo', pl.lane, mid);
+      }
+      obs('span', 1, start + span / 2, { len: span, rafts: rafts.map((r) => ({ ...r, from: r.from - start - span / 2, to: r.to - start - span / 2 })) });
+      prize(randi(3), start + span + 10);
+      return { len: span + 12, ops, pat };
     }
     case 'river': {
       // water across every lane — the only way through is a jump

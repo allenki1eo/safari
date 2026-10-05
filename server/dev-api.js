@@ -1,4 +1,9 @@
 import { handleScoreRequest } from './leaderboard.js';
+import { handleChallengeRequest } from './challenges.js';
+
+const ROUTES = { '/api/scores': handleScoreRequest, '/api/challenges': handleChallengeRequest };
+// a challenge carries its shadow-runner recording, so it may be bigger than a score
+const LIMITS = { '/api/scores': 4096, '/api/challenges': 65536 };
 
 function send(res, status, body) {
   res.statusCode = status;
@@ -7,12 +12,12 @@ function send(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
-async function readJson(req) {
+async function readJson(req, limit) {
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > 4096) {
+    if (size > limit) {
       const err = new Error('body too large');
       err.code = 'TOO_BIG';
       throw err;
@@ -26,11 +31,12 @@ async function readJson(req) {
 
 async function scoresMiddleware(req, res, next) {
   const path = (req.url || '').split('?')[0];
-  if (path !== '/api/scores') return next();
+  const handle = ROUTES[path];
+  if (!handle) return next();
   try {
-    const body = req.method === 'POST' ? await readJson(req) : undefined;
+    const body = req.method === 'POST' ? await readJson(req, LIMITS[path]) : undefined;
     const query = Object.fromEntries(new URLSearchParams((req.url || '').split('?')[1] || ''));
-    const result = await handleScoreRequest(req.method, body, query);
+    const result = await handle(req.method, body, query);
     send(res, result.status, result.body);
   } catch (err) {
     if (err?.code === 'TOO_BIG' || err instanceof SyntaxError) {
@@ -42,7 +48,7 @@ async function scoresMiddleware(req, res, next) {
   }
 }
 
-/** Serves /api/scores from `vite` and `vite preview` with the same handler as Vercel. */
+/** Serves /api/scores and /api/challenges from `vite` and `vite preview` with the same handlers as Vercel. */
 export function leaderboardPlugin() {
   const attach = (server) => {
     server.middlewares.use(scoresMiddleware);

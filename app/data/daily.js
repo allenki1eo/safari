@@ -1,7 +1,8 @@
 /**
- * The daily route. One calendar day in Dar es Salaam is one river, herd and
- * obstacle layout for everyone. Share links, the near-miss line and the ghost
- * all read from here so a friend who opens the link is racing the same trail.
+ * Routes, challenge links and the calendar. Every run deals a fresh layout from its own route
+ * key; a challenge link hands that key (and the challenger's run) to a friend, so they race
+ * the very same trail against the shadow runner. Dar es Salaam days still drive the daily
+ * board, the word hunt and the daily reward.
  */
 import { RUNNERS } from './content.js';
 
@@ -33,6 +34,14 @@ function darMidnight(day) {
 export function shiftDarDay(day, delta) {
   return darDay(new Date(darMidnight(day) + delta * DAY + HOUR));
 }
+
+/** A fresh route key for one run (every run deals a new layout); challenges pass theirs on. */
+export function newRoute() {
+  return `r${Math.floor(Math.random() * 36 ** 7).toString(36)}`;
+}
+
+/** Route keys from links: a run's own key, or a calendar day from older links. */
+export const ROUTE_RE = /^(r[0-9a-z]{1,8}|\d{4}-\d{2}-\d{2})$/;
 
 export function seedFromDay(day) {
   let h = 2166136261;
@@ -133,6 +142,8 @@ function finite(value) {
   return Number.isFinite(n) ? n : null;
 }
 
+const CHALLENGE_ID_RE = /^[a-z0-9]{8}$/;
+
 export function parseShareLink(params) {
   if (!params || typeof params.get !== 'function') return null;
   const day = params.get('day') || null;
@@ -142,8 +153,12 @@ export function parseShareLink(params) {
   const name = String(params.get('n') || '').trim();
   const from = finite(params.get('from'));
   const runner = params.get('r') || null;
-  if (!day && score == null && !name) return null;
+  const id = CHALLENGE_ID_RE.test(params.get('ch') || '') ? params.get('ch') : null;
+  const route = ROUTE_RE.test(params.get('rt') || '') ? params.get('rt') : null;
+  if (!day && score == null && !name && !id) return null;
   return {
+    id,
+    route,
     day,
     score,
     distance,
@@ -155,46 +170,33 @@ export function parseShareLink(params) {
 }
 
 /**
- * A same-day link locks the start region. A stale day keeps the friend as a
- * ghost and lets the player run today's trail from their own start.
- * Old links with a score and a name but no day still count as a challenge.
+ * What a challenge link sets up: the challenger's route (the run's own key, or the calendar
+ * day older links were dealt from), their start region, and their run for the shadow runner.
  */
-export function routeForLink(link, today) {
-  const empty = { sameDay: true, startRegion: null, friend: null, challenge: null };
+export function routeForLink(link) {
+  const empty = { id: null, route: null, startRegion: null, friend: null, challenge: null };
   if (!link) return empty;
-  const dated = !!link.day;
-  const sameDay = !dated || link.day === today;
-  const startRegion = dated && link.day === today && link.startRegion != null
-    ? Math.max(0, link.startRegion)
-    : null;
+  const route = link.route ?? (link.day && ROUTE_RE.test(link.day) ? link.day : null);
   const friend = link.name
-    ? {
-      name: link.name,
-      score: link.score,
-      distance: link.distance,
-      duration: link.duration,
-      runner: link.runner,
-    }
+    ? { name: link.name, score: link.score, distance: link.distance, duration: link.duration, runner: link.runner }
     : null;
-  const challenge = link.name && link.score != null
-    ? { name: link.name, score: link.score, sameDay }
-    : null;
-  return { sameDay, startRegion, friend, challenge };
+  const challenge = link.name && link.score != null ? { name: link.name, score: link.score } : null;
+  return { id: link.id, route, startRegion: link.startRegion == null ? null : Math.max(0, link.startRegion), friend, challenge };
 }
 
-function realGhost(run, source) {
-  if (!run) return null;
-  const name = String(run.name || '').trim().slice(0, 16);
-  const distance = Math.floor(Number(run.distance) || 0);
-  const duration = Math.floor(Number(run.duration) || 0);
-  if (!name || distance <= 0 || duration <= 0) return null;
-  const runner = RUNNERS.some((r) => r.id === run.runner) ? run.runner : 'zuri';
-  return { source, name, distance, duration, runner };
-}
-
-/** Friend link wins. Yesterday's best is the fallback. Missing numbers hide the ghost. */
-export function ghostFrom(friend, yesterday) {
-  return realGhost(friend, 'friend') || realGhost(yesterday, 'yesterday');
+/**
+ * The shadow runner, only ever from a friend's challenge: a recording (`track`) when the
+ * challenge has one, else their distance and time. Missing numbers hide it.
+ */
+export function ghostFrom(friend) {
+  if (!friend) return null;
+  const name = String(friend.name || '').trim().slice(0, 16);
+  const distance = Math.floor(Number(friend.distance) || 0);
+  const duration = Math.floor(Number(friend.duration) || 0);
+  const track = typeof friend.track === 'string' && friend.track ? friend.track : null;
+  if (!name || (!track && (distance <= 0 || duration <= 0))) return null;
+  const runner = RUNNERS.some((r) => r.id === friend.runner) ? friend.runner : 'zuri';
+  return { source: 'friend', name, distance, duration, runner, track };
 }
 
 /** Metres along the ghost's own pace, capped where that run ended. */
@@ -209,7 +211,8 @@ export function ghostDistance(ghost, time) {
 
 export function challengeUrl(run, origin = LIVE_ORIGIN) {
   const params = new URLSearchParams();
-  if (run?.day) params.set('day', String(run.day));
+  if (run?.challengeId) params.set('ch', String(run.challengeId));
+  if (run?.route) params.set('rt', String(run.route));
   params.set('c', String(Math.max(0, Math.floor(Number(run?.score) || 0))));
   params.set('m', String(Math.max(0, Math.floor(Number(run?.distance) || 0))));
   params.set('s', String(Math.max(0, Math.floor(Number(run?.duration) || 0))));
@@ -225,7 +228,8 @@ export function shareText(run) {
   const miss = run?.nearMiss?.line
     ? `${run.nearMiss.line}${run.nearMiss.shout ? ` — ${run.nearMiss.shout}` : ''}`
     : 'Clean run';
-  return `I ran ${distance}m${rank} on today's KIMBIA! route. ${miss} Can you beat it?`;
+  const bet = run?.stake > 0 ? ` ${run.stake} coins on it, winner takes all!` : '';
+  return `I ran ${distance}m${rank} in KIMBIA! ${miss} Race my shadow on the same route. Can you beat it?${bet}`;
 }
 
 export function whatsAppHref(run) {
