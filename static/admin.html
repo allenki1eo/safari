@@ -4,63 +4,152 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="robots" content="noindex" />
-  <title>Kimbia! · Runner recovery</title>
+  <title>Kimbia! · Admin</title>
   <style>
-    :root { --sun: #ffc940; --earth: #2b1a0e; --cream: #fff4de; --line: rgba(255, 228, 170, 0.2); }
+    :root { --sun: #ffc940; --earth: #2b1a0e; --cream: #fff4de; --leaf: #8fc24a; --line: rgba(255, 228, 170, 0.2); }
     * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 20px; background: radial-gradient(circle at 50% 0%, #6b3a17, #1c1008 70%); color: var(--cream); font: 16px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif; }
-    main { width: min(100%, 440px); padding: 26px 22px 22px; border-radius: 22px; background: rgba(43, 26, 14, 0.82); border: 1px solid var(--line); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45); }
-    h1 { margin: 0 0 6px; font-size: 24px; color: var(--sun); }
-    p { margin: 0 0 16px; color: rgba(255, 244, 222, 0.8); font-size: 14px; }
+    html { background: #1c1008; }
+    body { margin: 0; min-height: 100vh; padding: 28px 16px 40px; background: radial-gradient(circle at 50% 0%, #6b3a17, #1c1008 70%) fixed; color: var(--cream); font: 16px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+    .wrap { width: min(100%, 460px); margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+    header h1 { margin: 0; font-size: 28px; color: var(--sun); letter-spacing: 0.5px; }
+    header p { margin: 4px 0 0; color: rgba(255, 244, 222, 0.7); font-size: 14px; }
+    section { padding: 22px 20px 20px; border-radius: 22px; background: rgba(43, 26, 14, 0.82); border: 1px solid var(--line); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45); }
+    h2 { margin: 0 0 6px; font-size: 20px; color: var(--sun); display: flex; align-items: center; gap: 8px; }
+    p { margin: 0 0 14px; color: rgba(255, 244, 222, 0.8); font-size: 14px; }
+    ol { margin: 0 0 12px; padding-left: 20px; font-size: 14px; color: rgba(255, 244, 222, 0.85); }
+    ol li { margin: 4px 0; }
     label { display: block; margin: 12px 0 6px; font-weight: 700; font-size: 14px; }
     input { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.3); color: var(--cream); font-size: 16px; }
     input:focus { outline: 2px solid var(--sun); }
-    button { width: 100%; margin-top: 18px; padding: 14px; border: 0; border-radius: 14px; background: linear-gradient(180deg, #ffe08a, var(--sun)); color: var(--earth); font-weight: 900; font-size: 17px; cursor: pointer; }
+    button { width: 100%; margin-top: 16px; padding: 14px; border: 0; border-radius: 14px; background: linear-gradient(180deg, #ffe08a, var(--sun)); color: var(--earth); font-weight: 900; font-size: 17px; cursor: pointer; }
+    button.ghost { background: rgba(255, 244, 222, 0.1); color: var(--cream); border: 1px solid var(--line); }
     button:disabled { opacity: 0.6; }
-    .out { margin-top: 18px; padding: 14px; border-radius: 14px; background: rgba(255, 244, 222, 0.07); border: 1px solid var(--line); font-size: 14px; }
-    .out code { display: block; margin: 8px 0; font-size: 30px; letter-spacing: 4px; color: var(--sun); font-weight: 900; text-align: center; }
+    .out { margin-top: 16px; padding: 14px; border-radius: 14px; background: rgba(255, 244, 222, 0.07); border: 1px solid var(--line); font-size: 14px; }
+    .out code.big { display: block; margin: 8px 0; font-size: 30px; letter-spacing: 4px; color: var(--sun); font-weight: 900; text-align: center; }
     .err { color: #ffb4a8; }
+    .pill { display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: 12px; font-weight: 800; background: rgba(255, 255, 255, 0.12); }
+    .pill.on { background: rgba(143, 194, 74, 0.25); color: #d6f2a8; }
+    .pill.off { background: rgba(255, 180, 168, 0.18); color: #ffd2ca; }
+    .kv { margin-top: 12px; }
+    .kv b { display: block; font-size: 12px; letter-spacing: 0.6px; text-transform: uppercase; color: var(--sun); margin-bottom: 4px; }
+    .kv div { display: flex; gap: 8px; }
+    .kv code { flex: 1; min-width: 0; padding: 10px 12px; border-radius: 10px; background: rgba(0, 0, 0, 0.35); font-size: 12px; word-break: break-all; }
+    .kv button { width: auto; margin: 0; padding: 0 14px; font-size: 14px; }
+    .warn { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: rgba(255, 180, 168, 0.12); border: 1px solid rgba(255, 180, 168, 0.35); font-size: 13px; color: #ffe1db; }
   </style>
 </head>
 <body>
-  <main>
-    <h1>Runner recovery</h1>
-    <p>For a player who lost their runner and never set a recovery PIN. Make sure it's really them first (for example, ask for a screenshot of their old score). The code works once, for 7 days: they open <b>Settings → Get my runner back</b> and type it in place of a PIN.</p>
-    <form id="f">
-      <label for="key">Admin key</label>
-      <input id="key" type="password" autocomplete="current-password" required />
-      <label for="name">Runner name</label>
-      <input id="name" maxlength="16" autocomplete="off" required />
-      <button type="submit">Make a recovery code</button>
-    </form>
-    <div class="out" id="out" hidden></div>
-  </main>
+  <div class="wrap">
+    <header>
+      <h1>Kimbia! admin</h1>
+      <p>Only for the game's owner. Nothing here is shared with players.</p>
+    </header>
+
+    <section>
+      <label for="key" style="margin-top:0">Admin key</label>
+      <input id="key" type="password" autocomplete="current-password" placeholder="KIMBIA_ADMIN_KEY" />
+    </section>
+
+    <section>
+      <h2>🔑 Runner recovery</h2>
+      <p>For a player who lost their runner and never set a recovery PIN. Make sure it's really them first (for example, ask for a screenshot of their old score). The code works once, for 7 days: they open <b>Settings → Get my runner back</b> and type it in place of a PIN.</p>
+      <form id="recover">
+        <label for="name">Runner name</label>
+        <input id="name" maxlength="16" autocomplete="off" required />
+        <button type="submit">Make a recovery code</button>
+      </form>
+      <div class="out" id="recover-out" hidden></div>
+    </section>
+
+    <section>
+      <h2>🔔 Notifications <span class="pill" id="push-status">checking…</span></h2>
+      <div id="push-setup">
+        <p>Notifications need a key pair. Make one here — it is created in this browser and never sent anywhere — then add it to Vercel:</p>
+        <ol>
+          <li>Tap <b>Make notification keys</b>.</li>
+          <li>In Vercel → <b>safari</b> project → <b>Settings → Environment Variables</b>, add each value below under its name.</li>
+          <li>Redeploy (Deployments → ⋯ → Redeploy). Players can then turn notifications on.</li>
+        </ol>
+        <button type="button" class="ghost" id="make-keys">Make notification keys</button>
+        <div id="keys" hidden>
+          <div class="kv"><b>VAPID_PUBLIC_KEY</b><div><code id="k-pub"></code><button type="button" data-copy="k-pub">Copy</button></div></div>
+          <div class="kv"><b>VAPID_PRIVATE_KEY</b><div><code id="k-priv"></code><button type="button" data-copy="k-priv">Copy</button></div></div>
+          <div class="kv"><b>CRON_SECRET</b><div><code id="k-cron"></code><button type="button" data-copy="k-cron">Copy</button></div></div>
+          <div class="warn">Keep the private key and cron secret to yourself — paste them only into Vercel. Once players have turned notifications on, keep the same keys: new keys stop the old subscriptions from working.</div>
+        </div>
+      </div>
+      <form id="test">
+        <p style="margin-top:16px">Send a test notification to a runner who has turned notifications on (try your own runner name).</p>
+        <label for="test-name">Runner name</label>
+        <input id="test-name" maxlength="16" autocomplete="off" required />
+        <button type="submit">Send a test</button>
+      </form>
+      <div class="out" id="test-out" hidden></div>
+    </section>
+  </div>
   <script>
-    const f = document.getElementById('f');
-    const out = document.getElementById('out');
+    const $ = (id) => document.getElementById(id);
     const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-    f.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const btn = f.querySelector('button');
-      btn.disabled = true;
-      out.hidden = false;
-      out.textContent = 'Working…';
-      try {
-        const res = await fetch('/api/account', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ action: 'adminCode', adminKey: document.getElementById('key').value, name: document.getElementById('name').value }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || 'Something went wrong.');
-        const pretty = `${data.code.slice(0, 4)}-${data.code.slice(4)}`;
-        out.innerHTML = `Recovery code for <b>${esc(data.name)}</b> (best ${Number(data.best).toLocaleString()}):<code>${pretty}</code>Send it to the player privately. It works once and expires in 7 days.`;
-      } catch (err) {
-        out.innerHTML = `<span class="err">${esc(err.message)}</span>`;
-      } finally {
-        btn.disabled = false;
-      }
+    const adminKey = () => $('key').value;
+    async function post(url, body) {
+      const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Something went wrong.');
+      return data;
+    }
+    function form(id, out, run) {
+      $(id).addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = $(id).querySelector('button');
+        btn.disabled = true;
+        $(out).hidden = false;
+        $(out).textContent = 'Working…';
+        try {
+          $(out).innerHTML = await run();
+        } catch (err) {
+          $(out).innerHTML = `<span class="err">${esc(err.message)}</span>`;
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    }
+
+    form('recover', 'recover-out', async () => {
+      const data = await post('/api/account', { action: 'adminCode', adminKey: adminKey(), name: $('name').value });
+      const pretty = `${data.code.slice(0, 4)}-${data.code.slice(4)}`;
+      return `Recovery code for <b>${esc(data.name)}</b> (best ${Number(data.best).toLocaleString()}):<code class="big">${pretty}</code>Send it to the player privately. It works once and expires in 7 days.`;
     });
+
+    form('test', 'test-out', async () => {
+      const data = await post('/api/push', { action: 'test', adminKey: adminKey(), name: $('test-name').value });
+      if (!data.devices) return `<b>${esc(data.name)}</b> hasn't turned notifications on yet (Settings → 🔔 Notifications in the game).`;
+      return `Sent to <b>${esc(data.name)}</b>: ${data.sent} of ${data.devices} device${data.devices === 1 ? '' : 's'} took it.`;
+    });
+
+    // VAPID keys: an ECDSA P-256 pair, in the base64url forms web push expects
+    const b64url = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    $('make-keys').addEventListener('click', async () => {
+      const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+      $('k-pub').textContent = b64url(await crypto.subtle.exportKey('raw', pair.publicKey));
+      $('k-priv').textContent = (await crypto.subtle.exportKey('jwk', pair.privateKey)).d;
+      $('k-cron').textContent = b64url(crypto.getRandomValues(new Uint8Array(24)));
+      $('keys').hidden = false;
+      $('make-keys').textContent = 'Make a different pair';
+    });
+    document.addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-copy]');
+      if (!b) return;
+      await navigator.clipboard.writeText($(b.dataset.copy).textContent);
+      b.textContent = 'Copied';
+      setTimeout(() => (b.textContent = 'Copy'), 1500);
+    });
+
+    fetch('/api/push').then((r) => r.json()).then((d) => {
+      const on = !!d.publicKey;
+      $('push-status').textContent = on ? 'on' : 'not set up';
+      $('push-status').className = `pill ${on ? 'on' : 'off'}`;
+      if (on) $('push-setup').hidden = true;
+    }).catch(() => ($('push-status').textContent = 'unknown'));
   </script>
 </body>
 </html>

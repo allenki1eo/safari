@@ -15,7 +15,7 @@ import { KINDS, claimPrizes, prizeBoard } from './prizes.js';
 loadLocalEnv();
 
 // Applied in order on first use; every statement is idempotent.
-const SCHEMA_SQL = ['001_scores.sql', '002_players.sql', '003_daily.sql', '004_challenges.sql', '005_transfers.sql', '006_accounts.sql', '007_prizes.sql']
+const SCHEMA_SQL = ['001_scores.sql', '002_players.sql', '003_daily.sql', '004_challenges.sql', '005_transfers.sql', '006_accounts.sql', '007_prizes.sql', '008_push.sql']
   .map((file) => readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8'))
   .join('\n');
 export const TOKEN_RE = /^[a-f0-9]{64}$/;

@@ -2,6 +2,7 @@ import { handleScoreRequest } from './leaderboard.js';
 import { readFileSync } from 'node:fs';
 import { handleChallengeRequest } from './challenges.js';
 import { handleAccountRequest } from './accounts.js';
+import { handlePushRequest, runPushJob } from './push.js';
 import { cleanCode, handleTransferRequest, manifestFor } from './transfers.js';
 
 /** Dev twin of api/transfer.js: GET ?manifest=CODE serves the manifest with the code in it. */
@@ -15,9 +16,13 @@ function transferRoute(method, body, query) {
   return handleTransferRequest(method, body);
 }
 
-const ROUTES = { '/api/scores': handleScoreRequest, '/api/challenges': handleChallengeRequest, '/api/transfer': transferRoute, '/api/account': handleAccountRequest };
+const ROUTES = { '/api/scores': handleScoreRequest, '/api/challenges': handleChallengeRequest, '/api/transfer': transferRoute, '/api/account': handleAccountRequest,
+  '/api/push': handlePushRequest,
+  '/api/cron/morning': () => runPushJob('morning'),
+  '/api/cron/evening': () => runPushJob('evening'),
+};
 // a challenge carries its shadow-runner recording, so it may be bigger than a score
-const LIMITS = { '/api/scores': 4096, '/api/challenges': 65536, '/api/transfer': 40960, '/api/account': 40960 };
+const LIMITS = { '/api/scores': 4096, '/api/challenges': 65536, '/api/transfer': 40960, '/api/account': 40960, '/api/push': 4096 };
 
 function send(res, status, body) {
   res.statusCode = status;

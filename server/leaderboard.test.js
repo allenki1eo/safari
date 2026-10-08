@@ -509,3 +509,86 @@ test('day, week and month prizes go to the top runners once, on any of their dev
     assert.deepEqual(kito.body.prizes.map((p) => [p.kind, p.rank, p.amount]), [['week', 4, 400], ['day', 2, 600]]);
   });
 });
+
+test('notifications: subscribe, challenge news, prize news once, evening reminders that back off', async () => {
+  const push = await import('./push.js');
+  const { handleChallengeRequest } = await import('./challenges.js');
+  const prev = { pub: process.env.VAPID_PUBLIC_KEY, priv: process.env.VAPID_PRIVATE_KEY };
+  process.env.VAPID_PUBLIC_KEY = 'test-public';
+  process.env.VAPID_PRIVATE_KEY = 'test-private';
+  const outbox = [];
+  push.setPushSender(async (sub, payload) => {
+    if (sub.endpoint.includes('gone')) throw Object.assign(new Error('gone'), { statusCode: 410 });
+    outbox.push({ to: sub.endpoint, lang: String(sub.lang), ...payload });
+  });
+  const sub = (name) => ({ endpoint: `https://push.example/${name}`, keys: { p256dh: 'B'.repeat(87), auth: 'a'.repeat(22) } });
+  try {
+    await withDb(async () => {
+      const at = (iso) => setLeaderboardClock(() => new Date(iso));
+      at('2026-10-05T09:00:00Z');
+      assert.equal((await push.handlePushRequest('GET')).body.publicKey, 'test-public');
+      await post({ token: T.juma, name: 'Juma', score: 9000, distance: 900, duration: 120 });
+      await post({ token: T.neema, name: 'Neema', score: 4000, distance: 400, duration: 120 });
+      const ok = await push.handlePushRequest('POST', { action: 'subscribe', token: T.juma, subscription: sub('juma') });
+      assert.equal(ok.status, 200);
+      await push.handlePushRequest('POST', { action: 'subscribe', token: T.neema, subscription: sub('neema'), lang: 'sw' });
+      await push.handlePushRequest('POST', { action: 'subscribe', token: T.neema, subscription: sub('neema-gone') });
+      assert.equal((await push.handlePushRequest('POST', { action: 'subscribe', token: T.juma, subscription: { endpoint: 'http://x' } })).status, 400);
+
+      // a friend takes Juma's bet, then loses: Juma hears both
+      const made = await handleChallengeRequest('POST', { action: 'create', token: T.juma, name: 'Juma', runner: 'zuri', score: 9000, distance: 900, duration: 120, route: 'rabc', stake: 100 });
+      assert.equal(made.status, 200, JSON.stringify(made.body));
+      await handleChallengeRequest('POST', { action: 'accept', token: T.amani, id: made.body.id, name: 'Amani' });
+      await handleChallengeRequest('POST', { action: 'finish', token: T.amani, id: made.body.id, score: 5000 });
+      assert.deepEqual(outbox.map((m) => [m.to, m.title]), [
+        ['https://push.example/juma', '🎯 Bet taken!'],
+        ['https://push.example/juma', '🏆 Amani couldn’t beat you!'],
+      ]);
+      outbox.length = 0;
+
+      // the evening of the same day: both ran today, so nobody is nagged
+      at('2026-10-05T15:00:00Z');
+      assert.equal((await push.eveningJob()).sent, 0);
+
+      // next morning: Juma's prize news, in English; once only
+      at('2026-10-06T04:00:00Z');
+      const morning = await push.morningJob();
+      assert.equal(morning.players, 2);
+      const jumaNews = outbox.find((m) => m.to.endsWith('/juma'));
+      assert.equal(jumaNews.title, '🏆 You won 1,000 seeds!');
+      assert.match(jumaNews.body, /1st on the daily board/);
+      const neemaNews = outbox.find((m) => m.to.endsWith('/neema'));
+      assert.equal(neemaNews.lang, 'sw');
+      assert.match(neemaNews.title, /Umeshinda mbegu 600/);
+      outbox.length = 0;
+      assert.equal((await push.morningJob()).sent, 0, 'prize news goes out once');
+
+      // that evening Neema runs; Juma does not: only Juma is reminded, with today's leader
+      at('2026-10-06T09:00:00Z');
+      await post({ token: T.neema, name: 'Neema', score: 15000, distance: 1500, duration: 200 });
+      at('2026-10-06T15:00:00Z');
+      await push.eveningJob();
+      assert.deepEqual(outbox.map((m) => m.to), ['https://push.example/juma']);
+      assert.match(outbox[0].body, /Neema leads with 15,000/);
+      outbox.length = 0;
+      await push.eveningJob();
+      assert.equal(outbox.length, 0, 'at most one reminder a day');
+
+      // the dead browser was dropped after its 410
+      const db = createClient({ url: process.env.TURSO_DATABASE_URL });
+      const left = (await db.execute('SELECT endpoint FROM push_subs ORDER BY endpoint')).rows.map((r) => r.endpoint);
+      db.close();
+      assert.deepEqual(left, ['https://push.example/juma', 'https://push.example/neema']);
+    });
+  } finally {
+    push.setPushSender(null);
+    if (prev.pub == null) delete process.env.VAPID_PUBLIC_KEY; else process.env.VAPID_PUBLIC_KEY = prev.pub;
+    if (prev.priv == null) delete process.env.VAPID_PRIVATE_KEY; else process.env.VAPID_PRIVATE_KEY = prev.priv;
+  }
+});
+
+test('reminders back off: daily for three days, then every third day, then never', async () => {
+  const { remindToday } = await import('./push.js');
+  const days = Array.from({ length: 40 }, (_, i) => i).filter(remindToday);
+  assert.deepEqual(days, [1, 2, 3, 6, 9, 12, 15, 18, 21, 24, 27, 30]);
+});
