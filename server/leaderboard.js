@@ -10,11 +10,12 @@ import { RUNNERS } from '../app/data/content.js';
 import { darDay, shiftDarDay } from '../app/data/daily.js';
 import { REGIONS } from '../app/data/regions.js';
 import { loadLocalEnv } from './env.js';
+import { KINDS, claimPrizes, prizeBoard } from './prizes.js';
 
 loadLocalEnv();
 
 // Applied in order on first use; every statement is idempotent.
-const SCHEMA_SQL = ['001_scores.sql', '002_players.sql', '003_daily.sql', '004_challenges.sql', '005_transfers.sql', '006_accounts.sql']
+const SCHEMA_SQL = ['001_scores.sql', '002_players.sql', '003_daily.sql', '004_challenges.sql', '005_transfers.sql', '006_accounts.sql', '007_prizes.sql']
   .map((file) => readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8'))
   .join('\n');
 export const TOKEN_RE = /^[a-f0-9]{64}$/;
@@ -370,8 +371,10 @@ export async function handleScoreRequest(method, body, query) {
   try {
     if (method === 'GET') {
       if (query?.board === 'daily') return { status: 200, body: await dailyBoard() };
+      if (KINDS.includes(query?.board)) return { status: 200, body: await prizeBoard(query.board) };
       return { status: 200, body: { top: await listTop() } };
     }
+    if (method === 'POST' && body?.action === 'prizes') return await claimPrizes(body);
     if (method === 'POST') return await submitScore(body);
     return { status: 405, body: { error: 'Method not allowed.' } };
   } catch (err) {

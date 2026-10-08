@@ -196,3 +196,14 @@ export const BOOSTS = {
 export const BOOST_IDS = Object.keys(BOOSTS);
 
 export const SHOUTS = ['Hakuna shida!', 'Safi sana!', 'Pole pole? Never!', 'Kimbia!', 'Poa!', 'Hatari!', 'Mambo poa!'];
+
+/**
+ * Seeds for the top ten of each Dar es Salaam day, week and month (index 0 = 1st place).
+ * Sized against the shop: a week's win buys Amani, a month's win buys Kito.
+ */
+const podium = (gold, silver, bronze, rest) => [gold, silver, bronze, ...Array(7).fill(rest)];
+export const PRIZES = {
+  day: podium(1000, 600, 400, 100),
+  week: podium(6000, 3000, 1500, 400),
+  month: podium(12000, 6000, 3000, 1000),
+};

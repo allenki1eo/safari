@@ -47,7 +47,7 @@ async function readJson(res) {
 }
 
 export async function fetchBoard(board) {
-  const query = board === 'daily' ? '?board=daily' : '';
+  const query = board && board !== 'all' ? `?board=${encodeURIComponent(board)}` : '';
   const res = await fetch(`/api/scores${query}`, { headers: { accept: 'application/json' } });
   const data = await readJson(res);
   if (!res.ok) throw Object.assign(new Error(data.error || 'Could not load the board'), { status: res.status });
@@ -101,7 +101,7 @@ function medal(rank) {
   return String(rank);
 }
 
-function rowHtml(row, { youId, youName }) {
+function rowHtml(row, { youId, youName, crown }) {
   // prefer the server id; fall back to the (unique) name before this device has posted
   const yours = youId != null ? row.id === youId : !!youName && row.name.toLowerCase() === youName.toLowerCase();
   const emoji = EMOJI[row.runner] || '🏃';
@@ -109,10 +109,10 @@ function rowHtml(row, { youId, youName }) {
     <div class="lb-row${yours ? ' you' : ''}">
       <div class="lb-rank">${medal(row.rank)}</div>
       <div class="lb-who">
-        <b>${emoji} ${esc(row.name)}${yours ? ' <span class="you-tag">you</span>' : ''}</b>
+        <b>${emoji} ${esc(row.name)}${crown && row.name === crown ? ' <span class="crown" title="Last champion">👑</span>' : ''}${yours ? ' <span class="you-tag">you</span>' : ''}</b>
         <span>${fmt(row.distance)}m · ${fmt(row.seeds)} seeds · ${fmt(row.allies)} allies</span>
       </div>
-      <div class="lb-score">${fmt(row.score)}</div>
+      <div class="lb-score">${fmt(row.score)}${row.prize ? `<span class="lb-prize">+${fmt(row.prize)}<i class="seed"></i></span>` : ''}</div>
     </div>`;
 }
 
