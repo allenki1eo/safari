@@ -66,6 +66,21 @@ function ensureLocalDir(url) {
   mkdirSync(dirname(resolve(path)), { recursive: true });
 }
 
+// The schema's fingerprint: a new instance checks it with one read and runs the migrations only
+// when they changed, instead of every cold start re-running them all (one scans the run log).
+const SCHEMA_KEY = `schema:${createHash('sha256').update(SCHEMA_SQL).digest('hex').slice(0, 16)}`;
+
+async function ensureSchema(client) {
+  try {
+    const hit = await client.execute({ sql: 'SELECT 1 FROM meta WHERE key = ?', args: [SCHEMA_KEY] });
+    if (hit.rows.length) return;
+  } catch {
+    /* a fresh database has no meta table yet */
+  }
+  await client.executeMultiple(SCHEMA_SQL);
+  await client.execute({ sql: 'INSERT OR IGNORE INTO meta (key, value) VALUES (?, ?)', args: [SCHEMA_KEY, new Date().toISOString()] });
+}
+
 export function getClient() {
   const url = databaseUrl();
   const authToken = process.env.TURSO_AUTH_TOKEN?.trim() || undefined;
@@ -74,7 +89,7 @@ export function getClient() {
   ensureLocalDir(url);
   const client = createClient({ url, authToken });
   clientUrl = url;
-  clientPromise = client.executeMultiple(SCHEMA_SQL).then(() => client).catch((err) => {
+  clientPromise = ensureSchema(client).then(() => client).catch((err) => {
     clientPromise = null;
     clientUrl = '';
     throw err;

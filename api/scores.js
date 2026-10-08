@@ -23,7 +23,11 @@ export default async function handler(req, res) {
       return send(res, 400, { error: 'Invalid JSON.' });
     }
   }
-  const result = await handleScoreRequest(req.method, req.body, queryOf(req));
+  const query = queryOf(req);
+  const result = await handleScoreRequest(req.method, req.body, query);
+  // Boards are the same for everyone: Vercel's CDN answers repeat reads for a few seconds, so a
+  // rush of players opening the leaderboard costs one database read, not one each.
+  if (req.method === 'GET' && result.status === 200) res.setHeader('Vercel-CDN-Cache-Control', 'max-age=5');
   send(res, result.status, result.body);
 }
 
