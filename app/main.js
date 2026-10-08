@@ -8,6 +8,7 @@ import { UI } from './ui/ui.js';
 import { bindInput } from './game/input.js';
 import { audio } from './game/audio.js';
 import { save } from './data/save.js';
+import { refreshNotifications } from './ui/notify.js';
 
 const canvas = document.getElementById('scene');
 const game = new Game(canvas);
@@ -46,7 +47,9 @@ requestAnimationFrame(() =>
 );
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').then(refreshNotifications).catch(() => {});
+  });
 }
 
 // handy for debugging from the console

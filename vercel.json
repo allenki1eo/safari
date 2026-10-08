@@ -7,22 +7,43 @@
   "headers": [
     {
       "source": "/(assets|fonts)/(.*)",
-      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
     },
     {
       "source": "/models/(.*)",
-      "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400, stale-while-revalidate=604800" }]
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400, stale-while-revalidate=604800"
+        }
+      ]
     },
     {
       "source": "/sw.js",
       "headers": [
-        { "key": "Cache-Control", "value": "no-cache" },
-        { "key": "Service-Worker-Allowed", "value": "/" }
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        },
+        {
+          "key": "Service-Worker-Allowed",
+          "value": "/"
+        }
       ]
     },
     {
       "source": "/api/(.*)",
-      "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
     }
   ],
   "functions": {
@@ -37,6 +58,27 @@
     },
     "api/transfer.js": {
       "includeFiles": "{migrations/**,static/manifest.webmanifest}"
+    },
+    "api/push.js": {
+      "includeFiles": "migrations/**"
+    },
+    "api/cron/morning.js": {
+      "includeFiles": "migrations/**",
+      "maxDuration": 60
+    },
+    "api/cron/evening.js": {
+      "includeFiles": "migrations/**",
+      "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/morning",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/evening",
+      "schedule": "0 15 * * *"
+    }
+  ]
 }

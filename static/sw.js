@@ -1,6 +1,6 @@
 // Kimbia service worker — network-first pages, cache-first hashed assets.
 // Replaces the previous "safari-v1" worker and clears its cache on activate.
-const CACHE = 'kimbia-v13';
+const CACHE = 'kimbia-v14';
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(['/'])).then(() => self.skipWaiting()));
@@ -59,5 +59,39 @@ self.addEventListener('fetch', (e) => {
         return res;
       })
       .catch(() => caches.match(request).then((hit) => hit || caches.match('/'))),
+  );
+});
+
+// Notifications: prize news, challenge results and come-back reminders (server/push.js).
+self.addEventListener('push', (e) => {
+  let data = {};
+  try {
+    data = e.data ? e.data.json() : {};
+  } catch {
+    data = { body: e.data?.text() };
+  }
+  e.waitUntil(
+    self.registration.showNotification(data.title || 'Kimbia!', {
+      body: data.body || '',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/badge-96.png',
+      tag: data.tag || 'kimbia',
+      renotify: !!data.tag,
+      data: { url: data.url || '/' },
+      vibrate: [80, 40, 80],
+    }),
+  );
+});
+
+// Tapping a notification brings an open game to the front, or opens it.
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = new URL(e.notification.data?.url || '/', self.location.origin).href;
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
+      const open = wins.find((w) => new URL(w.url).origin === self.location.origin);
+      if (open) return open.focus();
+      return self.clients.openWindow(url);
+    }),
   );
 });

@@ -8,6 +8,7 @@ import { audio } from '../game/audio.js';
 import { challengeUrl, makeCard, shareText } from './share.js';
 import { fetchBoard, leaveDecision, postScore, renderRows, runnerName, scoreSavePlan } from './leaderboard.js';
 import { darDay, ghostFrom, huntWord, parseShareLink, routeForLink } from '../data/daily.js';
+import { disableNotifications, enableNotifications, notifyState, pushReady, pushReadyNow } from './notify.js';
 import { MEDAL, PRIZES, closesAt, collectPrizes, ordinal, periodName, timeLeft } from './prizes.js';
 import { STAKES, acceptBet, collectBets, createChallenge, fetchChallenge, finishBet, linkOrigin } from './challenges.js';
 import { install, device, standalone } from './install.js';
@@ -229,6 +230,8 @@ export class UI {
     this.maybeNudgeInstall();
     this.maybeOfferRestore();
     this.maybeAskForPin();
+    pushReady(); // warm the answer for Settings
+    this.maybeAskForNotify();
     // the pill glows once the browser says it can install; it leaves once installed
     this.offInstall?.();
     this.offInstall = install.on((ev) => {
@@ -943,6 +946,7 @@ export class UI {
             ${STAKES.map((n) => `<button class="stake ${n === 0 ? 'on' : ''}" data-stake="${n}" ${n > save.seeds ? 'disabled' : ''}>${n ? `${fmt(n)}<span class="seed"></span>` : t('Free')}</button>`).join('')}
           </div>
           <div class="pot-line" data-pot></div>
+          <div data-notify-slot></div>
           <div class="stack">
             <button class="btn teal big send" data-send>${ICON.share.replace('<svg', '<svg width="24" height="24"')} ${t('Send on WhatsApp')}</button>
             <button class="btn ghost" data-close data-click>${t('Not now')}</button>
@@ -998,6 +1002,7 @@ export class UI {
           audio.buy();
           el.querySelectorAll('[data-stake]').forEach((b) => (b.disabled = Number(b.dataset.stake) !== stake));
           this.toast('🔒', t('Bet locked: {n} coins. Now send it!', { n: fmt(stake) }));
+          this.offerNotifyInline(el.querySelector('[data-notify-slot]'));
         } else this.shareOnWhatsApp(base, links.get(0));
       } catch (err) {
         if (stake) this.toast('⚠️', `${esc(err.message)}<br>${t('Bets need a connection.')}`);
@@ -1941,6 +1946,106 @@ export class UI {
 
   /* ------------------------------------------------ getting a runner back */
   /** Runners with a name but no recovery PIN are asked once to protect it. */
+  /* ----------------------------------------------------- notifications */
+  /** Once, on a later visit: a runner with a name and a couple of runs, in a browser that can. */
+  maybeAskForNotify() {
+    if (!save.name || save.notifyAsked || (save.runs ?? 0) < 2 || this.askedThisVisit) return;
+    if (!save.pinSet && !save.pinAsked) return; // the PIN question comes first
+    if (notifyState() !== 'yes') return;
+    this.askedThisVisit = true;
+    setTimeout(async () => {
+      if (!(await pushReady())) return; // not set up on the server yet: ask another day
+      if (!this.screen?.classList.contains('title') || document.querySelector('.modal-wrap')) return;
+      save.notifyAsked = true;
+      persist();
+      this.notifySheet();
+    }, 2600);
+  }
+
+  /** Why say yes: the three things we will ever send. */
+  notifySheet() {
+    const state = notifyState();
+    const ios = state === 'ios-install';
+    const el = $(`
+      <div class="screen modal-wrap scrim-full">
+        <div class="panel modal notify-card">
+          <div class="bell"><span>🔔</span><i></i></div>
+          <h2>${t('Never miss a prize')}</h2>
+          <div class="notify-list">
+            <div><span>🏆</span><p><b>${t('Prize wins')}</b>${t('When you finish in the top spots of the day, week or month.')}</p></div>
+            <div><span>🎯</span><p><b>${t('Challenge results')}</b>${t('The moment a friend takes your bet, and who won.')}</p></div>
+            <div><span>🏁</span><p><b>${t('A nudge to run')}</b>${t("In the evening, when today's race is still open. Never more than once a day.")}</p></div>
+          </div>
+          ${ios ? `<p class="muted">${t('On iPhone, notifications work once Kimbia! is on your home screen.')}</p>` : ''}
+          <div class="stack">
+            <button class="btn big" data-ok data-click>${ios ? t('📲 Install Kimbia!') : t('🔔 Turn on')}</button>
+            <button class="btn ghost" data-no data-click>${t('Not now')}</button>
+          </div>
+        </div>
+      </div>`);
+    el.querySelector('[data-no]').addEventListener('click', () => el.remove());
+    el.querySelector('[data-ok]').addEventListener('click', async (e) => {
+      if (ios) {
+        el.remove();
+        return this.installApp();
+      }
+      e.currentTarget.disabled = true;
+      await this.turnOnNotify();
+      el.remove();
+    });
+    this.overlay(el);
+  }
+
+  async turnOnNotify() {
+    try {
+      const res = await enableNotifications();
+      if (res === 'on') {
+        audio.buy();
+        this.toast('🔔', t("Notifications are on. We'll tell you when you win."));
+      } else if (res === 'blocked') {
+        this.toast('🔕', t('Notifications are blocked for this site. Allow them in your browser settings.'), 4200);
+      }
+      return res;
+    } catch (err) {
+      this.toast('📡', esc(err.message || t('Notifications are unavailable.')));
+      return 'off';
+    }
+  }
+
+  /** On the challenge sheet, once a bet is locked: hear the result the moment it lands. */
+  async offerNotifyInline(slot) {
+    if (!slot || notifyState() !== 'yes' || !(await pushReady())) return;
+    slot.innerHTML = `<button class="notify-inline" data-click>🔔 <span>${t('Tell me when they finish')}</span></button>`;
+    slot.querySelector('button').addEventListener('click', async (e) => {
+      e.currentTarget.disabled = true;
+      const res = await this.turnOnNotify();
+      slot.innerHTML = res === 'on' ? `<div class="notify-inline done">✅ <span>${t("We'll tell you who wins.")}</span></div>` : '';
+    });
+  }
+
+  notifyRow() {
+    const state = notifyState();
+    if (state === 'no' || !pushReadyNow()) return '';
+    const label = t('🔔 Notifications');
+    if (state === 'ios-install') return `<div class="toggle-row"><span>${label}<small class="row-note">${t('Install the app to turn on')}</small></span><button class="btn small" data-act="install" data-click>${t('Install')}</button></div>`;
+    if (state === 'blocked') return `<div class="toggle-row"><span>${label}<small class="row-note">${t('Blocked in browser settings')}</small></span><button class="switch" disabled aria-label="${label}"></button></div>`;
+    return `<div class="toggle-row"><span>${label}</span><button class="switch ${state === 'on' ? 'on' : ''}" data-act="notify" aria-label="${label}"></button></div>`;
+  }
+
+  async toggleNotify(sheet) {
+    const sw = sheet.querySelector('[data-act=notify]');
+    if (!sw || sw.disabled) return;
+    sw.disabled = true;
+    audio.click();
+    if (notifyState() === 'on') await disableNotifications();
+    else {
+      save.notifyAsked = true;
+      await this.turnOnNotify();
+    }
+    sw.disabled = false;
+    sw.classList.toggle('on', notifyState() === 'on');
+  }
+
   maybeAskForPin() {
     if (!save.name || save.pinSet || save.pinAsked || (save.runs ?? 0) < 1) return;
     save.pinAsked = true;
@@ -2175,6 +2280,7 @@ export class UI {
           <div class="toggle-row"><span>${t('✨ Graphics')}</span><div class="seg" role="group">${['auto', 'high', 'low'].map((q) => `<button class="${(save.quality ?? 'auto') === q ? 'on' : ''}" data-q="${q}">${t(q[0].toUpperCase() + q.slice(1))}</button>`).join('')}</div></div>
           ${this.sizeControl()}
           <div class="toggle-row"><span>${t('🌍 Language')}</span><div class="seg" role="group">${Object.entries(LANGS).map(([k, n]) => `<button class="${lang === k ? 'on' : ''}" data-lang="${k}">${n}</button>`).join('')}</div></div>
+          ${this.notifyRow()}
           ${install.offered ? `<div class="toggle-row"><span>${t('📲 Play from your home screen')}</span><button class="btn small" data-act="install" data-click>${t('Install')}</button></div>` : ''}
           ${save.name ? `<div class="toggle-row"><span>${t('🔐 Recovery PIN')}${save.pinSet ? ` <em class="pin-on">${t('on')}</em>` : ''}</span><button class="btn small ${save.pinSet ? 'ghost' : ''}" data-act="pin" data-click>${save.pinSet ? t('Change') : t('Set PIN')}</button></div>` : ''}
           <div class="toggle-row"><span>${t('🔑 Get my runner back')}</span><button class="btn small ghost" data-act="recover" data-click>${t('Open')}</button></div>
@@ -2188,6 +2294,7 @@ export class UI {
       </div>`);
     el.addEventListener('click', (e) => {
       if (e.target.closest('[data-act=install]')) return this.installApp();
+      if (e.target.closest('[data-act=notify]')) return this.toggleNotify(el);
       if (e.target.closest('[data-act=progress]')) return this.progressSheet();
       if (e.target.closest('[data-act=pin]')) return this.pinSheet();
       if (e.target.closest('[data-act=recover]')) return this.recoverSheet();

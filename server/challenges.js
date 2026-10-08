@@ -13,6 +13,7 @@ import { ROUTE_RE } from '../app/data/daily.js';
 import { REGIONS } from '../app/data/regions.js';
 import { validTrack } from '../app/game/ghostTrack.js';
 import { RUNNER_IDS, TOKEN_RE, cleanName, fail, getClient, hashToken, now, strictInt } from './leaderboard.js';
+import { notifyBetSettled, notifyBetTaken } from './push.js';
 
 export const STAKE_MAX = 5000;
 /** An open bet nobody takes is refunded after this long. */
@@ -127,6 +128,7 @@ async function acceptChallenge(body) {
     args: [th, name, ms(), body.id],
   });
   if (!upd.rowsAffected) return conflict('Someone already took this bet.', 'TAKEN');
+  await notifyBetTaken(db, String(row.host_hash), { name, stake: Number(row.stake), id: String(row.id) });
   return { status: 200, body: { stake: Number(row.stake) } };
 }
 
@@ -137,7 +139,7 @@ async function finishChallenge(body) {
   if (score == null) return bad('Score must be a non-negative integer.');
   const db = await getClient();
   const th = hashToken(body.token);
-  await db.execute({
+  const upd = await db.execute({
     sql: `UPDATE challenges
           SET status = 'settled', rival_score = ?, settled_ms = ?,
               winner = CASE WHEN ? > score THEN 'rival' ELSE 'host' END
@@ -146,6 +148,11 @@ async function finishChallenge(body) {
   });
   const row = (await db.execute({ sql: 'SELECT * FROM challenges WHERE id = ?', args: [body.id] })).rows[0];
   if (!row || row.rival_hash !== th || row.status !== 'settled') return conflict('This bet is not yours to finish.', 'NOT_RIVAL');
+  if (upd.rowsAffected) {
+    await notifyBetSettled(db, String(row.host_hash), {
+      name: String(row.rival_name), winner: String(row.winner), score, pot: Number(row.stake) * 2, id: String(row.id),
+    });
+  }
   return {
     status: 200,
     body: { winner: String(row.winner), pot: Number(row.stake) * 2, hostName: String(row.host_name), hostScore: Number(row.score) },
