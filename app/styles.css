@@ -257,7 +257,7 @@ input { font: inherit; }
 
 /* -------------------------------------------------------------- modals */
 .modal-wrap { align-items: center; justify-content: center; }
-.modal { width: min(100%, 420px); padding: 26px 20px 20px; text-align: center; animation: pop 0.4s ease both; max-height: 100%; overflow-y: auto; }
+.modal { width: min(100%, 420px); padding: 26px 20px 20px; text-align: center; animation: pop 0.4s ease both; max-height: 100%; overflow-y: auto; touch-action: pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 .modal h2 { font-family: var(--display); font-weight: 400; font-size: 34px; margin: 0 0 6px; color: var(--sun-2); }
 .modal .stack { display: flex; flex-direction: column; gap: 12px; margin-top: 18px; }
 .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 4px; border-bottom: 1px solid var(--line); font-size: 17px; }
@@ -745,7 +745,7 @@ input { font: inherit; }
 .rank-prize { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; padding: 2px 8px; border-radius: 99px; background: rgba(255,201,64,0.2); color: var(--sun-2); font-size: 14px; font-weight: 900; vertical-align: middle; }
 .rank-prize .seed { width: 12px; height: 12px; }
 
-.prize-win .modal { position: relative; overflow: hidden; }
+.prize-win .modal { position: relative; overflow-x: hidden; overflow-y: auto; }
 .prize-win .rays { position: absolute; left: 50%; top: 70px; width: 520px; height: 520px; margin: -260px 0 0 -260px; background: repeating-conic-gradient(rgba(255,201,64,0.16) 0 10deg, transparent 10deg 20deg); border-radius: 50%; animation: spin 18s linear infinite; pointer-events: none; mask: radial-gradient(circle, #000 20%, transparent 65%); -webkit-mask: radial-gradient(circle, #000 20%, transparent 65%); }
 .prize-win .trophy { position: relative; font-size: 72px; line-height: 1; filter: drop-shadow(0 8px 16px rgba(255,170,0,0.55)); animation: prizePop 0.6s ease both, floaty 2.6s 0.6s ease-in-out infinite; }
 .prize-win h2 { position: relative; margin-top: 8px; }

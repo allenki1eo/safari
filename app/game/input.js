@@ -2,6 +2,9 @@
  * Swipe + keyboard input. Swipes fire as soon as the finger travels far enough,
  * not on release, which makes lane changes feel instant.
  */
+/** Panels that scroll with a finger: full-screen sheets, the results card and every pop-up. */
+export const SCROLLERS = '.sheet-body, .over .card, .modal, input, textarea';
+
 export function bindInput(target, onAction) {
   let sx = 0;
   let sy = 0;
@@ -33,7 +36,8 @@ export function bindInput(target, onAction) {
     start(t.clientX, t.clientY);
   }, { passive: true });
   target.addEventListener('touchmove', (e) => {
-    if (e.target.closest?.('.sheet-body, .over .card, input, textarea')) return;
+    // anything that scrolls keeps its native drag; everywhere else a drag is a swipe
+    if (e.target.closest?.(SCROLLERS)) return;
     const t = e.changedTouches[0];
     move(t.clientX, t.clientY);
     e.preventDefault();
