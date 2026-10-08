@@ -12,6 +12,7 @@ import {
   resetLeaderboardClient,
   setLeaderboardClock,
   validateSubmission,
+  hashToken,
 } from './leaderboard.js';
 import { leaveDecision, runnerName, scoreSavePlan } from '../app/ui/leaderboard.js';
 
@@ -453,5 +454,58 @@ test('a runner who never set a PIN gets back in with a one-time admin code', asy
       if (prev == null) delete process.env.KIMBIA_ADMIN_KEY;
       else process.env.KIMBIA_ADMIN_KEY = prev;
     }
+  });
+});
+
+test('day, week and month prizes go to the top runners once, on any of their devices', async () => {
+  await withDb(async () => {
+    const at = (iso) => setLeaderboardClock(() => new Date(iso));
+    const run = (token, name, score, extra = {}) =>
+      post({ token, name, score, distance: Math.round(score / 10), duration: 120, runner: 'zuri', ...extra });
+
+    // Monday 5 Oct, midday in Dar
+    at('2026-10-05T09:00:00Z');
+    await run(T.juma, 'Juma', 9000);
+    await run(T.neema, 'Neema', 7000);
+    await run(T.amani, 'Amani', 5000);
+    await run(T.thief, 'Thief', 99_000, { distance: 500_000, duration: 10 }); // impossible pace
+
+    const live = await handleScoreRequest('GET', undefined, { board: 'day' });
+    assert.equal(live.status, 200);
+    assert.deepEqual(live.body.top.map((r) => r.name), ['Juma', 'Neema', 'Amani'], 'an impossible run is left off');
+    assert.equal(live.body.top[0].prize, 1000);
+    assert.equal(live.body.endsAt, Date.parse('2026-10-05T21:00:00Z'));
+
+    // Tuesday: Neema has the best run of the week, Kito joins
+    at('2026-10-06T09:00:00Z');
+    await run(T.neema, 'Neema', 12_000);
+    await run(T.kito, 'Kito', 3000);
+    const week = await handleScoreRequest('GET', undefined, { board: 'week' });
+    assert.equal(week.body.period, '2026-10-05');
+    assert.deepEqual(week.body.top.map((r) => [r.name, r.score]), [['Neema', 12_000], ['Juma', 9000], ['Amani', 5000], ['Kito', 3000]]);
+    assert.equal(week.body.champion, null);
+
+    // Monday's prizes are ready on Tuesday; each is collected only once
+    const juma = await post({ action: 'prizes', token: T.juma });
+    assert.deepEqual(juma.body.prizes, [{ kind: 'day', period: '2026-10-05', rank: 1, score: 9000, amount: 1000 }]);
+    assert.deepEqual((await post({ action: 'prizes', token: T.juma })).body.prizes, []);
+    assert.deepEqual((await post({ action: 'prizes', token: T.thief })).body.prizes, []);
+    const today = await handleScoreRequest('GET', undefined, { board: 'day' });
+    assert.equal(today.body.champion.name, 'Juma', "yesterday's winner wears the crown");
+
+    // the next Monday: the week has closed. Neema collects on a second device.
+    at('2026-10-12T09:00:00Z');
+    const db = createClient({ url: process.env.TURSO_DATABASE_URL });
+    const neemaId = (await db.execute({ sql: 'SELECT id FROM players WHERE name = ?', args: ['Neema'] })).rows[0].id;
+    await db.execute({ sql: 'INSERT INTO player_keys (token_hash, player_id, created_ms) VALUES (?, ?, 0)', args: [hashToken(T.hanki), neemaId] });
+    db.close();
+    const neema = await post({ action: 'prizes', token: T.hanki });
+    assert.deepEqual(
+      neema.body.prizes.map((p) => [p.kind, p.rank, p.amount]),
+      [['week', 1, 6000], ['day', 1, 1000], ['day', 2, 600]],
+      'the week win comes first, then the days (Tuesday is paid even though nobody visited since)',
+    );
+    const kito = await post({ action: 'prizes', token: T.kito });
+    assert.deepEqual(kito.body.prizes.map((p) => [p.kind, p.rank, p.amount]), [['week', 4, 400], ['day', 2, 600]]);
   });
 });

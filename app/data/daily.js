@@ -35,6 +35,39 @@ export function shiftDarDay(day, delta) {
   return darDay(new Date(darMidnight(day) + delta * DAY + HOUR));
 }
 
+/** The moment a Dar calendar day ends (the next midnight there), as a UTC timestamp. */
+export const darDayEnd = (day) => darMidnight(day) + DAY;
+
+/** The Monday that starts the Dar week holding `day`. */
+export function darWeekStart(day) {
+  const [y, m, d] = String(day).split('-').map(Number);
+  const back = (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7; // Monday → 0
+  return shiftDarDay(day, -back);
+}
+
+/** The first and last day of a prize period: a day, the week from a Monday, or a month (YYYY-MM). */
+export function periodDays(kind, period) {
+  if (kind === 'day') return [period, period];
+  if (kind === 'week') return [period, shiftDarDay(period, 6)];
+  const [y, m] = period.split('-').map(Number);
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return [`${period}-01`, `${period}-${String(last).padStart(2, '0')}`];
+}
+
+/** The prize period of `kind` that holds `day`, and the one before it. */
+export function periodOf(kind, day) {
+  if (kind === 'day') return day;
+  if (kind === 'week') return darWeekStart(day);
+  return day.slice(0, 7);
+}
+export function previousPeriod(kind, period) {
+  if (kind === 'day') return shiftDarDay(period, -1);
+  if (kind === 'week') return shiftDarDay(period, -7);
+  return shiftDarDay(`${period}-01`, -1).slice(0, 7);
+}
+/** When a period's board closes and its prizes are handed out. */
+export const periodEnd = (kind, period) => darDayEnd(periodDays(kind, period)[1]);
+
 /** A fresh route key for one run (every run deals a new layout); challenges pass theirs on. */
 export function newRoute() {
   return `r${Math.floor(Math.random() * 36 ** 7).toString(36)}`;

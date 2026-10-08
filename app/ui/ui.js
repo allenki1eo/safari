@@ -8,6 +8,7 @@ import { audio } from '../game/audio.js';
 import { challengeUrl, makeCard, shareText } from './share.js';
 import { fetchBoard, leaveDecision, postScore, renderRows, runnerName, scoreSavePlan } from './leaderboard.js';
 import { darDay, ghostFrom, huntWord, parseShareLink, routeForLink } from '../data/daily.js';
+import { MEDAL, PRIZES, closesAt, collectPrizes, ordinal, periodName, timeLeft } from './prizes.js';
 import { STAKES, acceptBet, collectBets, createChallenge, fetchChallenge, finishBet, linkOrigin } from './challenges.js';
 import { install, device, standalone } from './install.js';
 import { VIEW_MIN, VIEW_MAX } from '../game/game.js';
@@ -182,6 +183,11 @@ export class UI {
         </div>
         <div class="title-bottom">
           ${this.challengeCardHtml()}
+          <button class="prize-ribbon" data-act="board" data-click>
+            <span class="gift">🎁</span>
+            <span class="what">${t("Today's #1 wins {n}", { n: `<b>${fmt(PRIZES.day[0])}</b>` })}<i class="seed"></i></span>
+            <span class="ends" data-ends>${timeLeft(closesAt('day'))}</span>
+          </button>
           ${save.best ? `<div class="best-line">${t('Best run {score} pts · {dist}m', { score: `<b>${fmt(save.best)}</b>`, dist: `<b>${fmt(save.bestDistance)}` })}</b></div>` : ''}
           <button class="start-chip" data-act="journey" data-click>
             <span class="flag">${COUNTRIES[start.country].flag}</span>
@@ -214,6 +220,12 @@ export class UI {
     });
     this.show(el);
     this.collectWinnings();
+    this.collectPrizeMoney();
+    const ends = el.querySelector('[data-ends]');
+    const tick = setInterval(() => {
+      if (!ends.isConnected) return clearInterval(tick);
+      ends.textContent = timeLeft(closesAt('day'));
+    }, 15000);
     this.maybeNudgeInstall();
     this.maybeOfferRestore();
     this.maybeAskForPin();
@@ -1017,7 +1029,8 @@ export class UI {
     const el = root.querySelector('[data-share-rank]');
     if (!el) return;
     if (daily?.rank) {
-      el.innerHTML = `${t('Today')} <b>#${fmt(daily.rank)}</b>`;
+      const prize = PRIZES.day[daily.rank - 1];
+      el.innerHTML = `${t('Today')} <b>#${fmt(daily.rank)}</b>${prize ? ` <span class="rank-prize">🎁 ${fmt(prize)}<i class="seed"></i></span>` : ''}`;
       return;
     }
     el.textContent = failed ? t("Today's rank didn't save") : t('Today — off the board');
@@ -1242,8 +1255,10 @@ export class UI {
         </div>
         <div class="sheet-body">
           <div class="lb-tabs">
-            <button type="button" data-board="all" class="on">${t('All-time')}</button>
-            <button type="button" data-board="daily">${t('Today')}</button>
+            <button type="button" data-board="day" class="on">${t('Today')}</button>
+            <button type="button" data-board="week">${t('Week')}</button>
+            <button type="button" data-board="month">${t('Month')}</button>
+            <button type="button" data-board="all">${t('All-time')}</button>
           </div>
           <div class="lb-rows"></div>
         </div>
@@ -1262,15 +1277,16 @@ export class UI {
         return;
       }
       if (e.target.closest('[data-act=retry]')) {
-        const which = el.querySelector('[data-board].on')?.dataset.board || 'all';
+        const which = el.querySelector('[data-board].on')?.dataset.board || 'day';
         this.fillBoard(rows, which);
       }
     });
     this.overlay(el);
-    this.fillBoard(rows, 'all');
+    this.fillBoard(rows, 'day');
   }
 
-  async fillBoard(body, board = 'all') {
+  async fillBoard(body, board = 'day') {
+    if (board !== 'all') return this.fillPrizeBoard(body, board);
     const daily = board === 'daily';
     body.innerHTML = `<p class="muted">${daily ? t("Loading today's route…") : t('Loading the savanna board…')}</p>`;
     try {
@@ -1295,6 +1311,103 @@ export class UI {
           <button class="btn" data-act="retry" data-click style="margin-top:14px">${t('Try again')}</button>
         </div>`;
     }
+  }
+
+  /** A day, week or month board: what each place wins, a live countdown, last time's champion. */
+  async fillPrizeBoard(body, kind) {
+    clearInterval(this.boardTick);
+    body.innerHTML = `<p class="muted">${t('Loading the board…')}</p>`;
+    try {
+      if (this._submitTask) await this._submitTask;
+      const data = await fetchBoard(kind);
+      if (!body.isConnected) return;
+      const top = data.top || [];
+      const title = { day: t("Today's prizes"), week: t("This week's prizes"), month: t("This month's prizes") }[kind];
+      const last = { day: t("Yesterday's champion"), week: t("Last week's champion"), month: t("Last month's champion") }[kind];
+      const p = data.prizes || PRIZES[kind];
+      const champ = data.champion;
+      body.innerHTML = `
+        <div class="prize-card">
+          <div class="prize-top"><b>🎁 ${title}</b><span class="ends">⏳ <span data-ends>${timeLeft(data.endsAt)}</span></span></div>
+          <div class="podium">
+            ${[1, 0, 2].map((i) => `<div class="step s${i + 1}"><span class="m">${MEDAL[i]}</span><b>${fmt(p[i])}</b><i class="seed"></i></div>`).join('')}
+          </div>
+          <div class="prize-rest">${t('4th–10th place: {n} each', { n: `<b>${fmt(p[3])}</b>` })}<i class="seed"></i></div>
+          ${champ ? `<div class="champ">👑 ${last}: <b>${esc(champ.name)}</b> · ${fmt(champ.score)}</div>` : ''}
+        </div>
+        ${top.length
+          ? renderRows(top, { youId: save.playerId ?? null, youName: save.playerId == null ? save.name || '' : '', crown: champ?.name })
+          : `<div class="panel lb-empty-card"><div class="e">🌅</div><p>${t('Nobody has run yet. Finish a run and the top spot is yours.')}</p></div>`}
+        <p class="muted lb-foot">${t('Your best run in the period counts. Prizes land in your bank the next time you open the game.')}</p>`;
+      const ends = body.querySelector('[data-ends]');
+      this.boardTick = setInterval(() => {
+        if (!ends.isConnected) return clearInterval(this.boardTick);
+        ends.textContent = timeLeft(data.endsAt);
+      }, 1000);
+    } catch (err) {
+      if (!body.isConnected) return;
+      body.innerHTML = `
+        <div class="panel lb-empty-card">
+          <div class="e">🌫️</div>
+          <p>${esc(err.message || t('Could not load the board'))}</p>
+          <button class="btn" data-act="retry" data-click style="margin-top:14px">${t('Try again')}</button>
+        </div>`;
+    }
+  }
+
+  /** Prizes won on a board that has closed, collected when the title screen opens. */
+  async collectPrizeMoney() {
+    if (this.collectingPrizes || Date.now() - (this.prizesAt ?? 0) < 60000) return;
+    this.collectingPrizes = true;
+    try {
+      const prizes = await collectPrizes();
+      this.prizesAt = Date.now();
+      if (prizes.length) this.prizeSheet(prizes);
+    } catch {
+      /* try again next time */
+    } finally {
+      this.collectingPrizes = false;
+    }
+  }
+
+  prizeSheet(prizes) {
+    const total = prizes.reduce((sum, p) => sum + p.amount, 0);
+    const best = Math.min(...prizes.map((p) => p.rank));
+    const el = $(`
+      <div class="screen modal-wrap scrim-full prize-win">
+        <div class="panel modal">
+          <div class="rays"></div>
+          <div class="trophy">${best <= 3 ? '🏆' : '🎁'}</div>
+          <h2>${best === 1 ? t('Champion!') : t('You won a prize!')}</h2>
+          <div class="muted">${t('You finished in the top spots. Here is your reward.')}</div>
+          <div class="win-list">
+            ${prizes.map((p) => `
+              <div class="win-row">
+                <span class="m">${MEDAL[p.rank - 1] ?? '🎖️'}</span>
+                <span class="w"><b>${t('{place} on {board}', { place: ordinal(p.rank), board: esc(periodName(p.kind, p.period)) })}</b><small>${fmt(p.score)} ${t('pts')}</small></span>
+                <span class="a">+${fmt(p.amount)}<i class="seed"></i></span>
+              </div>`).join('')}
+          </div>
+          <div class="win-total"><span class="seed lg"></span><b data-count>0</b></div>
+          <div class="stack"><button class="btn big" data-ok data-click>${t('Collect')}</button></div>
+        </div>
+      </div>`);
+    const count = el.querySelector('[data-count]');
+    const t0 = performance.now();
+    const roll = (now) => {
+      const k = Math.min(1, (now - t0) / 1200);
+      count.textContent = `+${fmt(total * (1 - (1 - k) ** 3))}`;
+      if (k < 1 && count.isConnected) requestAnimationFrame(roll);
+    };
+    requestAnimationFrame(roll);
+    el.querySelector('[data-ok]').addEventListener('click', () => {
+      audio.buy();
+      el.remove();
+      const chip = this.screen?.querySelector('.title-top .chip span:last-child');
+      if (chip) chip.textContent = fmt(save.seeds);
+    });
+    this.overlay(el);
+    audio.buy();
   }
 
   missionSetComplete() {
