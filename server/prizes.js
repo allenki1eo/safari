@@ -11,15 +11,13 @@ import { PRIZES } from '../app/data/content.js';
 import { darDay, periodDays, periodEnd, periodOf, previousPeriod } from '../app/data/daily.js';
 import { TOKEN_RE, TOP_LIMIT, getClient, hashToken, now, playerIdForToken } from './leaderboard.js';
 import { postInbox } from './inbox.js';
+import { fairRunSql, prizeScoreSql } from './plausible.js';
 
 export const KINDS = ['day', 'week', 'month'];
 // closed periods looked back over on each settle, so a quiet night still pays out
 const LOOKBACK = { day: 7, week: 3, month: 2 };
-// fastest believable pace, m/s (top speed with every boost is under 80)
-const MAX_PACE = 90;
-
-/** A run counts for prizes when it reports a real distance and a believable pace. */
-const fair = (t) => `${t}.score > 0 AND ${t}.duration > 0 AND ${t}.distance <= ${t}.duration * ${MAX_PACE}`;
+// A run counts for prizes only when it passes the same checks as the score route
+// (server/plausible.js), and its multiplier counts up to PRIZE_MULT_CAP.
 
 /**
  * Best run per player across the period's days, best first; ties go to whoever got there first.
@@ -29,10 +27,12 @@ const fair = (t) => `${t}.score > 0 AND ${t}.duration > 0 AND ${t}.distance <= $
 async function periodTop(db, kind, period, limit = TOP_LIMIT) {
   const [from, to] = periodDays(kind, period);
   const result = await db.execute({
-    sql: `SELECT player_id, id, name, score, distance, seeds, allies, chapter, runner FROM (
-            SELECT d.*, ROW_NUMBER() OVER (PARTITION BY d.player_id ORDER BY d.score DESC, d.id ASC) AS pick
+    sql: `SELECT player_id, id, name, pscore AS score, distance, seeds, allies, chapter, runner FROM (
+            SELECT d.*, ${prizeScoreSql('d', 'm')} AS pscore,
+                   ROW_NUMBER() OVER (PARTITION BY d.player_id ORDER BY ${prizeScoreSql('d', 'm')} DESC, d.id ASC) AS pick
             FROM daily_scores d
-            WHERE d.day BETWEEN ? AND ? AND ${fair('d')} AND d.player_id NOT IN (SELECT player_id FROM banned)
+            LEFT JOIN run_meta m ON m.day = d.day AND m.player_id = d.player_id
+            WHERE d.day BETWEEN ? AND ? AND ${fairRunSql('d')} AND d.player_id NOT IN (SELECT player_id FROM banned)
           )
           WHERE pick = 1
           ORDER BY score DESC, id ASC

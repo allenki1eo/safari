@@ -607,14 +607,16 @@ test('Derby Day: a side sticks, runs pull the rope, nothing counts outside the e
     // trying to switch sides keeps the first pick
     assert.deepEqual((await run(T.juma, 'Juma', 800, { side: 'red' })).body.derby, { side: 'green', added: 800 });
     await run(T.neema, 'Neema', 1500, { side: 'red' });
-    await run(T.amani, 'Amani', 5000, { side: 'red', duration: 10 }); // impossible pace adds nothing
+    const fake = await run(T.amani, 'Amani', 5000, { side: 'red', duration: 10 }); // impossible pace: turned away
+    assert.equal(fake.status, 422);
+    assert.equal(fake.body.code, 'IMPLAUSIBLE');
     assert.equal((await post({ action: 'side', token: T.kito, side: 'red' })).body.pending, true, 'no runner yet: joins with the first run');
     assert.equal((await post({ action: 'side', token: T.neema, side: 'green' })).body.side, 'red');
 
     const board = await handleScoreRequest('GET', undefined, { board: 'derby' });
     assert.equal(board.body.live, true);
-    assert.deepEqual(board.body.sides.green, { distance: 2000, runs: 2, fans: 1 });
-    assert.deepEqual(board.body.sides.red, { distance: 1500, runs: 1, fans: 2 });
+    assert.deepEqual(board.body.sides.green, { distance: 2000, runs: 2, fans: 1, perFan: 2000 });
+    assert.deepEqual(board.body.sides.red, { distance: 1500, runs: 1, fans: 1, perFan: 1500 });
 
     at('2026-10-13T09:00:00Z'); // it has closed: the score is frozen
     assert.equal((await run(T.neema, 'Neema', 9000)).body.derby, null);
@@ -728,4 +730,72 @@ test('inbox: prizes, bet results and announcements reach the game, with or witho
     if (prev.key == null) delete process.env.KIMBIA_ADMIN_KEY; else process.env.KIMBIA_ADMIN_KEY = prev.key;
     if (prev.pub != null) process.env.VAPID_PUBLIC_KEY = prev.pub;
   }
+});
+
+test('fair play: runs that could not have happened are turned away; real ones still save', async () => {
+  // validation keeps the multiplier only when it is a real one
+  assert.equal(validateSubmission({ token: T.juma, name: 'Juma', score: 10, mult: 31 }).ok, false);
+  assert.equal(validateSubmission({ token: T.juma, name: 'Juma', score: 10, mult: 0 }).ok, false);
+  assert.equal(validateSubmission({ token: T.juma, name: 'Juma', score: 10, mult: 7 }).value.mult, 7);
+  assert.equal(validateSubmission({ token: T.juma, name: 'Juma', score: 10 }).value.mult, null);
+
+  const { plausibleRun, scoreCeiling } = await import('./plausible.js');
+  // the live board's real runs, as posted (top run: 1.63 M points over 35 km in about 18 minutes)
+  for (const r of [
+    { score: 1_630_889, distance: 34_973, seeds: 15_686, duration: 1080 },
+    { score: 1_247_312, distance: 29_372, seeds: 12_000, duration: 896 },
+    { score: 26_540, distance: 649, seeds: 207, duration: 40 },
+    { score: 130, distance: 70, seeds: 2, duration: 5 },
+  ]) assert.equal(plausibleRun(r).ok, true, JSON.stringify(r));
+  assert.equal(plausibleRun({ score: 1000, distance: 5000, duration: 10 }).reason, 'pace');
+  assert.equal(plausibleRun({ score: 99_999_999, distance: 1000, duration: 100 }).reason, 'score');
+  assert.equal(plausibleRun({ score: 50_000, distance: 1000, duration: 100, mult: 1 }).reason, 'score', 'a ×1 runner cannot score 50 a metre');
+  assert.equal(plausibleRun({ score: 50_000, distance: 1000, duration: 100, mult: 3 }).ok, true);
+  assert.equal(plausibleRun({ score: 100, distance: 100, duration: 10, seeds: 90_000 }).reason, 'seeds');
+  assert.ok(scoreCeiling(1000, 1) < scoreCeiling(1000, 2));
+
+  await withDb(async () => {
+    const real = await post({ token: T.juma, name: 'Juma', score: 9000, distance: 900, duration: 60, mult: 2 });
+    assert.equal(real.status, 200);
+    const fake = await post({ token: T.thief, name: 'Thief', score: 99_999_999, distance: 1000, duration: 100 });
+    assert.equal(fake.status, 422);
+    assert.equal(fake.body.code, 'IMPLAUSIBLE');
+    const top = await handleScoreRequest('GET');
+    assert.deepEqual(top.body.top.map((r) => r.name), ['Juma'], 'the fake run never reaches the board');
+  });
+});
+
+test('fair play: a device can only post a few runs a minute; a busy network gets more room', async () => {
+  const { RATE } = await import('./leaderboard.js');
+  await withDb(async () => {
+    setLeaderboardClock(() => new Date('2026-10-09T09:00:00Z'));
+    const ctx = { ip: '41.59.1.1' };
+    const send = (token, score) => handleScoreRequest('POST', { token, name: token === T.juma ? 'Juma' : 'Neema', score, distance: 100, duration: 10 }, undefined, ctx);
+    for (let i = 0; i < RATE.perDevice; i++) assert.equal((await send(T.juma, 100 + i)).status, 200);
+    const blocked = await send(T.juma, 999);
+    assert.equal(blocked.status, 429);
+    assert.equal(blocked.body.code, 'RATE_LIMITED');
+    // another phone on the same carrier address is not held back
+    assert.equal((await send(T.neema, 50)).status, 200);
+    // a minute later the device may post again
+    setLeaderboardClock(() => new Date('2026-10-09T09:01:01Z'));
+    assert.equal((await send(T.juma, 1000)).status, 200);
+  });
+});
+
+test('fair play: prize boards skip impossible runs and count the multiplier up to ×10', async () => {
+  await withDb(async () => {
+    setLeaderboardClock(() => new Date('2026-10-05T09:00:00Z'));
+    // a ×30 veteran's 30,000 counts as 10,000 for prizes; a ×2 runner's 12,000 counts in full
+    await post({ token: T.juma, name: 'Juma', score: 30_000, distance: 1000, duration: 60, mult: 30 });
+    await post({ token: T.neema, name: 'Neema', score: 12_000, distance: 1000, duration: 60, mult: 2 });
+    // saved before the multiplier was recorded: counts as it is
+    await post({ token: T.amani, name: 'Amani', score: 11_000, distance: 1000, duration: 60 });
+    const day = await handleScoreRequest('GET', undefined, { board: 'day' });
+    assert.deepEqual(day.body.top.map((r) => [r.name, r.score]), [['Neema', 12_000], ['Amani', 11_000], ['Juma', 10_000]]);
+    // the all-time board still shows the real score
+    const all = await handleScoreRequest('GET');
+    assert.equal(all.body.top[0].name, 'Juma');
+    assert.equal(all.body.top[0].score, 30_000);
+  });
 });

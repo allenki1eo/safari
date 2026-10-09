@@ -3,7 +3,7 @@
  * not on release, which makes lane changes feel instant.
  */
 /** Panels that scroll with a finger: full-screen sheets, the results card and every pop-up. */
-export const SCROLLERS = '.sheet-body, .over .card, .modal, input, textarea';
+export const SCROLLERS = '.sheet-body, .over .card, .modal, .title-bottom, input, textarea';
 
 export function bindInput(target, onAction) {
   let sx = 0;

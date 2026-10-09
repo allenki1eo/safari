@@ -153,10 +153,12 @@ export const INTRO = [
 ];
 
 export const TUTORIAL = [
-  { at: 25, text: 'Swipe ← → to switch lanes', icon: '↔️' },
-  { at: 75, text: 'Swipe ↑ to jump logs', icon: '⬆️' },
-  { at: 125, text: 'Swipe ↓ to slide under branches', icon: '⬇️' },
-  { at: 175, text: 'Grab glowing totems to call an animal ally!', icon: '🐾' },
+  // each tip shows well before the scripted obstacle it teaches (patterns.js tutorialPlan):
+  // boulder ~87 m, logs ~123 m, branches ~157 m, totem ~191 m
+  { at: 20, text: 'Swipe ← → to switch lanes', icon: '↔️' },
+  { at: 92, text: 'Swipe ↑ to jump logs', icon: '⬆️' },
+  { at: 127, text: 'Swipe ↓ to slide under branches', icon: '⬇️' },
+  { at: 161, text: 'Grab glowing totems to call an animal ally!', icon: '🐾' },
 ];
 
 /* -------------------------------------------------------------------------- */

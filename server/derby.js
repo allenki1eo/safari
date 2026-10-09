@@ -1,13 +1,15 @@
 /**
  * Kariakoo Derby Special on the server: a runner's side (their first pick sticks, on every device that holds
  * a key to the runner) and each side's total distance, which every run adds to while the event
- * is live. Runs with an impossible pace add nothing, and one run adds at most RUN_MAX metres.
+ * is live. Runs that fail the fair-play checks add nothing, one run adds at most RUN_MAX metres,
+ * and the rope compares each side's metres per fan.
  */
 import { DERBY, DERBY_SIDES, derbyLive } from '../app/data/content.js';
 import { TOKEN_RE, getClient, hashToken, now, playerIdForToken } from './leaderboard.js';
+import { plausibleRun } from './plausible.js';
 
-const RUN_MAX = 60_000;
-const MAX_PACE = 90; // m/s, as for the prize boards
+// one run adds at most this much, so a single marathon can't settle the derby on its own
+const RUN_MAX = 15_000;
 
 export const cleanSide = (side) => (DERBY_SIDES.includes(side) ? side : null);
 
@@ -32,7 +34,7 @@ export async function derbyRun(db, playerId, run, side) {
   const held = await joinSide(db, playerId, side);
   if (!held) return null;
   const banned = (await db.execute({ sql: 'SELECT 1 FROM banned WHERE player_id = ?', args: [playerId] })).rows.length > 0;
-  const fair = !banned && run.duration > 0 && run.distance <= run.duration * MAX_PACE;
+  const fair = !banned && run.duration > 0 && plausibleRun(run).ok;
   const added = fair ? Math.min(run.distance, RUN_MAX) : 0;
   if (added > 0) {
     await db.execute({
@@ -52,6 +54,8 @@ export async function derbyBoard() {
   const sides = Object.fromEntries(DERBY_SIDES.map((id) => [id, { distance: 0, runs: 0, fans: 0 }]));
   for (const r of totals) if (sides[r.side]) Object.assign(sides[r.side], { distance: Number(r.distance), runs: Number(r.runs) });
   for (const r of fans) if (sides[r.side]) sides[r.side].fans = Number(r.n);
+  // the rope pulls by metres per fan, so the bigger crowd doesn't win just by being bigger
+  for (const s of Object.values(sides)) s.perFan = s.fans ? Math.round(s.distance / s.fans) : 0;
   const t = now().getTime();
   return { event: DERBY.id, live: derbyLive(t), opens: DERBY.opens, closes: DERBY.closes, sides };
 }
