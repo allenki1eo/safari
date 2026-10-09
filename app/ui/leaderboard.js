@@ -91,7 +91,7 @@ export async function postScore(entry) {
     }),
   });
   const data = await readJson(res);
-  if (!res.ok) throw Object.assign(new Error(data.error || 'Could not post your score'), { status: res.status, code: data.code });
+  if (!res.ok) throw Object.assign(new Error(data.error || 'Could not post your score'), { status: res.status, code: data.code, suggestions: data.suggestions ?? [] });
   return data;
 }
 

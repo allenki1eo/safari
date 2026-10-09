@@ -205,7 +205,40 @@ export function fail(err) {
   return { status: 500, body: { error: 'The leaderboard is unavailable.' } };
 }
 
-const taken = () => ({ status: 409, body: { error: 'That name is taken. Try another one.', code: 'NAME_TAKEN' } });
+/** Up to three free names close to `name`: "Gee_TZ", "Gee7", "Gee42"… within the 16-character limit. */
+export async function nameSuggestions(db, name) {
+  const base = [...name].slice(0, NAME_MAX - 3).join('');
+  const pick = () => 2 + Math.floor(Math.random() * 98);
+  const tries = [...new Set([`${base}_TZ`, `${base}${pick()}`, `${base}${pick()}`, `${base}_KE`, `${base}${pick()}`, `${base}_UG`, `${base}${100 + Math.floor(Math.random() * 900)}`])]
+    .filter((n) => cleanName(n) === n);
+  const keys = tries.map(nameKey);
+  const used = new Set((await db.execute({
+    sql: `SELECT name_key FROM players WHERE name_key IN (${keys.map(() => '?').join(', ')})`,
+    args: keys,
+  })).rows.map((r) => String(r.name_key)));
+  return tries.filter((n) => !used.has(nameKey(n))).slice(0, 3);
+}
+
+const takenFor = async (db, name) => ({
+  status: 409,
+  body: { error: 'That name is taken. Try another one.', code: 'NAME_TAKEN', suggestions: await nameSuggestions(db, name).catch(() => []) },
+});
+
+/**
+ * POST { action: 'check', token, name }: can this device use the name? Free, already theirs, or
+ * an old unclaimed board name are all fine; otherwise it is taken, with a few free suggestions.
+ */
+export async function checkName(body) {
+  const name = cleanName(body?.name);
+  if (!name) return { status: 200, body: { ok: false, reason: 'invalid' } };
+  const db = await getClient();
+  const owner = (await db.execute({ sql: 'SELECT id, token_hash FROM players WHERE name_key = ?', args: [nameKey(name)] })).rows[0];
+  if (!owner || owner.token_hash == null) return { status: 200, body: { ok: true, name } };
+  const mine = typeof body?.token === 'string' && TOKEN_RE.test(body.token)
+    && Number(await playerIdForToken(db, hashToken(body.token))) === Number(owner.id);
+  if (mine) return { status: 200, body: { ok: true, name, yours: true } };
+  return { status: 200, body: { ok: false, reason: 'taken', name, suggestions: await nameSuggestions(db, name) } };
+}
 const isUnique = (err) => /UNIQUE|constraint/i.test(String(err?.message || err));
 
 export async function listTop() {
@@ -246,24 +279,24 @@ export async function submitScore(body) {
         // first device to post under a name from the old board claims it
         await db.execute({ sql: 'UPDATE players SET token_hash = ?, name = ? WHERE id = ? AND token_hash IS NULL', args: [th, v.name, owner.id] });
       } else if (owner) {
-        return taken();
+        return await takenFor(db, v.name);
       } else {
         await db.execute({ sql: 'INSERT INTO players (name, name_key, token_hash) VALUES (?, ?, ?)', args: [v.name, key, th] });
       }
     } else if (player.name_key !== key) {
-      if (owner) return taken();
+      if (owner) return await takenFor(db, v.name);
       await db.execute({ sql: 'UPDATE players SET name = ?, name_key = ? WHERE id = ?', args: [v.name, key, player.id] });
     } else if (player.name !== v.name) {
       await db.execute({ sql: 'UPDATE players SET name = ? WHERE id = ?', args: [v.name, player.id] });
     }
   } catch (err) {
-    if (isUnique(err)) return taken();
+    if (isUnique(err)) return await takenFor(db, v.name);
     throw err;
   }
 
   const id0 = await playerIdForToken(db, th);
   player = id0 == null ? null : (await db.execute({ sql: `SELECT ${COLS} FROM players WHERE id = ?`, args: [id0] })).rows[0];
-  if (!player) return taken(); // lost a race for the name
+  if (!player) return await takenFor(db, v.name); // lost a race for the name
   const id = Number(player.id);
 
   let improved = false;
@@ -396,6 +429,7 @@ export async function handleScoreRequest(method, body, query) {
     }
     if (method === 'POST' && body?.action === 'prizes') return await claimPrizes(body);
     if (method === 'POST' && body?.action === 'side') return await pickSide(body);
+    if (method === 'POST' && body?.action === 'check') return await checkName(body);
     if (method === 'POST') return await submitScore(body);
     return { status: 405, body: { error: 'Method not allowed.' } };
   } catch (err) {

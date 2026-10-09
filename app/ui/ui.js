@@ -2,6 +2,7 @@ import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO, OUTFITS, outfitId, HUN
 import { adoptSide, fetchDerby, joinSide, km } from './derby.js';
 import { applyUpdate, markUpdateSeen, unseenUpdate, updateWaiting } from './updates.js';
 import { ago, describe, fetchInbox, markInboxRead, unreadCount } from './inbox.js';
+import { NAME_ATTRS, bindNameField, clampName } from './namefield.js';
 import { REGIONS, COUNTRIES } from '../data/regions.js';
 import {
   save, persist, ensureMissions, checkMissions, claimMissionSet, multiplier, claimDaily, hasProgress,
@@ -950,7 +951,7 @@ export class UI {
         <div class="panel modal challenge-sheet">
           <h2>${t('Challenge a friend')}</h2>
           <div class="muted">${t('They race your shadow on this exact route.')}</div>
-          ${save.name ? '' : `<input class="name-input" data-name maxlength="16" placeholder="${t('Your runner name')}" autocomplete="nickname">`}
+          ${save.name ? '' : `<input class="name-input" data-name placeholder="${t('Your runner name')}" ${NAME_ATTRS}><div class="name-status" data-name-status></div>`}
           <div class="bet-head"><b>${t('Bet coins?')}</b><span>${t('Winner takes all')}</span></div>
           <div class="stakes">
             ${STAKES.map((n) => `<button class="stake ${n === 0 ? 'on' : ''}" data-stake="${n}" ${n > save.seeds ? 'disabled' : ''}>${n ? `${fmt(n)}<span class="seed"></span>` : t('Free')}</button>`).join('')}
@@ -977,12 +978,21 @@ export class UI {
       send.classList.toggle('flame', !!stake && !ready);
       send.classList.toggle('teal', !stake || ready);
     };
+    const nameInput = el.querySelector('[data-name]');
+    const nameField = nameInput ? bindNameField(nameInput, el.querySelector('[data-name-status]')) : null;
     const make = async (n) => {
       const name = nameOf();
       if (!name) throw Object.assign(new Error(t('Pick a runner name first.')), { code: 'NAME' });
       if (!save.name) {
-        save.name = name;
-        persist();
+        // claim it on the leaderboard first, so it is really theirs (and not someone else's)
+        const res = await this.claimName(name, { quiet: true });
+        if (res.taken) {
+          nameField?.taken(name, res.suggestions);
+          throw Object.assign(new Error(t('“{name}” is taken. Pick another name.', { name })), { code: 'NAME' });
+        }
+        if (!save.name) throw Object.assign(new Error(t("Couldn't reach the leaderboard. Your name wasn't changed.")), { code: 'NAME' });
+        nameInput?.remove();
+        el.querySelector('[data-name-status]')?.remove();
       }
       const { id } = await createChallenge(base, n, name);
       const url = challengeUrl({ ...base, name, challengeId: id }).replace(/^https?:\/\/[^/]+/, linkOrigin());
@@ -1174,13 +1184,14 @@ export class UI {
           const message = err.code === 'NAME_TAKEN'
             ? t('“{name}” is taken. Pick another name.', { name })
             : (err.message || t('Could not save your score'));
-          this.paintBoard(root, top, null, message, run, true);
+          this.paintBoard(root, top, null, err.code === 'NAME_TAKEN' ? '' : message, run, true);
           this.paintDailyRank(root, null, true);
           if (err.code === 'NAME_TAKEN') {
+            this.nameField?.taken(name, err.suggestions);
             // maybe it's theirs, from another browser or phone: offer to get it back
             const btn = $(`<button class="btn small lb-recover" type="button">🔑 ${t("It's me — get my runner back")}</button>`);
             btn.addEventListener('click', () => this.recoverSheet(name, () => this.submitRun(root, run, save.name)));
-            root.querySelector('.lb-msg')?.after(btn);
+            root.querySelector('[data-name-status]')?.after(btn);
           } else root.querySelector('[data-lb-name]')?.focus();
         }
         finish(false);
@@ -1235,7 +1246,8 @@ export class UI {
       head = `
         <p class="lb-ask">${t("Pick your runner name. It's yours for good, and your best run will post by itself after every game.")}</p>
         <form class="lb-form">
-          <input class="name-input" maxlength="16" data-lb-name placeholder="${t('Your name')}" value="${esc(draft)}" autocomplete="nickname" enterkeyhint="done" />
+          <input class="name-input" data-lb-name placeholder="${t('Your name')}" value="${esc(draft)}" ${NAME_ATTRS} />
+          <div class="name-status" data-name-status></div>
           <button class="btn teal wide" type="submit" data-act="post">${t('Save score')}</button>
         </form>`;
     }
@@ -1249,6 +1261,8 @@ export class UI {
       e.preventDefault();
       this.postRun(root, run);
     });
+    const field = slot.querySelector('[data-lb-name]');
+    this.nameField = field ? bindNameField(field, slot.querySelector('[data-name-status]'), { current: save.name }) : null;
   }
 
   /** Name picked on the game-over card: claim it and post this run in one go. */
@@ -2282,10 +2296,11 @@ export class UI {
 
   maybeAskForPin() {
     if (!save.name || save.pinSet || save.pinAsked || (save.runs ?? 0) < 1) return;
-    save.pinAsked = true;
-    persist();
     setTimeout(() => {
-      if (!this.screen?.classList.contains('title')) return;
+      // never cover a sheet they opened (e.g. Settings mid-rename); ask on a later visit instead
+      if (!this.screen?.classList.contains('title') || document.querySelector('.modal-wrap') || save.pinAsked) return;
+      save.pinAsked = true;
+      persist();
       this.pinSheet(false, true);
     }, 2200);
   }
@@ -2343,7 +2358,7 @@ export class UI {
           <div style="font-size:50px">🔑</div>
           <h2>${t('Get my runner back')}</h2>
           <p class="muted">${t('Type your runner name and the PIN you set. Your name, coins and runners come back to this phone.')}</p>
-          <input class="name-input" data-name maxlength="16" placeholder="${t('Runner name')}" value="${esc(name)}" autocomplete="nickname" />
+          <input class="name-input" data-name placeholder="${t('Runner name')}" value="${esc(name)}" ${NAME_ATTRS} />
           <input class="name-input pin-input" data-pin maxlength="9" placeholder="${t('PIN or recovery code')}" autocomplete="off" autocapitalize="characters" spellcheck="false" />
           <p class="pin-err" data-err></p>
           <div class="stack">
@@ -2520,7 +2535,8 @@ export class UI {
           <div class="toggle-row"><span>${t('🔑 Get my runner back')}</span><button class="btn small ghost" data-act="recover" data-click>${t('Open')}</button></div>
           <div class="toggle-row"><span>${t('📦 Move my progress')}</span><button class="btn small ghost" data-act="progress" data-click>${t('Open')}</button></div>
           <div style="margin:18px 0 6px" class="muted">${t('Your runner name (shown on challenges)')}</div>
-          <input class="name-input" maxlength="16" placeholder="${t('e.g. Zuri')}" value="${esc(save.name)}" />
+          <input class="name-input" data-settings-name placeholder="${t('e.g. Zuri')}" value="${esc(save.name)}" ${NAME_ATTRS} />
+          <div class="name-status" data-name-status></div>
           <div class="stack"><button class="btn" data-act="close" data-click>${t('Done')}</button></div>
           <p class="muted" style="text-align:center;font-size:12px;margin:16px 0 0">${t('Swipe to move · Arrow keys / WASD on desktop')}</p>
           <p class="muted credits" style="text-align:center;font-size:11px;margin:10px 0 0;line-height:1.5">${t('Runners: Quaternius (CC0). Animals: © Wildfire Games, from')} <a href="https://play0ad.com" target="_blank" rel="noopener">0 A.D.</a>, <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener">CC BY-SA 3.0</a>.</p>
@@ -2550,35 +2566,71 @@ export class UI {
         persist();
         audio.click();
       }
-      if (e.target.closest('[data-act=close]') || e.target === el) {
-        const name = el.querySelector('.name-input').value.trim().slice(0, 16);
-        el.remove();
-        if (name && name !== save.name) this.claimName(name);
+      if (e.target.closest('[data-act=close]') || e.target === el) closeSettings();
+    });
+    const nameInput = el.querySelector('[data-settings-name]');
+    const nameField = bindNameField(nameInput, el.querySelector('[data-name-status]'), { current: save.name });
+    nameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        nameInput.blur();
+        closeSettings();
       }
     });
+    let closing = false;
+    const closeSettings = async () => {
+      if (closing) return;
+      const name = runnerName(clampName(nameInput.value));
+      if (!name || name === save.name) return el.remove();
+      closing = true;
+      const done = el.querySelector('[data-act=close]');
+      done.disabled = true;
+      done.textContent = t('Saving…');
+      const res = await this.claimName(name, { quiet: true });
+      closing = false;
+      done.disabled = false;
+      done.textContent = t('Done');
+      if (res.ok) return el.remove();
+      if (res.taken) {
+        nameField.taken(name, res.suggestions);
+        nameInput.focus();
+        return;
+      }
+      this.toast('📡', t("Couldn't reach the leaderboard. Your name wasn't changed."));
+    };
     this.bindSizeControl(el);
     this.overlay(el);
   }
 
-  /** Claims (or renames to) a unique runner name without posting a run. */
-  async claimName(name) {
-    const previous = save.name;
+  /**
+   * Claims (or renames to) a unique runner name without posting a run. Resolves
+   * { ok } once it is theirs, { taken, suggestions } if someone else has it, or { error }.
+   * With `quiet`, a taken name is left for the caller to show next to its name box.
+   */
+  async claimName(name, { quiet = false } = {}) {
     try {
       const data = await postScore({ name, score: 0, distance: 0, seeds: 0, allies: 0, chapter: 0, runner: save.runner });
       save.name = data.entry.name;
       save.playerId = data.entry.id;
       persist();
       this.toast('✅', t("You're now <b>{name}</b> on the leaderboard.", { name: esc(save.name) }));
+      return { ok: true };
     } catch (err) {
       if (err.code === 'NAME_TAKEN') {
-        this.toast('🙅', t('<b>{name}</b> is already taken. Try another name.', { name: esc(name) }), 3200);
-        this.recoverSheet(name);
-      } else if (err.status === 503) {
+        if (!quiet) {
+          this.toast('🙅', t('<b>{name}</b> is already taken. Try another name.', { name: esc(name) }), 3200);
+          this.recoverSheet(name);
+        }
+        return { taken: true, suggestions: err.suggestions ?? [] };
+      }
+      if (err.status === 503) {
         // no leaderboard configured (e.g. local dev): keep the name locally
         save.name = name;
         persist();
-      } else this.toast('📡', t("Couldn't reach the leaderboard. Your name wasn't changed."));
-      if (save.name !== name) save.name = previous;
+        return { ok: true };
+      }
+      if (!quiet) this.toast('📡', t("Couldn't reach the leaderboard. Your name wasn't changed."));
+      return { error: true };
     }
   }
 
