@@ -1,5 +1,6 @@
 import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO, OUTFITS, outfitId, HUNT_WORDS, BOOSTS, DERBY, derbyLive, derbyShown, wearable } from '../data/content.js';
 import { adoptSide, fetchDerby, joinSide, km } from './derby.js';
+import { applyUpdate, markUpdateSeen, unseenUpdate, updateWaiting } from './updates.js';
 import { REGIONS, COUNTRIES } from '../data/regions.js';
 import {
   save, persist, ensureMissions, checkMissions, claimMissionSet, multiplier, claimDaily, hasProgress,
@@ -224,6 +225,8 @@ export class UI {
     this.show(el);
     this.collectWinnings();
     this.collectPrizeMoney();
+    this.checkForUpdate(el);
+    this.maybeShowWhatsNew();
     const ends = el.querySelector('[data-ends]');
     const tick = setInterval(() => {
       if (!ends?.isConnected) return clearInterval(tick);
@@ -1954,6 +1957,60 @@ export class UI {
 
   /* ------------------------------------------------ getting a runner back */
   /** Runners with a name but no recovery PIN are asked once to protect it. */
+  /* ---------------------------------------------------------- updates */
+  /** A newer version is live: a banner on the home screen refreshes onto it with one tap. */
+  async checkForUpdate(root = this.screen) {
+    if (!this.watchingUpdates) {
+      this.watchingUpdates = true;
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && this.screen?.classList.contains('title')) this.checkForUpdate(this.screen);
+      });
+    }
+    if (!(await updateWaiting())) return;
+    if (!root?.isConnected || !root.classList.contains('title') || root.querySelector('.update-bar')) return;
+    const bar = $(`
+      <button class="update-bar" data-click>
+        <span class="spark">✨</span>
+        <span class="tx"><b>${t('A new update is ready')}</b><small>${t('Tap to get the latest version')}</small></span>
+        <span class="go">${t('Update')}</span>
+      </button>`);
+    bar.addEventListener('click', () => {
+      bar.classList.add('busy');
+      bar.querySelector('.go').textContent = '…';
+      applyUpdate();
+    });
+    root.querySelector('.title-bottom')?.prepend(bar);
+  }
+
+  /** Once after each update: what changed, so returning players know what to try. */
+  maybeShowWhatsNew() {
+    const entry = unseenUpdate();
+    if (!entry || this.whatsNewShown) return;
+    this.whatsNewShown = true;
+    this.askedThisVisit = true; // no notification ask on top of it this visit
+    setTimeout(() => {
+      if (!this.screen?.classList.contains('title') || document.querySelector('.modal-wrap')) {
+        this.whatsNewShown = false;
+        return;
+      }
+      const el = $(`
+        <div class="screen modal-wrap scrim-full">
+          <div class="panel modal whats-new">
+            <div class="kicker">${t("What's new")}</div>
+            <div class="badge">${entry.emoji}</div>
+            <h2>${esc(t(entry.title))}</h2>
+            <ul>${entry.items.map((line) => `<li>${esc(t(line))}</li>`).join('')}</ul>
+            <div class="stack"><button class="btn big" data-ok data-click>${t("Let's go!")}</button></div>
+          </div>
+        </div>`);
+      el.querySelector('[data-ok]').addEventListener('click', () => {
+        markUpdateSeen(entry.id);
+        el.remove();
+      });
+      this.overlay(el);
+    }, 900);
+  }
+
   /* -------------------------------------------------------- derby day */
   /** The tug of war on the title screen; the numbers arrive from the server a moment later. */
   derbyCardHtml() {

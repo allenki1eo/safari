@@ -815,3 +815,21 @@ input { font: inherit; }
 .outfits button.limited::after { content: 'LIMITED'; position: absolute; top: -8px; right: -4px; padding: 1px 5px; border-radius: 6px; background: var(--sun); color: var(--earth); font-size: 8px; font-weight: 900; letter-spacing: 0.6px; }
 .outfits button.limited.green { box-shadow: inset 0 -3px 0 #1f9d4a; }
 .outfits button.limited.red { box-shadow: inset 0 -3px 0 #d7263d; }
+
+/* -------------------------------------------------------------- updates */
+.update-bar { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 10px 10px 12px; border-radius: 16px; text-align: left; color: var(--earth);
+  background: linear-gradient(100deg, var(--sun-2), var(--sun) 60%, var(--flame)); box-shadow: 0 4px 0 #b9790e, var(--shadow); animation: rise 0.45s ease both, installGlow 2.6s 0.6s ease-in-out infinite; }
+.update-bar .spark { font-size: 24px; animation: wiggle 1.8s ease-in-out infinite; }
+.update-bar .tx { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.update-bar .tx b { font-family: var(--display); font-weight: 400; font-size: 17px; }
+.update-bar .tx small { font-size: 12px; font-weight: 800; opacity: 0.8; }
+.update-bar .go { flex: none; padding: 7px 14px; border-radius: 99px; background: var(--earth); color: var(--sun-2); font-weight: 900; font-size: 14px; }
+.update-bar.busy { opacity: 0.8; pointer-events: none; }
+.update-bar:active { transform: translateY(2px); }
+.whats-new .kicker { font-size: 12px; font-weight: 900; letter-spacing: 2px; text-transform: uppercase; color: var(--sun-2); }
+.whats-new .badge { width: 84px; height: 84px; margin: 10px auto 4px; display: grid; place-items: center; font-size: 46px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, var(--sun-2), var(--sun) 55%, var(--flame)); box-shadow: 0 7px 0 #a8620a, 0 0 36px rgba(255,201,64,0.45); animation: pop 0.45s ease both; }
+.whats-new ul { list-style: none; margin: 14px 0 4px; padding: 0; display: flex; flex-direction: column; gap: 8px; text-align: left; }
+.whats-new li { position: relative; padding: 10px 12px 10px 38px; border-radius: 14px; background: rgba(0,0,0,0.25); font-size: 14px; animation: rise 0.45s ease both; }
+.whats-new li:nth-child(2) { animation-delay: 0.08s; } .whats-new li:nth-child(3) { animation-delay: 0.16s; }
+.whats-new li::before { content: '✓'; position: absolute; left: 12px; top: 9px; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; background: var(--leaf); color: #fff; font-size: 11px; font-weight: 900; }
