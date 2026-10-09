@@ -672,7 +672,7 @@ test('admin dashboard: key required, stats add up, a ban clears the boards, broa
 
       // broadcast reaches subscribers, then waits 10 minutes
       const b = await admin({ action: 'broadcast', title: 'Derby tonight!', body: 'Pick your side and run.' });
-      assert.deepEqual(b.body, { devices: 1, sent: 1 });
+      assert.deepEqual(b.body, { devices: 1, sent: 1, inbox: true });
       assert.equal(sent[0].title, 'Derby tonight!');
       assert.equal((await admin({ action: 'broadcast', title: 'Again', body: 'Too soon' })).status, 429);
     });
@@ -681,5 +681,51 @@ test('admin dashboard: key required, stats add up, a ban clears the boards, broa
     for (const [k, v] of [['KIMBIA_ADMIN_KEY', prev.key], ['VAPID_PUBLIC_KEY', prev.pub], ['VAPID_PRIVATE_KEY', prev.priv]]) {
       if (v == null) delete process.env[k]; else process.env[k] = v;
     }
+  }
+});
+
+test('inbox: prizes, bet results and announcements reach the game, with or without notifications', async () => {
+  const { handleChallengeRequest } = await import('./challenges.js');
+  const { handleAdminRequest } = await import('./admin.js');
+  const push = await import('./push.js');
+  const prev = { key: process.env.KIMBIA_ADMIN_KEY, pub: process.env.VAPID_PUBLIC_KEY };
+  process.env.KIMBIA_ADMIN_KEY = 'admin-test-key';
+  delete process.env.VAPID_PUBLIC_KEY; // no notification keys: the inbox still fills
+  const inbox = async (token) => (await push.handlePushRequest('POST', { action: 'inbox', token })).body.messages;
+  try {
+    await withDb(async () => {
+      const at = (iso) => setLeaderboardClock(() => new Date(iso));
+      at('2026-10-05T09:00:00Z');
+      await post({ token: T.juma, name: 'Juma', score: 9000, distance: 900, duration: 120 });
+      await post({ token: T.neema, name: 'Neema', score: 4000, distance: 400, duration: 120 });
+      // a bet: Neema takes Juma's challenge and loses
+      const made = await handleChallengeRequest('POST', { action: 'create', token: T.juma, name: 'Juma', runner: 'zuri', score: 9000, distance: 900, duration: 120, route: 'rabc', stake: 100 });
+      await handleChallengeRequest('POST', { action: 'accept', token: T.neema, id: made.body.id, name: 'Neema' });
+      await handleChallengeRequest('POST', { action: 'finish', token: T.neema, id: made.body.id, score: 5000 });
+
+      at('2026-10-05T10:00:00Z');
+      await handleAdminRequest('POST', { adminKey: 'admin-test-key', action: 'broadcast', title: 'Derby tonight!', body: 'Pick your side.' });
+
+      // next day: Monday's prizes settle (twice, as if two servers raced) — one message each
+      at('2026-10-06T09:00:00Z');
+      await handleScoreRequest('GET', undefined, { board: 'day' });
+      await handleScoreRequest('POST', { action: 'prizes', token: T.neema });
+
+      const j = await inbox(T.juma);
+      assert.deepEqual(j.map((m) => m.kind), ['prize', 'broadcast', 'bet-won', 'bet-taken']);
+      assert.deepEqual(j[0].data, { kind: 'day', period: '2026-10-05', rank: 1, amount: 1000, score: 9000 });
+      assert.equal(j[1].data.title, 'Derby tonight!');
+      assert.equal(j[2].data.name, 'Neema');
+      const n = await inbox(T.neema);
+      assert.deepEqual(n.map((m) => m.kind), ['prize', 'broadcast'], "others' bets stay private");
+      // someone who never saved a run still sees announcements
+      assert.deepEqual((await inbox(T.kito)).map((m) => m.kind), ['broadcast']);
+      // after 30 days a message drops out
+      at('2026-11-10T09:00:00Z');
+      assert.equal((await inbox(T.juma)).length, 0);
+    });
+  } finally {
+    if (prev.key == null) delete process.env.KIMBIA_ADMIN_KEY; else process.env.KIMBIA_ADMIN_KEY = prev.key;
+    if (prev.pub != null) process.env.VAPID_PUBLIC_KEY = prev.pub;
   }
 });

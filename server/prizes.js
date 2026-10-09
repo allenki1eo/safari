@@ -10,6 +10,7 @@
 import { PRIZES } from '../app/data/content.js';
 import { darDay, periodDays, periodEnd, periodOf, previousPeriod } from '../app/data/daily.js';
 import { TOKEN_RE, TOP_LIMIT, getClient, hashToken, now, playerIdForToken } from './leaderboard.js';
+import { postInbox } from './inbox.js';
 
 export const KINDS = ['day', 'week', 'month'];
 // closed periods looked back over on each settle, so a quiet night still pays out
@@ -86,6 +87,9 @@ export async function settlePrizes(db) {
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           args: [kind, period, w.rank, w.id, w.name, w.runner, w.score, w.prize, t],
         })), 'write');
+        for (const w of winners) {
+          await postInbox(db, w.id, 'prize', { kind, period, rank: w.rank, amount: w.prize, score: w.score }, `prize:${kind}:${period}:${w.rank}`);
+        }
       }
       await db.execute({ sql: 'INSERT OR IGNORE INTO meta (key, value) VALUES (?, ?)', args: [mark, String(t)] });
     }

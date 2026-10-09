@@ -15,6 +15,7 @@ import { darDay, darDayEnd, darWeekStart, shiftDarDay } from '../app/data/daily.
 import { cleanName, fail, getClient, nameKey, now } from './leaderboard.js';
 import { derbyBoard } from './derby.js';
 import { broadcast, pushKeys } from './push.js';
+import { postInbox } from './inbox.js';
 
 const BROADCAST_GAP = 10 * 60 * 1000;
 const TITLE_MAX = 60;
@@ -177,8 +178,8 @@ async function prizes() {
   };
 }
 
+/** Posts to every player's inbox, and pushes it to phones with notifications on (when set up). */
 async function sendBroadcast(body) {
-  if (!pushKeys()) return { status: 503, body: { error: 'Notifications are not set up yet (add the VAPID keys in Vercel).' } };
   const title = String(body?.title ?? '').trim().slice(0, TITLE_MAX);
   const text = String(body?.body ?? '').trim().slice(0, BODY_MAX);
   if (!title || !text) return bad('Write a title and a message.');
@@ -189,8 +190,9 @@ async function sendBroadcast(body) {
     return { status: 429, body: { error: `One broadcast every 10 minutes — try again in ${Math.ceil((BROADCAST_GAP - (t - last)) / 60000)} min.` } };
   }
   await db.execute({ sql: "INSERT INTO meta (key, value) VALUES ('broadcast:last', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value", args: [String(t)] });
-  const result = await broadcast(db, () => ({ title, body: text, tag: `broadcast-${t}`, url: '/' }));
-  return { status: 200, body: result };
+  await postInbox(db, null, 'broadcast', { title, body: text });
+  const result = pushKeys() ? await broadcast(db, () => ({ title, body: text, tag: `broadcast-${t}`, url: '/' })) : { devices: 0, sent: 0 };
+  return { status: 200, body: { ...result, inbox: true } };
 }
 
 export async function handleAdminRequest(method, body) {

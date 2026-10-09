@@ -13,6 +13,7 @@ import { PRIZES } from '../app/data/content.js';
 import { darDay } from '../app/data/daily.js';
 import { TOKEN_RE, fail, getClient, hashToken, now, playerIdForToken } from './leaderboard.js';
 import { settlePrizes } from './prizes.js';
+import { inboxFor, postInbox } from './inbox.js';
 
 const ENDPOINT_MAX = 1024;
 const KEY_RE = /^[A-Za-z0-9_-]{16,200}={0,2}$/;
@@ -149,6 +150,8 @@ export async function broadcast(db, build) {
 /* ------------------------------------------------------- challenge news */
 /** A friend took your bet. Called from the challenge handlers; quiet on any failure. */
 export async function notifyBetTaken(db, hostHash, { name, stake, id }) {
+  const hostId = await playerIdForToken(db, hostHash).catch(() => null);
+  if (hostId != null) await postInbox(db, hostId, 'bet-taken', { name, stake }, `bet-taken:${id}`);
   if (!pushKeys()) return;
   try {
     await tell(db, await subsForTokenHash(db, hostHash), (T) => ({
@@ -164,6 +167,10 @@ export async function notifyBetTaken(db, hostHash, { name, stake, id }) {
 
 /** A friend finished your challenge: tell the host who won. */
 export async function notifyBetSettled(db, hostHash, { name, winner, score, pot, id }) {
+  const hostId = await playerIdForToken(db, hostHash).catch(() => null);
+  if (hostId != null) {
+    await postInbox(db, hostId, winner === 'rival' ? 'bet-lost' : 'bet-won', { name, score, pot }, `bet-settled:${id}`);
+  }
   if (!pushKeys()) return;
   try {
     await tell(db, await subsForTokenHash(db, hostHash), (T) => winner === 'rival'
@@ -343,6 +350,7 @@ export async function handlePushRequest(method, body) {
       case 'subscribe': return await subscribe(body);
       case 'unsubscribe': return await unsubscribe(body);
       case 'test': return await test(body);
+      case 'inbox': return await inboxFor(body);
       default: return bad('Unknown action.');
     }
   } catch (err) {
