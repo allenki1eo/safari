@@ -1,5 +1,5 @@
 /**
- * Derby Day, from the player's side: the live tug of war, and picking a side (which hands over
+ * Kariakoo Derby Special, from the player's side: the live tug of war, and picking a side (which hands over
  * that side's limited kit for good). The server keeps the side and the totals (server/derby.js).
  */
 import { DERBY, derbyLive } from '../data/content.js';

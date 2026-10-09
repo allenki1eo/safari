@@ -2020,15 +2020,15 @@ export class UI {
     return `
       <div class="derby-card ${live ? '' : 'over'}" data-act="derby" data-click role="button">
         <div class="derby-top">
-          <b>⚽ ${t('Derby Day')}</b>
+          <b>⚽ ${t('Kariakoo Derby Special')}</b>
           ${live ? `<span class="ends">⏳ <span data-ends>${timeLeft(DERBY.closes)}</span></span>` : `<span class="ends">${t('Final score')}</span>`}
         </div>
         <div class="rope" data-rope style="--g:50%">
           <i class="g"></i><i class="r"></i><span class="knot"></span>
         </div>
         <div class="derby-legend">
-          <span>${g.emoji} ${t(g.name)} <b data-km="green">…</b></span>
-          <span><b data-km="red">…</b> ${t(r.name)} ${r.emoji}</span>
+          <span><b data-km="green">…</b><small>${g.emoji} ${t(g.name)}</small></span>
+          <span class="right"><b data-km="red">…</b><small>${t(r.name)} ${r.emoji}</small></span>
         </div>
         <div class="derby-cta" data-cta>${live
           ? mine ? t('You run for {side} — every run pulls the rope', { side: `<b>${mine.emoji} ${esc(t(mine.name))}</b>` }) : `<span class="pick">${t('Pick your side · get the limited kit')}</span>`
@@ -2050,7 +2050,7 @@ export class UI {
       card.querySelector('[data-km=red]').textContent = km(r);
       if (!data.live) {
         const lead = g === r ? null : DERBY.sides[g > r ? 'green' : 'red'];
-        card.querySelector('[data-cta]').innerHTML = lead ? t('{side} won the Derby Run!', { side: `<b>${lead.emoji} ${esc(t(lead.name))}</b>` }) : t("It's a draw!");
+        card.querySelector('[data-cta]').innerHTML = lead ? t('{side} won the Kariakoo Derby!', { side: `<b>${lead.emoji} ${esc(t(lead.name))}</b>` }) : t("It's a draw!");
       }
     } catch {
       card.querySelector('[data-km=green]').textContent = '–';
@@ -2070,11 +2070,11 @@ export class UI {
     const el = $(`
       <div class="screen modal-wrap scrim-full">
         <div class="panel modal derby-pick">
-          <div class="kicker">⚽ ${t('Derby Day')}</div>
+          <div class="kicker">⚽ ${t('Kariakoo Derby Special')}</div>
           <h2>${t('Pick your side')}</h2>
-          <div class="muted">${t('Every run you finish adds its distance to your side. The bigger total when the whistle blows wins the Derby Run.')}</div>
+          <div class="muted">${t('Every run you finish adds its distance to your side. The bigger total when the whistle blows wins the Kariakoo Derby.')}</div>
           <div class="kits">${Object.values(DERBY.sides).map(kit).join('')}</div>
-          <p class="muted fine">${t('One side per runner — no switching. The limited kit stays yours after Derby Day.')}</p>
+          <p class="muted fine">${t('One side per runner — no switching. The limited kit stays yours after the Kariakoo Derby Special.')}</p>
           <div class="stack">
             <button class="btn big" data-ok data-click disabled>${t('Choose a kit')}</button>
             <button class="btn ghost" data-no data-click>${t('Not now')}</button>
@@ -2117,7 +2117,7 @@ export class UI {
       this.toast(mine.emoji, t('Kit on: {side}', { side: esc(t(mine.name)) }));
       return;
     }
-    this.toast('⚽', mine ? t('You run for {side} — every run pulls the rope', { side: `<b>${esc(t(mine.name))}</b>` }) : t('Derby Day is over — thanks for running!'), 3200);
+    this.toast('⚽', mine ? t('You run for {side} — every run pulls the rope', { side: `<b>${esc(t(mine.name))}</b>` }) : t('The Kariakoo Derby Special is over — thanks for running!'), 3200);
   }
 
   /* ----------------------------------------------------- notifications */

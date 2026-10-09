@@ -7,7 +7,7 @@ export const UPDATES = [
   {
     id: '2026-10-09-derby',
     emoji: '⚽',
-    title: 'Derby Day is here!',
+    title: 'The Kariakoo Derby Special is here!',
     items: [
       'Pick Green & Gold or Red & White and get a limited football kit to keep.',
       'Every run pulls the rope for your side — the bigger total on Sunday night wins.',

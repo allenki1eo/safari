@@ -786,7 +786,8 @@ input { font: inherit; }
 .derby-card::before { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(115deg, rgba(255,255,255,0.05) 0 14px, transparent 14px 28px); pointer-events: none; }
 .derby-card:active { transform: scale(0.985); }
 .derby-top { display: flex; justify-content: space-between; align-items: center; }
-.derby-top b { font-family: var(--display); font-weight: 400; font-size: 19px; letter-spacing: 0.4px; color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,0.35); }
+.derby-top { gap: 8px; }
+.derby-top b { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--display); font-weight: 400; font-size: clamp(16px, 4.6vw, 19px); letter-spacing: 0.4px; color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,0.35); }
 .derby-top .ends { padding: 3px 9px; border-radius: 99px; background: rgba(0,0,0,0.35); font-size: 12px; font-weight: 900; font-variant-numeric: tabular-nums; }
 .rope { --g: 50%; position: relative; height: 14px; border-radius: 99px; overflow: visible; display: flex; background: rgba(0,0,0,0.35); box-shadow: inset 0 2px 4px rgba(0,0,0,0.4); }
 .rope i { display: block; height: 100%; transition: width 1.2s cubic-bezier(.2,.8,.2,1); }
@@ -795,7 +796,10 @@ input { font: inherit; }
 .rope .knot { position: absolute; top: 50%; left: var(--g); width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff, #e8e8e8 55%, #9a9a9a); box-shadow: 0 3px 8px rgba(0,0,0,0.45); transition: left 1.2s cubic-bezier(.2,.8,.2,1); display: grid; place-items: center; font-size: 15px; }
 .rope .knot::after { content: '⚽'; }
 .derby-legend { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: 800; }
-.derby-legend b { font-family: var(--display); font-weight: 400; font-size: 16px; color: #fff; font-variant-numeric: tabular-nums; }
+.derby-legend span { display: flex; flex-direction: column; min-width: 0; }
+.derby-legend span.right { align-items: flex-end; text-align: right; }
+.derby-legend b { font-family: var(--display); font-weight: 400; font-size: 18px; line-height: 1.1; color: #fff; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.derby-legend small { font-size: 11.5px; font-weight: 800; opacity: 0.92; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .derby-cta { font-size: 13px; text-align: center; color: rgba(255,244,222,0.92); }
 .derby-cta:empty { display: none; }
 .derby-cta .pick { display: inline-block; padding: 6px 14px; border-radius: 99px; background: linear-gradient(180deg, var(--sun-2), var(--sun)); color: var(--earth); font-weight: 900; box-shadow: 0 3px 0 #a8620a; animation: breathe 2.2s ease-in-out infinite; }

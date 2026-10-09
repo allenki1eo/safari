@@ -1,5 +1,5 @@
 /**
- * Derby Day on the server: a runner's side (their first pick sticks, on every device that holds
+ * Kariakoo Derby Special on the server: a runner's side (their first pick sticks, on every device that holds
  * a key to the runner) and each side's total distance, which every run adds to while the event
  * is live. Runs with an impossible pace add nothing, and one run adds at most RUN_MAX metres.
  */
@@ -60,7 +60,7 @@ export async function pickSide(body) {
   const side = cleanSide(body?.side);
   if (!side) return { status: 400, body: { error: 'Pick a side.' } };
   if (typeof body?.token !== 'string' || !TOKEN_RE.test(body.token)) return { status: 400, body: { error: 'Player token is missing or invalid.' } };
-  if (!derbyLive(now().getTime())) return { status: 409, body: { error: 'Derby Day is over.', code: 'CLOSED' } };
+  if (!derbyLive(now().getTime())) return { status: 409, body: { error: 'Kariakoo Derby Special is over.', code: 'CLOSED' } };
   const db = await getClient();
   const id = await playerIdForToken(db, hashToken(body.token));
   if (id == null) return { status: 200, body: { side, pending: true } }; // joins with their first saved run

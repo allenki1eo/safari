@@ -49,14 +49,14 @@ export const OUTFITS = [
 ];
 
 /**
- * Derby Day: a limited event for the big Dar es Salaam derby. Players pick a side and get that
+ * Kariakoo Derby Special: a limited event for the big Dar es Salaam derby. Players pick a side and get that
  * side's kit to keep; every run adds its distance to the side's total on a live tug of war.
  * Only colours are used — no club names, crests or badges — so it reads as a fan event, not as
  * official club merchandise. Times are UTC (Dar es Salaam is UTC+3).
  */
 export const DERBY = {
   id: 'derby-2026-10',
-  title: 'Derby Day',
+  title: 'Kariakoo Derby Special',
   opens: Date.parse('2026-10-09T00:00:00Z'),
   closes: Date.parse('2026-10-12T21:00:00Z'), // midnight in Dar after Sunday
   shows: Date.parse('2026-10-14T21:00:00Z'), // the final score stays up a couple of days
@@ -71,7 +71,7 @@ export const derbyShown = (at = Date.now()) => at >= DERBY.opens && at < DERBY.s
 
 // the two derby kits are limited outfits: only someone who picked that side can wear one
 for (const side of Object.values(DERBY.sides)) {
-  OUTFITS.push({ id: `derby-${side.id}`, name: side.short, line: `Limited Derby Day kit · ${side.name}.`, limited: side.id });
+  OUTFITS.push({ id: `derby-${side.id}`, name: side.short, line: `Limited Kariakoo Derby kit · ${side.name}.`, limited: side.id });
 }
 
 export const outfitId = (id) => (OUTFITS.some((o) => o.id === id) ? id : OUTFITS[0].id);
