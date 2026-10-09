@@ -5,6 +5,7 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { G, bakeRigid, basic, bend, mat, mesh } from './materials.js';
 import { PAT, PATTERN_GLSL } from './rigkit.js';
 import { track } from './loading.js';
+import { dressFor } from '../data/content.js';
 
 /**
  * The runners as fully modelled, motion-captured-style characters: Quaternius Universal Base
@@ -464,6 +465,7 @@ function buildKid(def, look, gltf, clipsGltf) {
  * once loaded, dressed in `outfit`. Same API: `root`, `shadow`, `update(dt, speed, state)`, `hit()`.
  */
 export function makeKidRunner(def, fallback, outfit = 'kit') {
+  [def, outfit] = dressFor(def, outfit);
   const root = fallback.root;
   const holder = new THREE.Group();
   holder.rotation.y = Math.PI; // the models face +z; runners look down the track (-z)

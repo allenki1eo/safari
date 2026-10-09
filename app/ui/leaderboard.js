@@ -87,6 +87,7 @@ export async function postScore(entry) {
       chapter: entry.chapter,
       runner: entry.runner,
       duration: entry.duration ?? 0,
+      side: save.side ?? undefined, // Derby Day
     }),
   });
   const data = await readJson(res);

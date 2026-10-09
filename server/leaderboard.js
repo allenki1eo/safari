@@ -11,11 +11,12 @@ import { darDay, shiftDarDay } from '../app/data/daily.js';
 import { REGIONS } from '../app/data/regions.js';
 import { loadLocalEnv } from './env.js';
 import { KINDS, claimPrizes, prizeBoard } from './prizes.js';
+import { cleanSide, derbyBoard, derbyRun, pickSide } from './derby.js';
 
 loadLocalEnv();
 
 // Applied in order on first use; every statement is idempotent.
-const SCHEMA_SQL = ['001_scores.sql', '002_players.sql', '003_daily.sql', '004_challenges.sql', '005_transfers.sql', '006_accounts.sql', '007_prizes.sql', '008_push.sql']
+const SCHEMA_SQL = ['001_scores.sql', '002_players.sql', '003_daily.sql', '004_challenges.sql', '005_transfers.sql', '006_accounts.sql', '007_prizes.sql', '008_push.sql', '009_derby.sql']
   .map((file) => readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8'))
   .join('\n');
 export const TOKEN_RE = /^[a-f0-9]{64}$/;
@@ -155,7 +156,9 @@ export function validateSubmission(body) {
     }
     runner = body.runner;
   }
-  return { ok: true, value: { token: body.token, name, score, distance, seeds, allies, chapter, runner, duration } };
+  // Derby Day: the side this runner is on (ignored outside the event or if not a real side)
+  const side = cleanSide(body.side);
+  return { ok: true, value: { token: body.token, name, score, distance, seeds, allies, chapter, runner, duration, side } };
 }
 
 function mapRow(row, rank) {
@@ -286,7 +289,8 @@ export async function submitScore(body) {
   // The all-time row above is unchanged. Today's rank is only here so the
   // share card can show where this run sits on the daily board.
   const daily = v.score > 0 ? await recordDaily(db, id, v) : null;
-  return { status: 200, body: { entry: { ...mapRow(player, rank), improved, run: v.score }, top, daily } };
+  const derby = v.score > 0 || v.side ? await derbyRun(db, id, v, v.side) : null;
+  return { status: 200, body: { entry: { ...mapRow(player, rank), improved, run: v.score }, top, daily, derby } };
 }
 
 const DAILY_UPSERT = `
@@ -387,9 +391,11 @@ export async function handleScoreRequest(method, body, query) {
     if (method === 'GET') {
       if (query?.board === 'daily') return { status: 200, body: await dailyBoard() };
       if (KINDS.includes(query?.board)) return { status: 200, body: await prizeBoard(query.board) };
+      if (query?.board === 'derby') return { status: 200, body: await derbyBoard() };
       return { status: 200, body: { top: await listTop() } };
     }
     if (method === 'POST' && body?.action === 'prizes') return await claimPrizes(body);
+    if (method === 'POST' && body?.action === 'side') return await pickSide(body);
     if (method === 'POST') return await submitScore(body);
     return { status: 405, body: { error: 'Method not allowed.' } };
   } catch (err) {

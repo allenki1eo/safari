@@ -1,4 +1,6 @@
-import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO, OUTFITS, outfitId, HUNT_WORDS, BOOSTS } from '../data/content.js';
+import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO, OUTFITS, outfitId, HUNT_WORDS, BOOSTS, DERBY, derbyLive, derbyShown, wearable } from '../data/content.js';
+import { adoptSide, fetchDerby, joinSide, km } from './derby.js';
+import { applyUpdate, markUpdateSeen, unseenUpdate, updateWaiting } from './updates.js';
 import { REGIONS, COUNTRIES } from '../data/regions.js';
 import {
   save, persist, ensureMissions, checkMissions, claimMissionSet, multiplier, claimDaily, hasProgress,
@@ -184,11 +186,11 @@ export class UI {
         </div>
         <div class="title-bottom">
           ${this.challengeCardHtml()}
-          <button class="prize-ribbon" data-act="board" data-click>
+          ${derbyShown() ? this.derbyCardHtml() : `<button class="prize-ribbon" data-act="board" data-click>
             <span class="gift">🎁</span>
             <span class="what">${t("Today's #1 wins {n}", { n: `<b>${fmt(PRIZES.day[0])}</b>` })}<i class="seed"></i></span>
             <span class="ends" data-ends>${timeLeft(closesAt('day'))}</span>
-          </button>
+          </button>`}
           ${save.best ? `<div class="best-line">${t('Best run {score} pts · {dist}m', { score: `<b>${fmt(save.best)}</b>`, dist: `<b>${fmt(save.bestDistance)}` })}</b></div>` : ''}
           <button class="start-chip" data-act="journey" data-click>
             <span class="flag">${COUNTRIES[start.country].flag}</span>
@@ -218,15 +220,19 @@ export class UI {
       else if (act === 'board') this.showBoard();
       else if (act === 'install') this.installApp();
       else if (act === 'take-bet') this.takeBet(e.target.closest('button'));
+      else if (act === 'derby') this.derbySheet();
     });
     this.show(el);
     this.collectWinnings();
     this.collectPrizeMoney();
+    this.checkForUpdate(el);
+    this.maybeShowWhatsNew();
     const ends = el.querySelector('[data-ends]');
     const tick = setInterval(() => {
-      if (!ends.isConnected) return clearInterval(tick);
-      ends.textContent = timeLeft(closesAt('day'));
+      if (!ends?.isConnected) return clearInterval(tick);
+      ends.textContent = timeLeft(derbyShown() ? DERBY.closes : closesAt('day'));
     }, 15000);
+    this.paintDerby(el);
     this.maybeNudgeInstall();
     this.maybeOfferRestore();
     this.maybeAskForPin();
@@ -1141,6 +1147,11 @@ export class UI {
         this.postedRunId = this.game.runId;
         this.postedEntry = data.entry;
         this.lastTop = data.top;
+        if (data.derby?.side) {
+          adoptSide(data.derby.side);
+          const side = DERBY.sides[data.derby.side];
+          if (data.derby.added > 0) this.toast(side.emoji, t('<b>+{km}</b> for {side}', { km: km(data.derby.added), side: esc(t(side.name)) }), 3200);
+        }
         if (data.daily?.rank) {
           run.rank = data.daily.rank;
           this.cardFor(run); // redraw with today's rank on it
@@ -1722,7 +1733,7 @@ export class UI {
       this.game.setRunner(r.id);
       const owned = save.owned.includes(r.id);
       const selected = save.runner === r.id;
-      const outfit = OUTFITS.find((o) => o.id === outfitId(save.outfit));
+      const outfit = wearable(save.side).find((o) => o.id === outfitId(save.outfit)) ?? OUTFITS[0];
       const el = $(`
         <div class="screen select scrim-bottom">
           <div class="sheet-head">
@@ -1737,7 +1748,7 @@ export class UI {
             <p>${esc(r.bio)}</p>
             <div class="outfit-line">${esc(outfit.line)}</div>
             <div class="outfits" role="listbox" aria-label="${t('Outfit')}">
-              ${OUTFITS.map((o) => `<button type="button" class="${o.id === outfit.id ? 'on' : ''}" data-outfit="${o.id}" aria-label="${esc(o.line)}">${esc(o.name)}</button>`).join('')}
+              ${wearable(save.side).map((o) => `<button type="button" class="${o.id === outfit.id ? 'on' : ''} ${o.limited ? `limited ${o.limited}` : ''}" data-outfit="${o.id}" aria-label="${esc(o.line)}">${esc(o.name)}</button>`).join('')}
             </div>
             <div class="select-nav">
               <button class="arrow" data-act="prev" aria-label="${t('Previous')}">‹</button>
@@ -1946,6 +1957,169 @@ export class UI {
 
   /* ------------------------------------------------ getting a runner back */
   /** Runners with a name but no recovery PIN are asked once to protect it. */
+  /* ---------------------------------------------------------- updates */
+  /** A newer version is live: a banner on the home screen refreshes onto it with one tap. */
+  async checkForUpdate(root = this.screen) {
+    if (!this.watchingUpdates) {
+      this.watchingUpdates = true;
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && this.screen?.classList.contains('title')) this.checkForUpdate(this.screen);
+      });
+    }
+    if (!(await updateWaiting())) return;
+    if (!root?.isConnected || !root.classList.contains('title') || root.querySelector('.update-bar')) return;
+    const bar = $(`
+      <button class="update-bar" data-click>
+        <span class="spark">✨</span>
+        <span class="tx"><b>${t('A new update is ready')}</b><small>${t('Tap to get the latest version')}</small></span>
+        <span class="go">${t('Update')}</span>
+      </button>`);
+    bar.addEventListener('click', () => {
+      bar.classList.add('busy');
+      bar.querySelector('.go').textContent = '…';
+      applyUpdate();
+    });
+    root.querySelector('.title-bottom')?.prepend(bar);
+  }
+
+  /** Once after each update: what changed, so returning players know what to try. */
+  maybeShowWhatsNew() {
+    const entry = unseenUpdate();
+    if (!entry || this.whatsNewShown) return;
+    this.whatsNewShown = true;
+    this.askedThisVisit = true; // no notification ask on top of it this visit
+    setTimeout(() => {
+      if (!this.screen?.classList.contains('title') || document.querySelector('.modal-wrap')) {
+        this.whatsNewShown = false;
+        return;
+      }
+      const el = $(`
+        <div class="screen modal-wrap scrim-full">
+          <div class="panel modal whats-new">
+            <div class="kicker">${t("What's new")}</div>
+            <div class="badge">${entry.emoji}</div>
+            <h2>${esc(t(entry.title))}</h2>
+            <ul>${entry.items.map((line) => `<li>${esc(t(line))}</li>`).join('')}</ul>
+            <div class="stack"><button class="btn big" data-ok data-click>${t("Let's go!")}</button></div>
+          </div>
+        </div>`);
+      el.querySelector('[data-ok]').addEventListener('click', () => {
+        markUpdateSeen(entry.id);
+        el.remove();
+      });
+      this.overlay(el);
+    }, 900);
+  }
+
+  /* -------------------------------------------------------- derby day */
+  /** The tug of war on the title screen; the numbers arrive from the server a moment later. */
+  derbyCardHtml() {
+    const live = derbyLive();
+    const mine = DERBY.sides[save.side];
+    const [g, r] = Object.values(DERBY.sides);
+    return `
+      <div class="derby-card ${live ? '' : 'over'}" data-act="derby" data-click role="button">
+        <div class="derby-top">
+          <b>⚽ ${t('Kariakoo Derby Special')}</b>
+          ${live ? `<span class="ends">⏳ <span data-ends>${timeLeft(DERBY.closes)}</span></span>` : `<span class="ends">${t('Final score')}</span>`}
+        </div>
+        <div class="rope" data-rope style="--g:50%">
+          <i class="g"></i><i class="r"></i><span class="knot"></span>
+        </div>
+        <div class="derby-legend">
+          <span><b data-km="green">…</b><small>${g.emoji} ${t(g.name)}</small></span>
+          <span class="right"><b data-km="red">…</b><small>${t(r.name)} ${r.emoji}</small></span>
+        </div>
+        <div class="derby-cta" data-cta>${live
+          ? mine ? t('You run for {side} — every run pulls the rope', { side: `<b>${mine.emoji} ${esc(t(mine.name))}</b>` }) : `<span class="pick">${t('Pick your side · get the limited kit')}</span>`
+          : ''}</div>
+      </div>`;
+  }
+
+  async paintDerby(root) {
+    const card = root.querySelector('.derby-card');
+    if (!card) return;
+    try {
+      const data = await fetchDerby();
+      if (!card.isConnected) return;
+      const g = data.sides.green.distance;
+      const r = data.sides.red.distance;
+      const share = g + r ? Math.round((g / (g + r)) * 1000) / 10 : 50;
+      card.querySelector('[data-rope]').style.setProperty('--g', `${Math.min(92, Math.max(8, share))}%`);
+      card.querySelector('[data-km=green]').textContent = km(g);
+      card.querySelector('[data-km=red]').textContent = km(r);
+      if (!data.live) {
+        const lead = g === r ? null : DERBY.sides[g > r ? 'green' : 'red'];
+        card.querySelector('[data-cta]').innerHTML = lead ? t('{side} won the Kariakoo Derby!', { side: `<b>${lead.emoji} ${esc(t(lead.name))}</b>` }) : t("It's a draw!");
+      }
+    } catch {
+      card.querySelector('[data-km=green]').textContent = '–';
+      card.querySelector('[data-km=red]').textContent = '–';
+    }
+  }
+
+  /** Pick a side: two kits, one choice, and that kit is yours to keep. */
+  derbySheet() {
+    if (!derbyLive() || save.side) return this.derbyInfo();
+    let pick = null;
+    const kit = (s) => `
+      <button type="button" class="kit-card ${s.id}" data-side="${s.id}" style="--c:${s.color};--a:${s.accent}">
+        <span class="shirt"><i></i></span>
+        <b>${esc(t(s.name))}</b>
+      </button>`;
+    const el = $(`
+      <div class="screen modal-wrap scrim-full">
+        <div class="panel modal derby-pick">
+          <div class="kicker">⚽ ${t('Kariakoo Derby Special')}</div>
+          <h2>${t('Pick your side')}</h2>
+          <div class="muted">${t('Every run you finish adds its distance to your side. The bigger total when the whistle blows wins the Kariakoo Derby.')}</div>
+          <div class="kits">${Object.values(DERBY.sides).map(kit).join('')}</div>
+          <p class="muted fine">${t('One side per runner — no switching. The limited kit stays yours after the Kariakoo Derby Special.')}</p>
+          <div class="stack">
+            <button class="btn big" data-ok data-click disabled>${t('Choose a kit')}</button>
+            <button class="btn ghost" data-no data-click>${t('Not now')}</button>
+          </div>
+        </div>
+      </div>`);
+    const ok = el.querySelector('[data-ok]');
+    el.addEventListener('click', async (e) => {
+      const card = e.target.closest('[data-side]');
+      if (card) {
+        pick = card.dataset.side;
+        el.querySelectorAll('[data-side]').forEach((c) => c.classList.toggle('on', c === card));
+        ok.disabled = false;
+        ok.textContent = t('Join {side}', { side: t(DERBY.sides[pick].name) });
+        audio.click();
+        return;
+      }
+      if (e.target.closest('[data-no]')) return el.remove();
+      if (e.target.closest('[data-ok]') && pick) {
+        ok.disabled = true;
+        await joinSide(pick);
+        audio.buy();
+        el.remove();
+        this.game.setRunner(save.runner);
+        const s = DERBY.sides[save.side];
+        this.toast(s.emoji, t("You're {side}! Your limited kit is on — now run for your side.", { side: `<b>${esc(t(s.name))}</b>` }), 4200);
+        if (this.screen?.classList.contains('title')) this.title();
+      }
+    });
+    this.overlay(el);
+  }
+
+  derbyInfo() {
+    const mine = DERBY.sides[save.side];
+    const wearing = String(save.outfit).startsWith('derby-');
+    if (mine && !wearing) {
+      save.outfit = `derby-${mine.id}`;
+      persist();
+      this.game.setRunner(save.runner);
+      this.toast(mine.emoji, t('Kit on: {side}', { side: esc(t(mine.name)) }));
+      return;
+    }
+    this.toast('⚽', mine ? t('You run for {side} — every run pulls the rope', { side: `<b>${esc(t(mine.name))}</b>` }) : t('The Kariakoo Derby Special is over — thanks for running!'), 3200);
+  }
+
   /* ----------------------------------------------------- notifications */
   /** Once, on a later visit: a runner with a name and a couple of runs, in a browser that can. */
   maybeAskForNotify() {

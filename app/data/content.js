@@ -48,7 +48,44 @@ export const OUTFITS = [
   { id: 'journey', name: 'Cloak', line: 'A tunic and a shuka for the long road.' },
 ];
 
+/**
+ * Kariakoo Derby Special: a limited event for the big Dar es Salaam derby. Players pick a side and get that
+ * side's kit to keep; every run adds its distance to the side's total on a live tug of war.
+ * Only colours are used — no club names, crests or badges — so it reads as a fan event, not as
+ * official club merchandise. Times are UTC (Dar es Salaam is UTC+3).
+ */
+export const DERBY = {
+  id: 'derby-2026-10',
+  title: 'Kariakoo Derby Special',
+  opens: Date.parse('2026-10-09T00:00:00Z'),
+  closes: Date.parse('2026-10-12T21:00:00Z'), // midnight in Dar after Sunday
+  shows: Date.parse('2026-10-14T21:00:00Z'), // the final score stays up a couple of days
+  sides: {
+    green: { id: 'green', name: 'Green & Gold', short: 'Green', emoji: '💚', color: '#1f9d4a', accent: '#f6c933', shirt: 0x178a3e, stripe: 0xf6c933, pants: 0x161616 },
+    red: { id: 'red', name: 'Red & White', short: 'Red', emoji: '❤️', color: '#d7263d', accent: '#ffffff', shirt: 0xc8102e, stripe: 0xffffff, pants: 0xffffff },
+  },
+};
+export const DERBY_SIDES = Object.keys(DERBY.sides);
+export const derbyLive = (at = Date.now()) => at >= DERBY.opens && at < DERBY.closes;
+export const derbyShown = (at = Date.now()) => at >= DERBY.opens && at < DERBY.shows;
+
+// the two derby kits are limited outfits: only someone who picked that side can wear one
+for (const side of Object.values(DERBY.sides)) {
+  OUTFITS.push({ id: `derby-${side.id}`, name: side.short, line: `Limited Kariakoo Derby kit · ${side.name}.`, limited: side.id });
+}
+
 export const outfitId = (id) => (OUTFITS.some((o) => o.id === id) ? id : OUTFITS[0].id);
+
+/** Outfits this player may wear: the everyday ones, plus their side's derby kit. */
+export const wearable = (side) => OUTFITS.filter((o) => !o.limited || o.limited === side);
+
+/** A derby kit is the football jersey in the side's colours: the runner to dress, and the cut. */
+export function dressFor(def, outfit) {
+  const side = OUTFITS.find((o) => o.id === outfit)?.limited;
+  const kit = side && DERBY.sides[side];
+  if (!kit) return [def, outfit];
+  return [{ ...def, shirt: kit.shirt, accent: kit.stripe, pants: kit.pants, dress: undefined, socks: kit.stripe }, 'jersey'];
+}
 
 export const ALLIES = {
   tembo: {
