@@ -5,7 +5,7 @@ import { ago, describe, fetchInbox, markInboxRead, unreadCount } from './inbox.j
 import { NAME_ATTRS, bindNameField, clampName } from './namefield.js';
 import { REGIONS, COUNTRIES } from '../data/regions.js';
 import {
-  save, persist, ensureMissions, checkMissions, claimMissionSet, multiplier, claimDaily, hasProgress,
+  save, persist, ensureMissions, checkMissions, claimMissionSet, multiplier, claimDaily, dailyDue, hasProgress,
   collectMission, skipMission, skipCost, setBonus, missionSetReady, uncollected,
 } from '../data/save.js';
 import { audio } from '../game/audio.js';
@@ -230,6 +230,11 @@ export class UI {
     this.collectWinnings();
     this.collectPrizeMoney();
     this.checkForUpdate(el);
+    // the daily reward greets you on the title screen only; it never opens over a run
+    if (save.introSeen && dailyDue()) {
+      this.nudgedThisVisit = true; // the reward takes this visit's one pop-up slot
+      setTimeout(() => this.daily(), 600);
+    }
     this.maybeShowWhatsNew();
     this.paintInboxCount(el);
     const ends = el.querySelector('[data-ends]');
@@ -266,7 +271,6 @@ export class UI {
         setTimeout(() => (bar.hidden = true), 2000);
       }
     });
-    if (save.introSeen) setTimeout(() => this.daily(), 600);
   }
 
   play() {
@@ -793,12 +797,10 @@ export class UI {
           <div class="story-unlock"><span class="e">${COUNTRIES[reg.country].flag}</span><div><b>${esc(reg.name)} · ${esc(reg.title)}</b><br><span class="muted">${next ? t('Next: {place}', { place: `${COUNTRIES[next.country].flag} ${esc(next.name)}` }) : t('You crossed all three countries!')}</span></div></div>
           <div class="bet-slot"></div>
           <div class="chal-slot"></div>
-          <div style="display:flex;flex-direction:column;gap:12px">
-            <button class="btn big" type="button" data-act="again">${t('↻ Run again')}</button>
-            <div class="row2">
-              <button class="btn teal" type="button" data-act="share">${ICON.share.replace('<svg', '<svg width="22" height="22"')} WhatsApp</button>
-              <button class="btn ghost" type="button" data-act="home">${t('🏠 Home')}</button>
-            </div>
+          <div class="over-actions">
+            <button class="btn again" type="button" data-act="again">${t('↻ Run again')}</button>
+            <button class="btn teal share" type="button" data-act="share" aria-label="WhatsApp">${ICON.share.replace('<svg', '<svg width="22" height="22"')}<span>WhatsApp</span></button>
+            <button class="btn ghost home" type="button" data-act="home" aria-label="${t('🏠 Home')}">🏠</button>
           </div>
         </div>
       </div>`);
@@ -893,7 +895,7 @@ export class UI {
     const slot = root?.querySelector('.bet-slot');
     if (slot) slot.innerHTML = `<div class="bet-result pending">🤝 ${t('Checking the bet…')}</div>`;
     try {
-      const res = await finishBet(bet.id, run.score);
+      const res = await finishBet(bet.id, run);
       if (this.remote?.id === bet.id) this.remote = { ...this.remote, status: 'settled' };
       const won = res.winner === 'rival';
       const html = won
@@ -1045,7 +1047,7 @@ export class UI {
       <div class="share-card">
         <div class="share-kicker">${t("Today's route")}</div>
         <div class="share-dist">${fmt(run.distance)}m</div>
-        <div class="share-rank" data-share-rank>${t('Today')} <span class="muted">…</span></div>
+        <div class="share-rank" data-share-rank>${save.name ? `${t('Today')} <span class="muted">…</span>` : `<span class="muted">${t('Save a name to get ranked today')}</span>`}</div>
         <div class="share-miss">${miss}</div>
       </div>`;
   }
@@ -1154,6 +1156,7 @@ export class UI {
           chapter: Math.max(0, run.chapter || 0),
           runner: save.runner,
           duration: Math.max(0, Math.round(run.duration || 0)),
+          mult: run.mult,
         });
         save.name = data.entry.name;
         save.playerId = data.entry.id;
@@ -1282,7 +1285,10 @@ export class UI {
   /** The unread count on the title screen's 📬 button. */
   async paintInboxCount(root = this.screen) {
     try {
-      const n = unreadCount(await fetchInbox());
+      const messages = await fetchInbox();
+      // a brand-new runner has nothing waiting for them: older announcements don't count as unread
+      if (save.inboxSeen == null && !(save.runs > 0)) markInboxRead(messages);
+      const n = unreadCount(messages);
       const badge = root?.querySelector('.inbox-btn .count');
       if (!badge) return;
       badge.hidden = n === 0;
@@ -2008,10 +2014,10 @@ export class UI {
   maybeNudgeInstall() {
     if (device.platform !== 'ios' || !install.offered || save.iosNudge || (save.runs ?? 0) < 2) return;
     if (install.how === 'ios-open') return; // can't install from here; the Install button explains
-    save.iosNudge = true;
-    persist();
     setTimeout(() => {
-      if (!this.screen?.classList.contains('title')) return;
+      if (!this.claimNudge()) return; // another pop-up had this visit: try next time
+      save.iosNudge = true;
+      persist();
       const el = $(`
         <div class="install-nudge panel">
           <img src="/icons/apple-touch-icon.png" alt="" width="48" height="48" />
@@ -2063,7 +2069,7 @@ export class UI {
     this.whatsNewShown = true;
     this.askedThisVisit = true; // no notification ask on top of it this visit
     setTimeout(() => {
-      if (!this.screen?.classList.contains('title') || document.querySelector('.modal-wrap')) {
+      if (!this.claimNudge()) {
         this.whatsNewShown = false;
         return;
       }
@@ -2102,11 +2108,11 @@ export class UI {
         </div>
         <div class="derby-legend">
           <span><b data-km="green">…</b><small>${g.emoji} ${t(g.name)}</small></span>
+          <div class="derby-cta" data-cta>${live
+            ? mine ? `${mine.emoji} ${t('Your side')}` : `<span class="pick">${t('Pick your side')}</span>`
+            : ''}</div>
           <span class="right"><b data-km="red">…</b><small>${t(r.name)} ${r.emoji}</small></span>
         </div>
-        <div class="derby-cta" data-cta>${live
-          ? mine ? t('You run for {side} — every run pulls the rope', { side: `<b>${mine.emoji} ${esc(t(mine.name))}</b>` }) : `<span class="pick">${t('Pick your side · get the limited kit')}</span>`
-          : ''}</div>
       </div>`;
   }
 
@@ -2116,12 +2122,15 @@ export class UI {
     try {
       const data = await fetchDerby();
       if (!card.isConnected) return;
-      const g = data.sides.green.distance;
-      const r = data.sides.red.distance;
+      // the rope and the numbers compare metres per fan (server/derby.js), so a big crowd or one
+      // marathon runner can't settle it alone; older servers only send the totals
+      const g = data.sides.green.perFan ?? data.sides.green.distance;
+      const r = data.sides.red.perFan ?? data.sides.red.distance;
       const share = g + r ? Math.round((g / (g + r)) * 1000) / 10 : 50;
       card.querySelector('[data-rope]').style.setProperty('--g', `${Math.min(92, Math.max(8, share))}%`);
-      card.querySelector('[data-km=green]').textContent = km(g);
-      card.querySelector('[data-km=red]').textContent = km(r);
+      const perFan = data.sides.green.perFan != null ? `<em>/${esc(t('fan'))}</em>` : '';
+      card.querySelector('[data-km=green]').innerHTML = `${esc(km(g))}${perFan}`;
+      card.querySelector('[data-km=red]').innerHTML = `${esc(km(r))}${perFan}`;
       if (!data.live) {
         const lead = g === r ? null : DERBY.sides[g > r ? 'green' : 'red'];
         card.querySelector('[data-cta]').innerHTML = lead ? t('{side} won the Kariakoo Derby!', { side: `<b>${lead.emoji} ${esc(t(lead.name))}</b>` }) : t("It's a draw!");
@@ -2203,7 +2212,7 @@ export class UI {
     this.askedThisVisit = true;
     setTimeout(async () => {
       if (!(await pushReady())) return; // not set up on the server yet: ask another day
-      if (!this.screen?.classList.contains('title') || document.querySelector('.modal-wrap')) return;
+      if (!this.claimNudge()) return;
       save.notifyAsked = true;
       persist();
       this.notifySheet();
@@ -2297,8 +2306,7 @@ export class UI {
   maybeAskForPin() {
     if (!save.name || save.pinSet || save.pinAsked || (save.runs ?? 0) < 1) return;
     setTimeout(() => {
-      // never cover a sheet they opened (e.g. Settings mid-rename); ask on a later visit instead
-      if (!this.screen?.classList.contains('title') || document.querySelector('.modal-wrap') || save.pinAsked) return;
+      if (!this.claimNudge()) return;
       save.pinAsked = true;
       persist();
       this.pinSheet(false, true);
@@ -2457,9 +2465,12 @@ export class UI {
    */
   maybeOfferRestore() {
     if (device.platform !== 'ios' || !standalone() || save.restoreAsked || hasProgress() || this.params.get('restore')) return;
-    save.restoreAsked = true;
-    persist();
-    setTimeout(() => this.progressSheet(true), 900);
+    setTimeout(() => {
+      if (!this.claimNudge()) return;
+      save.restoreAsked = true;
+      persist();
+      this.progressSheet(true);
+    }, 900);
   }
 
   /** Settings → Move my progress: get a code here, or type one from elsewhere. */
@@ -2635,6 +2646,7 @@ export class UI {
   }
 
   daily() {
+    if (!this.onTitle()) return; // asked again next time the title screen opens
     const d = claimDaily();
     if (!d) return;
     const el = $(`
@@ -2654,8 +2666,21 @@ export class UI {
       audio.unlock();
       audio.buy();
       el.remove();
-      this.title();
+      // repaint the seed count, but never pull a running player back to the menu
+      if (this.onTitle()) this.title();
     });
     this.overlay(el);
+  }
+
+  /** True while the title screen is what the player sees (no run, no other modal on top). */
+  onTitle() {
+    return this.game.state === 'menu' && !!this.screen?.classList.contains('title') && !document.querySelector('.modal-wrap');
+  }
+
+  /** One pop-up per visit: a nudge only shows if nothing else has asked this visit. */
+  claimNudge() {
+    if (this.nudgedThisVisit || !this.onTitle()) return false;
+    this.nudgedThisVisit = true;
+    return true;
   }
 }

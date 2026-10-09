@@ -87,6 +87,7 @@ export async function postScore(entry) {
       chapter: entry.chapter,
       runner: entry.runner,
       duration: entry.duration ?? 0,
+      mult: entry.mult ?? undefined,
       side: save.side ?? undefined, // Derby Day
     }),
   });

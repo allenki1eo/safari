@@ -1,5 +1,6 @@
 import { MISSION_POOL, ALLY_IDS, outfitId } from './content.js';
 import { REGIONS, regionIndexAt } from './regions.js';
+import { darDay, shiftDarDay } from './daily.js';
 
 const KEY = 'kimbia.save.v1';
 
@@ -26,7 +27,8 @@ const defaults = () => ({
   music: true,
   haptics: true,
   quality: 'auto', // graphics: auto | high | low
-  lastDaily: '',
+  lastDaily: '', // UTC date of the last daily reward (older builds)
+  dailyDay: '', // Dar es Salaam day of the last daily reward
   streak: 0,
   hunt: { day: '', done: 0, got: 0 }, // word hunt: words spelled today, letters of the current one
 });
@@ -217,12 +219,39 @@ export function claimMissionSet() {
 export const multiplier = () => 1 + save.missionLevel;
 
 /* ------------------------------------------------------------------- daily */
-export function claimDaily() {
-  const today = new Date().toISOString().slice(0, 10);
-  if (save.lastDaily === today) return null;
-  const yesterday = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
-  save.streak = save.lastDaily === yesterday ? Math.min(7, save.streak + 1) : 1;
-  save.lastDaily = today;
+const utcDay = (now) => now.toISOString().slice(0, 10);
+
+/**
+ * Where the daily reward stands at `now`. The reward day runs midnight to midnight in
+ * Dar es Salaam (`dailyDay`). Saves from before that only hold `lastDaily`, a UTC date: that
+ * claim fell on the same Dar day or the one after, so until the UTC date moves on it still
+ * counts as today's (nothing is paid twice before the old rule would have paid it), and a streak
+ * carries on if you come back within two Dar days (nobody loses their streak to the switch).
+ */
+function dailyState(now = new Date()) {
+  const today = darDay(now);
+  if (save.dailyDay) {
+    return { today, due: save.dailyDay !== today && save.dailyDay < today, continued: shiftDarDay(save.dailyDay, 1) === today };
+  }
+  if (save.lastDaily) {
+    const due = utcDay(now) !== save.lastDaily && today > save.lastDaily;
+    const continued = today === shiftDarDay(save.lastDaily, 1) || today === shiftDarDay(save.lastDaily, 2);
+    return { today, due, continued };
+  }
+  return { today, due: true, continued: false };
+}
+
+/** True when today's login reward hasn't been collected yet. */
+export function dailyDue(now = new Date()) {
+  return dailyState(now).due;
+}
+
+export function claimDaily(now = new Date()) {
+  const { today, due, continued } = dailyState(now);
+  if (!due) return null;
+  save.streak = continued ? Math.min(7, (save.streak || 0) + 1) : 1;
+  save.dailyDay = today;
+  save.lastDaily = utcDay(now); // older builds on another device still read this
   const reward = 50 * save.streak + (save.streak === 7 ? 500 : 0);
   save.seeds += reward;
   persist();

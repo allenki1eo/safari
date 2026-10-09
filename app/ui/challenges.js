@@ -42,6 +42,8 @@ export async function createChallenge(run, stake, name) {
     score: run.score,
     distance: run.distance,
     duration: run.duration,
+    seeds: run.seeds ?? 0,
+    mult: run.mult ?? undefined,
     startRegion: run.startRegion ?? 0,
     route: run.route,
     track: run.track ?? '',
@@ -70,8 +72,11 @@ export async function acceptBet(id, name) {
 }
 
 /** Reports the run against the bet; a win pays the whole pot into the bank. */
-export async function finishBet(id, score) {
-  const data = await call('POST', { action: 'finish', token: playerToken(), id, score });
+export async function finishBet(id, run) {
+  const data = await call('POST', {
+    action: 'finish', token: playerToken(), id,
+    score: run.score, distance: run.distance ?? 0, duration: run.duration ?? 0, seeds: run.seeds ?? 0, mult: run.mult ?? undefined,
+  });
   if (data.winner === 'rival') {
     save.seeds += data.pot;
     persist();

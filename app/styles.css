@@ -864,3 +864,70 @@ input { font: inherit; }
 .name-chip { padding: 5px 11px; border-radius: 99px; background: rgba(255,201,64,0.16); border: 1px solid rgba(255,201,64,0.55); color: var(--sun-2); font-weight: 900; font-size: 13px; }
 .name-chip:active { transform: scale(0.96); }
 .name-status .spin { width: 12px; height: 12px; border-radius: 50%; border: 2px solid rgba(255,244,222,0.25); border-top-color: var(--sun); animation: spin 0.8s linear infinite; }
+
+/* ------------------------------------------------- polish batch (Oct 2026) */
+/* results: Run again / WhatsApp / Home stay pinned to the bottom of the card, no scrolling */
+.over-actions {
+  position: sticky; bottom: -20px; z-index: 3; margin: 16px -20px -20px; padding: 12px 16px calc(14px + var(--safe-b));
+  display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 56px; gap: 8px; align-items: stretch;
+  background: linear-gradient(to top, rgba(43,26,14,0.98) 80%, rgba(43,26,14,0));
+}
+.over-actions .btn { min-height: 60px; padding: 0 10px; font-size: 20px; min-width: 0; }
+.over-actions .again { font-size: 22px; }
+.over-actions .home { padding: 0; font-size: 24px; }
+.over-actions .share span { font-size: 18px; }
+@media (max-width: 360px) { .over-actions .share span { display: none; } }
+
+/* the unread badge only shows when there is something unread (display:grid used to beat [hidden]) */
+.inbox-btn .count[hidden] { display: none; }
+
+/* tap targets: 44px or more */
+.outfits button { min-height: 44px; padding: 6px 14px; font-size: 13px; }
+.seg button { min-height: 44px; padding: 6px 12px; }
+.switch { width: 62px; height: 44px; background: transparent; flex: none; }
+.switch::before { content: ''; position: absolute; left: 4px; right: 4px; top: 6px; bottom: 6px; border-radius: 99px; background: rgba(255,255,255,0.18); transition: background 0.2s; }
+.switch.on { background: transparent; }
+.switch.on::before { background: var(--leaf); }
+.switch::after { top: 10px; left: 8px; z-index: 1; }
+
+/* derby card: one compact block, so the runner stays in view on the title screen */
+.derby-card { gap: 6px; padding: 9px 12px 8px; }
+.derby-legend { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; }
+.derby-legend b em { font-style: normal; font-family: var(--body, inherit); font-size: 11px; opacity: 0.85; margin-left: 2px; }
+.derby-legend b { font-size: 16px; }
+.derby-legend small { font-size: 10.5px; }
+.derby-legend .derby-cta { min-width: 0; text-align: center; font-size: 12px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.derby-cta .pick { padding: 5px 12px; font-size: 12.5px; }
+.title-bottom { gap: 12px; }
+.start-chip { min-height: 52px; padding-top: 6px; padding-bottom: 6px; }
+
+/* landscape phones: logo on the left, everything you tap on the right, inside the notch-safe area */
+@media (orientation: landscape) and (max-height: 540px) {
+  .title {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 390px); grid-template-rows: auto minmax(0, 1fr);
+    column-gap: 20px; row-gap: 6px;
+    padding: calc(10px + var(--safe-t)) calc(14px + env(safe-area-inset-right, 0px)) calc(10px + var(--safe-b)) calc(14px + env(safe-area-inset-left, 0px));
+  }
+  .title-top { grid-column: 1 / -1; grid-row: 1; }
+  .title-top .chips { flex-direction: row; }
+  .title .install-pill, .title .icon-btn { height: 46px; }
+  .title .icon-btn { width: 46px; }
+  .title .logo { grid-column: 1; grid-row: 2; align-self: center; margin: 0; }
+  .title .logo h1 { font-size: clamp(44px, 8.5vw, 72px); }
+  .title .logo .sub { font-size: 14px; margin-top: 6px; }
+  .title .title-bottom {
+    grid-column: 2; grid-row: 2; align-self: end; max-width: none; margin: 0; gap: 8px;
+    max-height: 100%; overflow-y: auto; touch-action: pan-y; overscroll-behavior: contain; scrollbar-width: none;
+  }
+  .title .derby-card { gap: 4px; padding: 7px 10px 6px; }
+  .title .derby-legend small { display: none; }
+  .title .start-chip { min-height: 46px; padding-top: 4px; padding-bottom: 4px; }
+  .title .start-chip .flag { font-size: 22px; }
+  .title .start-chip b { font-size: 17px; }
+  .title .play-btn { min-height: 54px; font-size: 24px; }
+  .title .nav-btn { padding: 5px 4px 4px; gap: 2px; font-size: 11px; min-height: 48px; }
+  .title .nav-btn .ico { font-size: 19px; }
+  .title .best-line { font-size: 12px; }
+  .title .prize-ribbon { min-height: 44px; }
+  .over .card { max-height: calc(100dvh - 16px - var(--safe-t) - var(--safe-b)); }
+}

@@ -119,8 +119,13 @@ export function herdRng(day, wz) {
 }
 
 /** Cruise speed the course was designed for, from distance alone. */
+export const SPEED_CAP = 40;
+
 export function cruiseSpeed(z) {
-  return 15 + 21 * (1 - Math.exp(-Math.max(0, z) / 4200));
+  const d = Math.max(0, z);
+  // fast early climb toward 36 m/s, then a slow extra push past 5 km that tops out at 40 m/s
+  const late = 4 * Math.min(1, Math.max(0, d - 5000) / 10000);
+  return Math.min(SPEED_CAP, 15 + 21 * (1 - Math.exp(-d / 4200)) + late);
 }
 
 /** Difficulty handed to the pattern generator. It is the chunk distance, not who is faster. */
@@ -131,7 +136,9 @@ export function chunkDifficulty(z) {
 export function chunkGap(z) {
   const speed = cruiseSpeed(z);
   const diff = Math.min(1, Math.max(0, z) / 6000);
-  return Math.max(12, speed * (1.15 + (0.62 - 1.15) * diff));
+  // past 6 km the breathers keep shrinking a little, down to a floor at 12 km
+  const late = Math.min(1, Math.max(0, z - 6000) / 6000);
+  return Math.max(12, speed * (1.15 + (0.62 - 1.15) * diff - 0.06 * late));
 }
 
 export function chunkPlan(day, z) {
