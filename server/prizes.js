@@ -31,7 +31,7 @@ async function periodTop(db, kind, period, limit = TOP_LIMIT) {
     sql: `SELECT player_id, id, name, score, distance, seeds, allies, chapter, runner FROM (
             SELECT d.*, ROW_NUMBER() OVER (PARTITION BY d.player_id ORDER BY d.score DESC, d.id ASC) AS pick
             FROM daily_scores d
-            WHERE d.day BETWEEN ? AND ? AND ${fair('d')}
+            WHERE d.day BETWEEN ? AND ? AND ${fair('d')} AND d.player_id NOT IN (SELECT player_id FROM banned)
           )
           WHERE pick = 1
           ORDER BY score DESC, id ASC

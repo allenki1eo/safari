@@ -2,131 +2,538 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="robots" content="noindex" />
+  <meta name="theme-color" content="#1c1008" />
   <title>Kimbia! · Admin</title>
   <style>
-    :root { --sun: #ffc940; --earth: #2b1a0e; --cream: #fff4de; --leaf: #8fc24a; --line: rgba(255, 228, 170, 0.2); }
+    :root {
+      --sun: #ffc940; --sun-2: #ffe08a; --flame: #ff7a2f; --earth: #2b1a0e; --cream: #fff4de; --leaf: #8fc24a;
+      --bg: #1c1008; --panel: rgba(43, 26, 14, 0.86); --panel-2: rgba(0, 0, 0, 0.25); --line: rgba(255, 228, 170, 0.16);
+      --muted: rgba(255, 244, 222, 0.66); --bad: #ffb4a8; --green: #1f9d4a; --red: #d7263d; --bar: #f5b83d;
+    }
     * { box-sizing: border-box; }
-    html { background: #1c1008; }
-    body { margin: 0; min-height: 100vh; padding: 28px 16px 40px; background: radial-gradient(circle at 50% 0%, #6b3a17, #1c1008 70%) fixed; color: var(--cream); font: 16px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif; }
-    .wrap { width: min(100%, 460px); margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
-    header h1 { margin: 0; font-size: 28px; color: var(--sun); letter-spacing: 0.5px; }
-    header p { margin: 4px 0 0; color: rgba(255, 244, 222, 0.7); font-size: 14px; }
-    section { padding: 22px 20px 20px; border-radius: 22px; background: rgba(43, 26, 14, 0.82); border: 1px solid var(--line); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45); }
-    h2 { margin: 0 0 6px; font-size: 20px; color: var(--sun); display: flex; align-items: center; gap: 8px; }
-    p { margin: 0 0 14px; color: rgba(255, 244, 222, 0.8); font-size: 14px; }
-    ol { margin: 0 0 12px; padding-left: 20px; font-size: 14px; color: rgba(255, 244, 222, 0.85); }
-    ol li { margin: 4px 0; }
-    label { display: block; margin: 12px 0 6px; font-weight: 700; font-size: 14px; }
-    input { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.3); color: var(--cream); font-size: 16px; }
-    input:focus { outline: 2px solid var(--sun); }
-    button { width: 100%; margin-top: 16px; padding: 14px; border: 0; border-radius: 14px; background: linear-gradient(180deg, #ffe08a, var(--sun)); color: var(--earth); font-weight: 900; font-size: 17px; cursor: pointer; }
-    button.ghost { background: rgba(255, 244, 222, 0.1); color: var(--cream); border: 1px solid var(--line); }
-    button:disabled { opacity: 0.6; }
-    .out { margin-top: 16px; padding: 14px; border-radius: 14px; background: rgba(255, 244, 222, 0.07); border: 1px solid var(--line); font-size: 14px; }
-    .out code.big { display: block; margin: 8px 0; font-size: 30px; letter-spacing: 4px; color: var(--sun); font-weight: 900; text-align: center; }
-    .err { color: #ffb4a8; }
-    .pill { display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: 12px; font-weight: 800; background: rgba(255, 255, 255, 0.12); }
-    .pill.on { background: rgba(143, 194, 74, 0.25); color: #d6f2a8; }
-    .pill.off { background: rgba(255, 180, 168, 0.18); color: #ffd2ca; }
+    html { background: var(--bg); }
+    body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 50% -10%, #6b3a17, var(--bg) 60%) fixed; color: var(--cream);
+      font: 15px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif; -webkit-font-smoothing: antialiased; }
+    button, input, textarea { font: inherit; color: inherit; }
+    button { cursor: pointer; border: 0; background: none; }
+    .wrap { width: min(100%, 980px); margin: 0 auto; padding: 18px 16px 48px; }
+    .card { padding: 18px; border-radius: 20px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 14px 40px rgba(0, 0, 0, 0.35); }
+    h1 { margin: 0; font-size: 22px; letter-spacing: 0.3px; white-space: nowrap; }
+    h1 span { color: var(--sun); }
+    h2 { margin: 0 0 12px; font-size: 17px; color: var(--sun-2); }
+    p { margin: 0 0 12px; color: var(--muted); }
+    .muted { color: var(--muted); font-size: 13px; }
+    label { display: block; margin: 12px 0 6px; font-weight: 700; font-size: 13px; }
+    input, textarea { width: 100%; padding: 11px 13px; border-radius: 12px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.3); }
+    textarea { resize: vertical; min-height: 70px; }
+    input:focus, textarea:focus { outline: 2px solid var(--sun); outline-offset: 1px; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 11px 16px; border-radius: 12px; font-weight: 800;
+      background: linear-gradient(180deg, var(--sun-2), var(--sun)); color: var(--earth); }
+    .btn.ghost { background: rgba(255, 244, 222, 0.08); color: var(--cream); border: 1px solid var(--line); }
+    .btn.danger { background: rgba(215, 38, 61, 0.2); color: #ffd2ca; border: 1px solid rgba(215, 38, 61, 0.5); }
+    .btn.small { padding: 7px 11px; font-size: 13px; border-radius: 10px; }
+    .btn:disabled { opacity: 0.55; cursor: default; }
+    .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .grow { flex: 1; min-width: 0; }
+    .err { color: var(--bad); }
+    .ok { color: #d6f2a8; }
+    .pill { display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: 12px; font-weight: 800; background: rgba(255, 255, 255, 0.1); }
+    .pill.on { background: rgba(143, 194, 74, 0.22); color: #d6f2a8; }
+    .pill.off { background: rgba(255, 180, 168, 0.16); color: #ffd2ca; }
+    [hidden] { display: none !important; }
+
+    /* login */
+    .login { min-height: 100vh; display: grid; place-items: center; padding: 20px; }
+    .login .card { width: min(100%, 380px); text-align: center; }
+    .login .mark { font-size: 44px; }
+    .login form { text-align: left; margin-top: 8px; }
+    .login .btn { width: 100%; margin-top: 16px; }
+
+    /* chrome */
+    header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+    header .when { margin-left: auto; white-space: nowrap; }
+    header .btn { white-space: nowrap; }
+    @media (max-width: 480px) { header h1 { font-size: 19px; } header .when { display: none; } header #refresh { margin-left: auto; } }
+    nav { position: sticky; top: 0; z-index: 5; display: flex; gap: 6px; overflow-x: auto; padding: 8px 0 12px; margin-bottom: 4px; scrollbar-width: none;
+      background: linear-gradient(var(--bg) 70%, transparent); }
+    nav::-webkit-scrollbar { display: none; }
+    nav button { flex: none; padding: 9px 14px; border-radius: 99px; font-weight: 800; font-size: 14px; background: rgba(255, 244, 222, 0.07); border: 1px solid var(--line); }
+    nav button.on { background: linear-gradient(180deg, var(--sun-2), var(--sun)); color: var(--earth); border-color: transparent; }
+    section { display: flex; flex-direction: column; gap: 14px; }
+
+    /* overview */
+    .tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    @media (min-width: 720px) { .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    .tile { padding: 14px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line); }
+    .tile b { display: block; font-size: 26px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+    .tile span { font-size: 12.5px; color: var(--muted); font-weight: 700; }
+    .tile small { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); }
+    .chart { position: relative; }
+    .chart svg { display: block; width: 100%; height: 190px; overflow: visible; }
+    .chart .axis { fill: var(--muted); font-size: 10px; }
+    .chart .grid { stroke: rgba(255, 244, 222, 0.08); }
+    .chart .bar { fill: var(--bar); }
+    .chart .hit { fill: transparent; }
+    .chart .hit:hover + .bar, .chart .bar.hl { fill: var(--sun-2); }
+    .chart .val { fill: var(--cream); font-size: 11px; font-weight: 700; text-anchor: middle; }
+    .tip { position: absolute; pointer-events: none; padding: 7px 10px; border-radius: 10px; background: #0f0905; border: 1px solid var(--line); font-size: 12px; white-space: nowrap; transform: translate(-50%, -110%); }
+    table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+    th, td { padding: 8px 6px; text-align: left; border-bottom: 1px solid var(--line); }
+    th { color: var(--muted); font-weight: 700; font-size: 12px; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+    /* derby */
+    .rope { --g: 50%; position: relative; height: 18px; border-radius: 99px; display: flex; background: rgba(0, 0, 0, 0.35); margin: 16px 0 10px; }
+    .rope i { display: block; height: 100%; transition: width 1s; }
+    .rope .g { width: var(--g); border-radius: 99px 0 0 99px; background: repeating-linear-gradient(115deg, #1f9d4a 0 10px, #f6c933 10px 14px); }
+    .rope .r { flex: 1; border-radius: 0 99px 99px 0; background: repeating-linear-gradient(115deg, #d7263d 0 10px, #fff 10px 14px); }
+    .rope .knot { position: absolute; top: 50%; left: var(--g); width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%; background: #f4f4f4; display: grid; place-items: center; box-shadow: 0 3px 8px rgba(0, 0, 0, 0.45); transition: left 1s; }
+    .sides { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .side { padding: 14px; border-radius: 16px; background: var(--panel-2); border-top: 4px solid var(--c); }
+    .side b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; }
+
+    /* players */
+    .list { display: flex; flex-direction: column; gap: 6px; }
+    .prow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; width: 100%; padding: 10px 12px; border-radius: 14px; background: var(--panel-2); text-align: left; border: 1px solid transparent; }
+    .prow:hover, .prow.on { border-color: rgba(255, 201, 64, 0.5); }
+    .prow b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .prow small { color: var(--muted); font-size: 12px; }
+    .prow .score { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--sun-2); }
+    .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: 1px; }
+    .tag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 6px; font-size: 11px; font-weight: 800; background: rgba(215, 38, 61, 0.3); color: #ffd2ca; }
+    .detail .facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 10px 0 14px; }
+    @media (min-width: 720px) { .detail .facts { grid-template-columns: repeat(4, minmax(0, 1fr)); } .players-grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: 14px; align-items: start; } }
+    .fact { padding: 10px; border-radius: 12px; background: var(--panel-2); }
+    .fact b { display: block; font-variant-numeric: tabular-nums; }
+    .fact span { font-size: 12px; color: var(--muted); }
+    .code { display: block; margin: 8px 0; font-size: 28px; letter-spacing: 4px; color: var(--sun); font-weight: 900; text-align: center; }
+
+    /* notifications */
+    .preview { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border-radius: 14px; background: #f4efe6; color: #1c1008; margin-top: 12px; }
+    .preview img { width: 36px; height: 36px; border-radius: 9px; }
+    .preview b { display: block; font-size: 14px; }
+    .preview span { font-size: 13px; color: #4a3a2c; }
     .kv { margin-top: 12px; }
-    .kv b { display: block; font-size: 12px; letter-spacing: 0.6px; text-transform: uppercase; color: var(--sun); margin-bottom: 4px; }
+    .kv b { display: block; font-size: 12px; letter-spacing: 0.6px; color: var(--sun); margin-bottom: 4px; }
     .kv div { display: flex; gap: 8px; }
     .kv code { flex: 1; min-width: 0; padding: 10px 12px; border-radius: 10px; background: rgba(0, 0, 0, 0.35); font-size: 12px; word-break: break-all; }
-    .kv button { width: auto; margin: 0; padding: 0 14px; font-size: 14px; }
-    .warn { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: rgba(255, 180, 168, 0.12); border: 1px solid rgba(255, 180, 168, 0.35); font-size: 13px; color: #ffe1db; }
+    .warn { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: rgba(255, 180, 168, 0.1); border: 1px solid rgba(255, 180, 168, 0.3); font-size: 13px; color: #ffe1db; }
+    details summary { cursor: pointer; font-weight: 800; color: var(--sun-2); }
+    .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); padding: 10px 16px; border-radius: 12px; background: #0f0905; border: 1px solid var(--line); font-weight: 700; z-index: 20; max-width: calc(100% - 32px); }
   </style>
 </head>
 <body>
-  <div class="wrap">
+  <div class="login" id="login">
+    <div class="card">
+      <div class="mark">🏃🏾‍♂️</div>
+      <h1>KIMBIA! <span>admin</span></h1>
+      <p style="margin-top:6px">For the game's owner only.</p>
+      <form id="login-form">
+        <label for="key">Admin key</label>
+        <input id="key" type="password" autocomplete="current-password" placeholder="KIMBIA_ADMIN_KEY" required />
+        <button class="btn" type="submit">Log in</button>
+        <p class="err" id="login-err" style="margin:10px 0 0" hidden></p>
+      </form>
+    </div>
+  </div>
+
+  <div class="wrap" id="app" hidden>
     <header>
-      <h1>Kimbia! admin</h1>
-      <p>Only for the game's owner. Nothing here is shared with players.</p>
+      <h1>KIMBIA! <span>admin</span></h1>
+      <span class="muted when" id="when"></span>
+      <button class="btn ghost small" id="refresh" title="Refresh">↻</button>
+      <button class="btn ghost small" id="logout">Log out</button>
     </header>
+    <nav id="tabs">
+      <button data-tab="overview" class="on">📊 Overview</button>
+      <button data-tab="players">🏃 Players</button>
+      <button data-tab="derby">⚽ Kariakoo Derby</button>
+      <button data-tab="prizes">🎁 Prizes</button>
+      <button data-tab="notify">🔔 Notifications</button>
+    </nav>
 
-    <section>
-      <label for="key" style="margin-top:0">Admin key</label>
-      <input id="key" type="password" autocomplete="current-password" placeholder="KIMBIA_ADMIN_KEY" />
-    </section>
-
-    <section>
-      <h2>🔑 Runner recovery</h2>
-      <p>For a player who lost their runner and never set a recovery PIN. Make sure it's really them first (for example, ask for a screenshot of their old score). The code works once, for 7 days: they open <b>Settings → Get my runner back</b> and type it in place of a PIN.</p>
-      <form id="recover">
-        <label for="name">Runner name</label>
-        <input id="name" maxlength="16" autocomplete="off" required />
-        <button type="submit">Make a recovery code</button>
-      </form>
-      <div class="out" id="recover-out" hidden></div>
-    </section>
-
-    <section>
-      <h2>🔔 Notifications <span class="pill" id="push-status">checking…</span></h2>
-      <div id="push-setup">
-        <p>Notifications need a key pair. Make one here — it is created in this browser and never sent anywhere — then add it to Vercel:</p>
-        <ol>
-          <li>Tap <b>Make notification keys</b>.</li>
-          <li>In Vercel → <b>safari</b> project → <b>Settings → Environment Variables</b>, add each value below under its name.</li>
-          <li>Redeploy (Deployments → ⋯ → Redeploy). Players can then turn notifications on.</li>
-        </ol>
-        <button type="button" class="ghost" id="make-keys">Make notification keys</button>
-        <div id="keys" hidden>
-          <div class="kv"><b>VAPID_PUBLIC_KEY</b><div><code id="k-pub"></code><button type="button" data-copy="k-pub">Copy</button></div></div>
-          <div class="kv"><b>VAPID_PRIVATE_KEY</b><div><code id="k-priv"></code><button type="button" data-copy="k-priv">Copy</button></div></div>
-          <div class="kv"><b>CRON_SECRET</b><div><code id="k-cron"></code><button type="button" data-copy="k-cron">Copy</button></div></div>
-          <div class="warn">Keep the private key and cron secret to yourself — paste them only into Vercel. Once players have turned notifications on, keep the same keys: new keys stop the old subscriptions from working.</div>
+    <!-- overview -->
+    <section data-pane="overview">
+      <div class="tiles" id="tiles"></div>
+      <div class="card">
+        <div class="row" style="margin-bottom:6px">
+          <h2 class="grow" style="margin:0">Players per day · last 14 days</h2>
+          <button class="btn ghost small" id="table-toggle">Show table</button>
         </div>
+        <div class="chart" id="chart"></div>
+        <div id="chart-table" hidden></div>
       </div>
-      <form id="test">
-        <p style="margin-top:16px">Send a test notification to a runner who has turned notifications on (try your own runner name).</p>
-        <label for="test-name">Runner name</label>
-        <input id="test-name" maxlength="16" autocomplete="off" required />
-        <button type="submit">Send a test</button>
-      </form>
-      <div class="out" id="test-out" hidden></div>
+    </section>
+
+    <!-- players -->
+    <section data-pane="players" hidden>
+      <div class="players-grid">
+        <div class="card">
+          <div class="row">
+            <input class="grow" id="q" placeholder="Search runner names" autocomplete="off" />
+          </div>
+          <div class="row" style="margin:10px 0 12px">
+            <button class="btn ghost small" data-sort="top">Top scores</button>
+            <button class="btn ghost small" data-sort="recent">Newest</button>
+          </div>
+          <div class="list" id="plist"><p>Loading…</p></div>
+        </div>
+        <div class="card detail" id="pdetail"><p>Pick a runner to see their stats, recent runs and prizes — and to make a recovery code or take them off the boards.</p></div>
+      </div>
+    </section>
+
+    <!-- derby -->
+    <section data-pane="derby" hidden>
+      <div class="card" id="derby"></div>
+    </section>
+
+    <!-- prizes -->
+    <section data-pane="prizes" hidden>
+      <div class="card" id="prizes"></div>
+    </section>
+
+    <!-- notifications -->
+    <section data-pane="notify" hidden>
+      <div class="card">
+        <h2>Send a notification to everyone <span class="pill" id="push-status">…</span></h2>
+        <p>Goes to every phone that turned notifications on. Keep it short and worth it — one every 10 minutes at most.</p>
+        <form id="bc">
+          <label for="bc-title">Title</label>
+          <input id="bc-title" maxlength="60" placeholder="⚽ Kariakoo Derby tonight!" required />
+          <label for="bc-body">Message</label>
+          <textarea id="bc-body" maxlength="160" placeholder="Pick your side and pull the rope before the whistle." required></textarea>
+          <div class="preview"><img src="/icons/icon-192.png" alt="" /><div><b id="pv-title">⚽ Kariakoo Derby tonight!</b><span id="pv-body">Pick your side and pull the rope before the whistle.</span></div></div>
+          <div class="row" style="margin-top:14px"><button class="btn" type="submit">Send to everyone</button><span class="muted" id="bc-out"></span></div>
+        </form>
+      </div>
+      <div class="card">
+        <h2>Test on one runner</h2>
+        <form id="test" class="row">
+          <input class="grow" id="test-name" maxlength="16" placeholder="Runner name (try your own)" required />
+          <button class="btn ghost" type="submit">Send a test</button>
+        </form>
+        <p class="muted" id="test-out" style="margin:10px 0 0"></p>
+      </div>
+      <div class="card">
+        <details id="keys-box">
+          <summary>Notification keys</summary>
+          <p style="margin-top:10px">Make a key pair here — it is created in this browser and never sent anywhere — then add each value in Vercel → <b>safari</b> → Settings → Environment Variables, and redeploy.</p>
+          <button class="btn ghost" type="button" id="make-keys">Make notification keys</button>
+          <div id="keys" hidden>
+            <div class="kv"><b>VAPID_PUBLIC_KEY</b><div><code id="k-pub"></code><button class="btn small" type="button" data-copy="k-pub">Copy</button></div></div>
+            <div class="kv"><b>VAPID_PRIVATE_KEY</b><div><code id="k-priv"></code><button class="btn small" type="button" data-copy="k-priv">Copy</button></div></div>
+            <div class="kv"><b>CRON_SECRET</b><div><code id="k-cron"></code><button class="btn small" type="button" data-copy="k-cron">Copy</button></div></div>
+            <div class="warn">Paste these only into Vercel. Once players have turned notifications on, keep the same keys: new keys stop the old subscriptions from working.</div>
+          </div>
+        </details>
+      </div>
     </section>
   </div>
+
   <script>
     const $ = (id) => document.getElementById(id);
     const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-    const adminKey = () => $('key').value;
-    async function post(url, body) {
-      const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const fmt = (n) => Math.round(Number(n) || 0).toLocaleString();
+    const km = (m) => (m >= 1000 ? `${(m / 1000).toLocaleString(undefined, { maximumFractionDigits: m < 100000 ? 1 : 0 })} km` : `${Math.round(m)} m`);
+    const SIDES = { green: { name: 'Green & Gold', c: '#1f9d4a', e: '💚' }, red: { name: 'Red & White', c: '#d7263d', e: '❤️' } };
+    const store = { get: () => { try { return sessionStorage.getItem('kimbia.admin') || ''; } catch { return ''; } },
+      set: (v) => { try { v ? sessionStorage.setItem('kimbia.admin', v) : sessionStorage.removeItem('kimbia.admin'); } catch { /* private mode */ } } };
+    let adminKey = store.get();
+
+    function toast(text) {
+      const t = Object.assign(document.createElement('div'), { className: 'toast', textContent: text });
+      document.body.append(t);
+      setTimeout(() => t.remove(), 2600);
+    }
+    async function call(url, body) {
+      const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ adminKey, ...body }) });
       const data = await res.json().catch(() => ({}));
+      if (res.status === 403) { logout(); throw new Error('Your admin key was not accepted. Log in again.'); }
       if (!res.ok) throw new Error(data.error || 'Something went wrong.');
       return data;
     }
-    function form(id, out, run) {
-      $(id).addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const btn = $(id).querySelector('button');
-        btn.disabled = true;
-        $(out).hidden = false;
-        $(out).textContent = 'Working…';
-        try {
-          $(out).innerHTML = await run();
-        } catch (err) {
-          $(out).innerHTML = `<span class="err">${esc(err.message)}</span>`;
-        } finally {
-          btn.disabled = false;
-        }
+    const admin = (action, body = {}) => call('/api/admin', { action, ...body });
+
+    /* ------------------------------------------------------------ login */
+    $('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = e.target.querySelector('button');
+      btn.disabled = true;
+      $('login-err').hidden = true;
+      adminKey = $('key').value;
+      try {
+        await admin('login');
+        store.set(adminKey);
+        start();
+      } catch (err) {
+        adminKey = '';
+        $('login-err').textContent = err.message;
+        $('login-err').hidden = false;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+    function logout() {
+      adminKey = '';
+      store.set('');
+      $('app').hidden = true;
+      $('login').hidden = false;
+    }
+    $('logout').addEventListener('click', logout);
+
+    /* ------------------------------------------------------------- tabs */
+    const loaders = {};
+    let tab = 'overview';
+    $('tabs').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-tab]');
+      if (!b) return;
+      tab = b.dataset.tab;
+      document.querySelectorAll('[data-tab]').forEach((x) => x.classList.toggle('on', x === b));
+      document.querySelectorAll('[data-pane]').forEach((p) => (p.hidden = p.dataset.pane !== tab));
+      loaders[tab]?.();
+    });
+    $('refresh').addEventListener('click', () => loaders[tab]?.());
+
+    function start() {
+      $('login').hidden = true;
+      $('app').hidden = false;
+      loaders[tab]();
+    }
+
+    /* --------------------------------------------------------- overview */
+    let overviewData = null;
+    loaders.overview = async () => {
+      try {
+        const o = await admin('overview');
+        overviewData = o;
+        $('when').textContent = `Updated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        const tiles = [
+          ['Runners', fmt(o.players), `${fmt(o.scored)} with a score`],
+          ['Played today', fmt(o.activeToday), `${fmt(o.newToday)} new today`],
+          ['Played this week', fmt(o.activeWeek), 'since Monday'],
+          ['Runs today', fmt(o.runsToday), `${fmt(o.runsAll)} all time`],
+          ['Notifications on', fmt(o.notify), o.pushReady ? 'sending is set up' : 'keys not set up yet'],
+          ['Recovery PINs', fmt(o.pins), 'runners protected'],
+          ['Open bets', fmt(o.openBets), `${fmt(o.coinsInBets)} coins at stake`],
+          ['Off the boards', fmt(o.banned), 'banned runners'],
+        ];
+        $('tiles').innerHTML = tiles.map(([k, v, s]) => `<div class="tile"><span>${k}</span><b>${v}</b><small>${s}</small></div>`).join('');
+        drawChart(o.series);
+        $('chart-table').innerHTML = `<table><tr><th>Day</th><th class="num">Players</th><th class="num">Runs</th></tr>${[...o.series].reverse().map((d) => `<tr><td>${d.day}</td><td class="num">${fmt(d.players)}</td><td class="num">${fmt(d.runs)}</td></tr>`).join('')}</table>`;
+      } catch (err) {
+        $('tiles').innerHTML = `<p class="err">${esc(err.message)}</p>`;
+      }
+    };
+    let resizeTimer;
+    addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => overviewData && drawChart(overviewData.series), 200); });
+    $('table-toggle').addEventListener('click', () => {
+      const t = $('chart-table');
+      t.hidden = !t.hidden;
+      $('table-toggle').textContent = t.hidden ? 'Show table' : 'Hide table';
+    });
+
+    /** One series of bars: players per day, baseline-anchored, a tooltip on each day. */
+    function drawChart(series) {
+      const W = Math.max(300, $('chart').clientWidth || 640), H = 190, L = 30, B = 22, T = 18;
+      const max = Math.max(4, ...series.map((d) => d.players));
+      // a round top for the axis: 1, 2 or 5 times a power of ten above the busiest day
+      const mag = Math.pow(10, Math.floor(Math.log10(max)));
+      const top = [1, 2, 5, 10].map((m) => m * mag).find((v) => v >= max);
+      const y = (v) => T + (H - T - B) * (1 - v / top);
+      const bw = (W - L) / series.length;
+      const ticks = [0, top / 2, top];
+      const day = (d) => new Date(`${d}T12:00:00Z`).toLocaleDateString([], { day: 'numeric', month: 'short', timeZone: 'UTC' });
+      const best = series.reduce((a, d, i) => (d.players > series[a].players ? i : a), 0);
+      let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Players per day for the last 14 days">`;
+      for (const v of ticks) svg += `<line class="grid" x1="${L}" x2="${W}" y1="${y(v)}" y2="${y(v)}"/><text class="axis" x="${L - 6}" y="${y(v) + 3}" text-anchor="end">${fmt(v)}</text>`;
+      series.forEach((d, i) => {
+        const x = L + i * bw + bw * 0.2, w = bw * 0.6, h = Math.max(0, H - B - y(d.players));
+        const r = Math.min(4, w / 2, h);
+        // rounded top, square at the baseline
+        const path = h <= 0 ? '' : `M${x},${H - B} V${y(d.players) + r} Q${x},${y(d.players)} ${x + r},${y(d.players)} H${x + w - r} Q${x + w},${y(d.players)} ${x + w},${y(d.players) + r} V${H - B} Z`;
+        svg += `<rect class="hit" data-i="${i}" x="${L + i * bw}" y="${T}" width="${bw}" height="${H - T - B}"/><path class="bar" d="${path}"/>`;
+        if ((series.length - 1 - i) % (W < 500 ? 3 : 2) === 0) svg += `<text class="axis" x="${x + w / 2}" y="${H - 6}" text-anchor="middle">${day(d.day)}</text>`;
+        if (i === best || i === series.length - 1) svg += `<text class="val" x="${x + w / 2}" y="${y(d.players) - 5}">${fmt(d.players)}</text>`;
+      });
+      svg += '</svg><div class="tip" hidden></div>';
+      const box = $('chart');
+      box.innerHTML = svg;
+      const tip = box.querySelector('.tip');
+      box.querySelectorAll('.hit').forEach((h) => {
+        const show = () => {
+          const d = series[h.dataset.i];
+          const r = h.getBoundingClientRect(), b = box.getBoundingClientRect();
+          tip.innerHTML = `<b>${day(d.day)}</b> · ${fmt(d.players)} players · ${fmt(d.runs)} runs`;
+          tip.style.left = `${r.left - b.left + r.width / 2}px`;
+          tip.style.top = `${y(d.players) * (b.height / H)}px`;
+          tip.hidden = false;
+        };
+        h.addEventListener('mouseenter', show);
+        h.addEventListener('touchstart', show, { passive: true });
+        h.addEventListener('mouseleave', () => (tip.hidden = true));
       });
     }
 
-    form('recover', 'recover-out', async () => {
-      const data = await post('/api/account', { action: 'adminCode', adminKey: adminKey(), name: $('name').value });
-      const pretty = `${data.code.slice(0, 4)}-${data.code.slice(4)}`;
-      return `Recovery code for <b>${esc(data.name)}</b> (best ${Number(data.best).toLocaleString()}):<code class="big">${pretty}</code>Send it to the player privately. It works once and expires in 7 days.`;
+    /* ---------------------------------------------------------- players */
+    let sort = 'top', picked = null, searchTimer;
+    loaders.players = () => loadPlayers();
+    async function loadPlayers() {
+      document.querySelectorAll('[data-sort]').forEach((b) => b.classList.toggle('on', b.dataset.sort === sort));
+      try {
+        const { players } = await admin('players', { q: $('q').value, sort });
+        $('plist').innerHTML = players.length ? players.map((p) => `
+          <button class="prow ${p.id === picked ? 'on' : ''}" data-id="${p.id}">
+            <span><b>${p.side ? `<i class="dot" style="background:${SIDES[p.side].c}"></i>` : ''}${esc(p.name)}${p.banned ? '<span class="tag">BANNED</span>' : ''}</b>
+            <small>${p.lastDay ? `last played ${p.lastDay}` : 'never finished a run'} · ${fmt(p.days)} days</small></span>
+            <span class="score">${fmt(p.best)}</span>
+          </button>`).join('') : '<p>No runners match.</p>';
+      } catch (err) {
+        $('plist').innerHTML = `<p class="err">${esc(err.message)}</p>`;
+      }
+    }
+    $('q').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(loadPlayers, 250); });
+    document.querySelectorAll('[data-sort]').forEach((b) => b.addEventListener('click', () => { sort = b.dataset.sort; loadPlayers(); }));
+    $('plist').addEventListener('click', (e) => {
+      const row = e.target.closest('[data-id]');
+      if (!row) return;
+      picked = Number(row.dataset.id);
+      document.querySelectorAll('.prow').forEach((r) => r.classList.toggle('on', r === row));
+      showPlayer(picked).then(() => { if (innerWidth < 720) $('pdetail').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
     });
 
-    form('test', 'test-out', async () => {
-      const data = await post('/api/push', { action: 'test', adminKey: adminKey(), name: $('test-name').value });
-      if (!data.devices) return `<b>${esc(data.name)}</b> hasn't turned notifications on yet (Settings → 🔔 Notifications in the game).`;
-      return `Sent to <b>${esc(data.name)}</b>: ${data.sent} of ${data.devices} device${data.devices === 1 ? '' : 's'} took it.`;
-    });
+    async function showPlayer(id) {
+      const box = $('pdetail');
+      box.innerHTML = '<p>Loading…</p>';
+      try {
+        const { player: p } = await admin('player', { id });
+        const side = p.side ? SIDES[p.side] : null;
+        box.innerHTML = `
+          <div class="row"><h2 class="grow" style="margin:0">${esc(p.name)}</h2>${p.banned ? `<span class="pill off">Off the boards</span>` : ''}</div>
+          <div class="muted">Joined ${p.joined.slice(0, 10)} · runner ${esc(p.runner)}${side ? ` · ${side.e} ${side.name}` : ''}</div>
+          <div class="facts">
+            <div class="fact"><b>${fmt(p.best)}</b><span>best score</span></div>
+            <div class="fact"><b>${fmt(p.days)}</b><span>days played</span></div>
+            <div class="fact"><b>${p.pin ? 'Yes' : 'No'}</b><span>recovery PIN</span></div>
+            <div class="fact"><b>${fmt(p.devices)}</b><span>phones with notifications</span></div>
+          </div>
+          ${p.banned ? `<p class="err">Reason: ${esc(p.banned)}</p>` : ''}
+          <div class="row">
+            <button class="btn small" data-act="code">Make a recovery code</button>
+            ${p.banned ? '<button class="btn ghost small" data-act="unban">Put back on the boards</button>' : '<button class="btn danger small" data-act="ban">Take off the boards</button>'}
+          </div>
+          <div id="code-out"></div>
+          <h2 style="margin-top:18px">Recent days</h2>
+          ${p.recent.length ? `<table><tr><th>Day</th><th class="num">Score</th><th class="num">Distance</th><th class="num">Time</th></tr>${p.recent.map((r) => `<tr><td>${r.day}</td><td class="num">${fmt(r.score)}</td><td class="num">${fmt(r.distance)} m</td><td class="num">${Math.floor(r.duration / 60)}:${String(r.duration % 60).padStart(2, '0')}</td></tr>`).join('')}</table>` : '<p>No runs on the daily boards yet.</p>'}
+          <h2 style="margin-top:18px">Prizes</h2>
+          ${p.prizes.length ? `<table><tr><th>Board</th><th class="num">Place</th><th class="num">Seeds</th><th>Collected</th></tr>${p.prizes.map((r) => `<tr><td>${r.kind} ${r.period}</td><td class="num">#${r.rank}</td><td class="num">${fmt(r.amount)}</td><td>${r.claimed ? '✓' : 'waiting'}</td></tr>`).join('')}</table>` : '<p>No prizes yet.</p>'}`;
+        box.querySelector('[data-act=code]').addEventListener('click', async (e) => {
+          e.target.disabled = true;
+          try {
+            const data = await call('/api/account', { action: 'adminCode', name: p.name });
+            $('code-out').innerHTML = `<p style="margin-top:12px">Recovery code for <b>${esc(data.name)}</b>:</p><code class="code">${data.code.slice(0, 4)}-${data.code.slice(4)}</code><p class="muted">Send it to the player privately. It works once, for 7 days: Settings → Get my runner back, and type it in place of a PIN.</p>`;
+          } catch (err) { $('code-out').innerHTML = `<p class="err">${esc(err.message)}</p>`; }
+          e.target.disabled = false;
+        });
+        box.querySelector('[data-act=ban], [data-act=unban]').addEventListener('click', async (e) => {
+          const banning = e.target.dataset.act === 'ban';
+          let reason = '';
+          if (banning) {
+            reason = prompt(`Take ${p.name} off every leaderboard, prize and derby total?\n\nReason (only you see this):`, 'Impossible score');
+            if (reason === null) return;
+          }
+          try {
+            await admin('ban', { id: p.id, banned: banning, reason });
+            toast(banning ? `${p.name} is off the boards` : `${p.name} is back on the boards`);
+            showPlayer(p.id);
+            loadPlayers();
+          } catch (err) { toast(err.message); }
+        });
+      } catch (err) {
+        box.innerHTML = `<p class="err">${esc(err.message)}</p>`;
+      }
+    }
 
-    // VAPID keys: an ECDSA P-256 pair, in the base64url forms web push expects
+    /* ------------------------------------------------------------ derby */
+    loaders.derby = async () => {
+      const box = $('derby');
+      try {
+        const o = overviewData && Date.now() - overviewFetched < 15000 ? overviewData : await admin('overview');
+        const d = o.derby;
+        const g = d.sides.green, r = d.sides.red;
+        const share = g.distance + r.distance ? (g.distance / (g.distance + r.distance)) * 100 : 50;
+        const left = d.closes - Date.now();
+        const lead = g.distance === r.distance ? 'Level' : g.distance > r.distance ? `${SIDES.green.e} Green & Gold lead` : `${SIDES.red.e} Red & White lead`;
+        box.innerHTML = `
+          <div class="row"><h2 class="grow" style="margin:0">⚽ ${esc(o.derbyTitle)}</h2>
+            <span class="pill ${d.live ? 'on' : 'off'}">${d.live ? `Live · ${Math.floor(left / 864e5)}d ${Math.floor((left % 864e5) / 36e5)}h left` : 'Closed'}</span></div>
+          <p style="margin-top:6px">${lead}${g.distance + r.distance ? ` by ${km(Math.abs(g.distance - r.distance))}` : ''}.</p>
+          <div class="rope" style="--g:${Math.min(94, Math.max(6, share))}%"><i class="g"></i><i class="r"></i><span class="knot">⚽</span></div>
+          <div class="sides">
+            ${[['green', g], ['red', r]].map(([id, s]) => `<div class="side" style="--c:${SIDES[id].c}"><span class="muted">${SIDES[id].e} ${SIDES[id].name}</span><b>${km(s.distance)}</b><span class="muted">${fmt(s.runs)} runs · ${fmt(s.fans)} fans</span></div>`).join('')}
+          </div>
+          <p class="muted" style="margin:12px 0 0">Every saved run adds its distance to the runner's side (impossible paces add nothing, one run adds at most 60 km). Banned runners don't count.</p>`;
+      } catch (err) {
+        box.innerHTML = `<p class="err">${esc(err.message)}</p>`;
+      }
+    };
+    let overviewFetched = 0;
+    const loadOverview = loaders.overview;
+    loaders.overview = async () => { await loadOverview(); overviewFetched = Date.now(); };
+
+    /* ----------------------------------------------------------- prizes */
+    loaders.prizes = async () => {
+      const box = $('prizes');
+      try {
+        const { prizes, amounts } = await admin('prizes');
+        const podium = (k) => `${fmt(amounts[k][0])} / ${fmt(amounts[k][1])} / ${fmt(amounts[k][2])} · 4th–10th ${fmt(amounts[k][3])}`;
+        box.innerHTML = `
+          <h2>Prize amounts (seeds)</h2>
+          <table><tr><th>Board</th><th>1st / 2nd / 3rd · rest</th></tr>
+            <tr><td>Day</td><td>${podium('day')}</td></tr><tr><td>Week</td><td>${podium('week')}</td></tr><tr><td>Month</td><td>${podium('month')}</td></tr></table>
+          <h2 style="margin-top:18px">Latest winners</h2>
+          ${prizes.length ? `<table><tr><th>Board</th><th>Runner</th><th class="num">Place</th><th class="num">Seeds</th><th>Collected</th></tr>${prizes.map((p) => `<tr><td>${p.kind} ${p.period}</td><td>${esc(p.name)}</td><td class="num">#${p.rank}</td><td class="num">${fmt(p.amount)}</td><td>${p.claimed ? '✓' : 'waiting'}</td></tr>`).join('')}</table>` : '<p>No prizes handed out yet.</p>'}`;
+      } catch (err) {
+        box.innerHTML = `<p class="err">${esc(err.message)}</p>`;
+      }
+    };
+
+    /* ---------------------------------------------------- notifications */
+    loaders.notify = async () => {
+      try {
+        const { publicKey } = await (await fetch('/api/push')).json();
+        $('push-status').textContent = publicKey ? 'set up' : 'not set up';
+        $('push-status').className = `pill ${publicKey ? 'on' : 'off'}`;
+        $('keys-box').open = !publicKey;
+      } catch { $('push-status').textContent = 'unknown'; }
+    };
+    const preview = () => {
+      $('pv-title').textContent = $('bc-title').value || $('bc-title').placeholder;
+      $('pv-body').textContent = $('bc-body').value || $('bc-body').placeholder;
+    };
+    $('bc-title').addEventListener('input', preview);
+    $('bc-body').addEventListener('input', preview);
+    $('bc').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!confirm('Send this notification to every player who turned them on?')) return;
+      const btn = e.target.querySelector('button');
+      btn.disabled = true;
+      $('bc-out').textContent = 'Sending…';
+      try {
+        const r = await admin('broadcast', { title: $('bc-title').value, body: $('bc-body').value });
+        $('bc-out').innerHTML = `<span class="ok">Sent: ${fmt(r.sent)} of ${fmt(r.devices)} phones took it.</span>`;
+      } catch (err) { $('bc-out').innerHTML = `<span class="err">${esc(err.message)}</span>`; }
+      btn.disabled = false;
+    });
+    $('test').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      $('test-out').textContent = 'Sending…';
+      try {
+        const data = await call('/api/push', { action: 'test', name: $('test-name').value });
+        $('test-out').innerHTML = data.devices ? `Sent to <b>${esc(data.name)}</b>: ${data.sent} of ${data.devices} phone${data.devices === 1 ? '' : 's'} took it.` : `<b>${esc(data.name)}</b> hasn't turned notifications on yet.`;
+      } catch (err) { $('test-out').innerHTML = `<span class="err">${esc(err.message)}</span>`; }
+    });
     const b64url = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     $('make-keys').addEventListener('click', async () => {
       const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
@@ -144,12 +551,7 @@
       setTimeout(() => (b.textContent = 'Copy'), 1500);
     });
 
-    fetch('/api/push').then((r) => r.json()).then((d) => {
-      const on = !!d.publicKey;
-      $('push-status').textContent = on ? 'on' : 'not set up';
-      $('push-status').className = `pill ${on ? 'on' : 'off'}`;
-      if (on) $('push-setup').hidden = true;
-    }).catch(() => ($('push-status').textContent = 'unknown'));
+    if (adminKey) admin('login').then(start).catch(logout);
   </script>
 </body>
 </html>

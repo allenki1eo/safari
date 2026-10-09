@@ -16,7 +16,7 @@ import { cleanSide, derbyBoard, derbyRun, pickSide } from './derby.js';
 loadLocalEnv();
 
 // Applied in order on first use; every statement is idempotent.
-const SCHEMA_SQL = ['001_scores.sql', '002_players.sql', '003_daily.sql', '004_challenges.sql', '005_transfers.sql', '006_accounts.sql', '007_prizes.sql', '008_push.sql', '009_derby.sql']
+const SCHEMA_SQL = ['001_scores.sql', '002_players.sql', '003_daily.sql', '004_challenges.sql', '005_transfers.sql', '006_accounts.sql', '007_prizes.sql', '008_push.sql', '009_derby.sql', '010_banned.sql']
   .map((file) => readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8'))
   .join('\n');
 export const TOKEN_RE = /^[a-f0-9]{64}$/;
@@ -179,7 +179,7 @@ const COLS = 'id, name, best_score, distance, seeds, allies, chapter, runner';
 const TOP_SQL = `
   SELECT ${COLS}
   FROM players
-  WHERE best_score > 0
+  WHERE best_score > 0 AND id NOT IN (SELECT player_id FROM banned)
   ORDER BY best_score DESC, id ASC
   LIMIT ?
 `;
@@ -349,7 +349,7 @@ function mapDaily(row, rank) {
 const DAILY_TOP_SQL = `
   SELECT id, name, score, distance, duration, seeds, allies, chapter, runner
   FROM daily_scores
-  WHERE day = ? AND score > 0
+  WHERE day = ? AND score > 0 AND player_id NOT IN (SELECT player_id FROM banned)
   ORDER BY score DESC, id ASC
   LIMIT ?
 `;

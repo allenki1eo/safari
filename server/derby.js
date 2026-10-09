@@ -31,7 +31,8 @@ export async function derbyRun(db, playerId, run, side) {
   if (!derbyLive(now().getTime())) return null;
   const held = await joinSide(db, playerId, side);
   if (!held) return null;
-  const fair = run.duration > 0 && run.distance <= run.duration * MAX_PACE;
+  const banned = (await db.execute({ sql: 'SELECT 1 FROM banned WHERE player_id = ?', args: [playerId] })).rows.length > 0;
+  const fair = !banned && run.duration > 0 && run.distance <= run.duration * MAX_PACE;
   const added = fair ? Math.min(run.distance, RUN_MAX) : 0;
   if (added > 0) {
     await db.execute({
