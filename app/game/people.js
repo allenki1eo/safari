@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { blobShadow } from './materials.js';
-import { outfitId } from '../data/content.js';
+import { dressFor, outfitId } from '../data/content.js';
 import { dress } from './wardrobe.js';
 import {
   Animator, PAT, SkinBuilder, TAU, box, cap, disc, ellipsoid, keyed, limb, ramp, rigMaterial, sampleClip, torus, tube,
@@ -553,6 +553,7 @@ function buildClips(b) {
  * states run / jump / slide / ride / fly / idle / dead, and `hit()` for a stumble.
  */
 export function makeRunner(def, outfit = 'kit') {
+  [def, outfit] = dressFor(def, outfitId(outfit));
   const root = new THREE.Group();
   const { mesh, builder, scale } = buildBody(def, outfitId(outfit));
   mesh.scale.setScalar(scale);

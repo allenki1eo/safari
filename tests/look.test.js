@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { OUTFITS, outfitId } from '../app/data/content.js';
+import { DERBY, OUTFITS, dressFor, outfitId, wearable } from '../app/data/content.js';
 import { save } from '../app/data/save.js';
 import { REGIONS } from '../app/data/regions.js';
 import { daylightAt } from '../app/game/world.js';
@@ -8,11 +8,21 @@ import { GROUND_LIFT } from '../app/game/materials.js';
 describe('wearable outfits', () => {
   it('offers distinct garments and falls back to the running kit', () => {
     const ids = OUTFITS.map((o) => o.id);
-    expect(ids).toEqual(['kit', 'jersey', 'kanga', 'vest', 'journey']);
+    expect(ids).toEqual(['kit', 'jersey', 'kanga', 'vest', 'journey', 'derby-green', 'derby-red']);
     expect(new Set(OUTFITS.map((o) => o.line)).size).toBe(ids.length);
     expect(outfitId('kanga')).toBe('kanga');
     expect(outfitId('no-such-skin')).toBe('kit');
     expect(save.outfit).toBe('kit');
+  });
+
+  it('keeps the derby kits for players who picked that side', () => {
+    expect(wearable(undefined).map((o) => o.id)).toEqual(['kit', 'jersey', 'kanga', 'vest', 'journey']);
+    expect(wearable('red').map((o) => o.id)).toContain('derby-red');
+    expect(wearable('red').map((o) => o.id)).not.toContain('derby-green');
+    const [kitted, cut] = dressFor({ id: 'zuri', shirt: 1, accent: 2, pants: 3 }, 'derby-green');
+    expect(cut).toBe('jersey');
+    expect(kitted.shirt).toBe(DERBY.sides.green.shirt);
+    expect(dressFor({ id: 'zuri' }, 'kanga')[1]).toBe('kanga');
   });
 });
 

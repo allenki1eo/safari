@@ -592,3 +592,35 @@ test('reminders back off: daily for three days, then every third day, then never
   const days = Array.from({ length: 40 }, (_, i) => i).filter(remindToday);
   assert.deepEqual(days, [1, 2, 3, 6, 9, 12, 15, 18, 21, 24, 27, 30]);
 });
+
+test('Derby Day: a side sticks, runs pull the rope, nothing counts outside the event', async () => {
+  await withDb(async () => {
+    const at = (iso) => setLeaderboardClock(() => new Date(iso));
+    const run = (token, name, distance, extra = {}) => post({ token, name, score: distance * 10, distance, duration: 300, ...extra });
+
+    at('2026-10-08T12:00:00Z'); // before it opens: no side, no tally
+    assert.equal((await run(T.juma, 'Juma', 900, { side: 'green' })).body.derby, null);
+
+    at('2026-10-10T12:00:00Z');
+    const juma = await run(T.juma, 'Juma', 1200, { side: 'green' });
+    assert.deepEqual(juma.body.derby, { side: 'green', added: 1200 });
+    // trying to switch sides keeps the first pick
+    assert.deepEqual((await run(T.juma, 'Juma', 800, { side: 'red' })).body.derby, { side: 'green', added: 800 });
+    await run(T.neema, 'Neema', 1500, { side: 'red' });
+    await run(T.amani, 'Amani', 5000, { side: 'red', duration: 10 }); // impossible pace adds nothing
+    assert.equal((await post({ action: 'side', token: T.kito, side: 'red' })).body.pending, true, 'no runner yet: joins with the first run');
+    assert.equal((await post({ action: 'side', token: T.neema, side: 'green' })).body.side, 'red');
+
+    const board = await handleScoreRequest('GET', undefined, { board: 'derby' });
+    assert.equal(board.body.live, true);
+    assert.deepEqual(board.body.sides.green, { distance: 2000, runs: 2, fans: 1 });
+    assert.deepEqual(board.body.sides.red, { distance: 1500, runs: 1, fans: 2 });
+
+    at('2026-10-13T09:00:00Z'); // it has closed: the score is frozen
+    assert.equal((await run(T.neema, 'Neema', 9000)).body.derby, null);
+    const final = await handleScoreRequest('GET', undefined, { board: 'derby' });
+    assert.equal(final.body.live, false);
+    assert.equal(final.body.sides.red.distance, 1500);
+    assert.equal((await post({ action: 'side', token: T.hanki, side: 'red' })).body.code, 'CLOSED');
+  });
+});
