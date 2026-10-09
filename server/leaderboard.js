@@ -250,6 +250,58 @@ export async function listTop() {
   return queryTop(db);
 }
 
+/* ------------------------------------------------------------ paged boards */
+// The full leaderboard screen reads every board a page at a time, so it has room for every runner.
+export const BOARD_PAGE = 50;
+const MAX_FROM = 100_000;
+
+/** `?from=` and `?me=` from a board request, or null when the caller wants the classic top 20. */
+export function pageQuery(query) {
+  if (query?.from == null) return null;
+  const from = Number(query.from);
+  const me = query.me == null || query.me === '' ? null : Number(query.me);
+  return {
+    from: Number.isSafeInteger(from) && from >= 0 ? Math.min(from, MAX_FROM) : 0,
+    me: Number.isSafeInteger(me) && me > 0 ? me : null,
+  };
+}
+
+/**
+ * One page of a board, how many runners it holds, and (with `me`) that runner's own row and rank,
+ * so someone in 4,000th place still sees where they stand. `inner` selects one row per runner
+ * with the columns pid, id (the tie-break: whoever got there first), name, score, distance, seeds,
+ * allies, chapter and runner.
+ */
+export async function boardPage(db, inner, args, { from, me }, map) {
+  const ranked = `SELECT *, ROW_NUMBER() OVER (ORDER BY score DESC, id ASC) AS rk FROM (${inner})`;
+  const [page, total, you] = await Promise.all([
+    db.execute({ sql: `SELECT * FROM (${inner}) ORDER BY score DESC, id ASC LIMIT ? OFFSET ?`, args: [...args, BOARD_PAGE, from] }),
+    db.execute({ sql: `SELECT COUNT(*) AS n FROM (${inner})`, args }),
+    me == null ? null : db.execute({ sql: `SELECT * FROM (${ranked}) WHERE pid = ?`, args: [...args, me] }),
+  ]);
+  const n = Number(total.rows[0]?.n ?? 0);
+  const mine = you?.rows[0];
+  return {
+    top: page.rows.map((row, i) => map(row, from + i + 1)),
+    total: n,
+    from,
+    more: from + page.rows.length < n,
+    you: mine ? map(mine, Number(mine.rk)) : null,
+  };
+}
+
+const ALL_INNER = `
+  SELECT id AS pid, id, name, best_score AS score, distance, seeds, allies, chapter, runner
+  FROM players
+  WHERE best_score > 0 AND id NOT IN (SELECT player_id FROM banned)
+`;
+
+/** The all-time board, a page at a time. */
+export async function allTimePage(opts) {
+  const db = await getClient();
+  return boardPage(db, ALL_INNER, [], opts, (row, rank) => ({ ...mapRow({ ...row, id: row.pid, best_score: row.score }, rank) }));
+}
+
 /**
  * The player a device key belongs to: the key they registered with, or one added when they
  * got their runner back on another device (accounts.js).
@@ -477,8 +529,10 @@ export async function handleScoreRequest(method, body, query, ctx = null) {
   try {
     if (method === 'GET') {
       if (query?.board === 'daily') return { status: 200, body: await dailyBoard() };
-      if (KINDS.includes(query?.board)) return { status: 200, body: await prizeBoard(query.board) };
+      const paged = pageQuery(query);
+      if (KINDS.includes(query?.board)) return { status: 200, body: await prizeBoard(query.board, paged) };
       if (query?.board === 'derby') return { status: 200, body: await derbyBoard() };
+      if (paged) return { status: 200, body: await allTimePage(paged) };
       return { status: 200, body: { top: await listTop() } };
     }
     if (method === 'POST' && body?.action === 'prizes') return await claimPrizes(body);

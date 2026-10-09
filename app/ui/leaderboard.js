@@ -46,8 +46,21 @@ async function readJson(res) {
   }
 }
 
-export async function fetchBoard(board) {
-  const query = board && board !== 'all' ? `?board=${encodeURIComponent(board)}` : '';
+/** Rows per page on the full leaderboard screen (server/leaderboard.js BOARD_PAGE). */
+export const BOARD_PAGE = 50;
+
+/**
+ * A board. With `page` ({ from, me }) it comes a page at a time with the total number of runners
+ * and, when `me` is a player id, that runner's own row wherever they stand.
+ */
+export async function fetchBoard(board, page = null) {
+  const params = new URLSearchParams();
+  if (board && board !== 'all') params.set('board', board);
+  if (page) {
+    params.set('from', String(page.from ?? 0));
+    if (page.me != null) params.set('me', String(page.me));
+  }
+  const query = String(params) ? `?${params}` : ''; // (not params.size: older Android browsers lack it)
   const res = await fetch(`/api/scores${query}`, { headers: { accept: 'application/json' } });
   const data = await readJson(res);
   if (!res.ok) throw Object.assign(new Error(data.error || 'Could not load the board'), { status: res.status });
@@ -103,7 +116,7 @@ function medal(rank) {
   return String(rank);
 }
 
-function rowHtml(row, { youId, youName, crown }) {
+export function rowHtml(row, { youId, youName, crown }) {
   // prefer the server id; fall back to the (unique) name before this device has posted
   const yours = youId != null ? row.id === youId : !!youName && row.name.toLowerCase() === youName.toLowerCase();
   const emoji = EMOJI[row.runner] || '🏃';

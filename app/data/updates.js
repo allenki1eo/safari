@@ -5,6 +5,15 @@
  */
 export const UPDATES = [
   {
+    id: '2026-10-09-board',
+    emoji: '🏆',
+    title: 'Every runner is on the board',
+    items: [
+      'The leaderboard now shows everyone, not just the top 20 — tap Show more to keep going.',
+      'Your own place stays pinned at the bottom, wherever you stand.',
+    ],
+  },
+  {
     id: '2026-10-09-names',
     emoji: '🏷️',
     title: 'Saving your name is easier',

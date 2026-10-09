@@ -9,7 +9,7 @@
  */
 import { PRIZES } from '../app/data/content.js';
 import { darDay, periodDays, periodEnd, periodOf, previousPeriod } from '../app/data/daily.js';
-import { TOKEN_RE, TOP_LIMIT, getClient, hashToken, now, playerIdForToken } from './leaderboard.js';
+import { TOKEN_RE, TOP_LIMIT, boardPage, getClient, hashToken, now, playerIdForToken } from './leaderboard.js';
 import { postInbox } from './inbox.js';
 import { fairRunSql, prizeScoreSql } from './plausible.js';
 
@@ -20,37 +20,43 @@ const LOOKBACK = { day: 7, week: 3, month: 2 };
 // (server/plausible.js), and its multiplier counts up to PRIZE_MULT_CAP.
 
 /**
- * Best run per player across the period's days, best first; ties go to whoever got there first.
+ * Best run per player across the period's days (one row each, with pid, id, name, score…).
  * One pass over the period's rows (a window ranks each player's runs), so a month of boards
  * costs about as much as a day.
  */
-async function periodTop(db, kind, period, limit = TOP_LIMIT) {
+function periodInner(kind, period) {
   const [from, to] = periodDays(kind, period);
-  const result = await db.execute({
-    sql: `SELECT player_id, id, name, pscore AS score, distance, seeds, allies, chapter, runner FROM (
+  return {
+    sql: `SELECT player_id AS pid, id, name, pscore AS score, distance, seeds, allies, chapter, runner FROM (
             SELECT d.*, ${prizeScoreSql('d', 'm')} AS pscore,
                    ROW_NUMBER() OVER (PARTITION BY d.player_id ORDER BY ${prizeScoreSql('d', 'm')} DESC, d.id ASC) AS pick
             FROM daily_scores d
             LEFT JOIN run_meta m ON m.day = d.day AND m.player_id = d.player_id
             WHERE d.day BETWEEN ? AND ? AND ${fairRunSql('d')} AND d.player_id NOT IN (SELECT player_id FROM banned)
           )
-          WHERE pick = 1
-          ORDER BY score DESC, id ASC
-          LIMIT ?`,
-    args: [from, to, limit],
-  });
-  return result.rows.map((row, i) => ({
-    id: Number(row.player_id),
-    rank: i + 1,
-    name: String(row.name),
-    score: Number(row.score),
-    distance: Number(row.distance),
-    seeds: Number(row.seeds),
-    allies: Number(row.allies),
-    chapter: Number(row.chapter),
-    runner: String(row.runner),
-    prize: PRIZES[kind][i] ?? 0,
-  }));
+          WHERE pick = 1`,
+    args: [from, to],
+  };
+}
+
+const mapPeriod = (kind) => (row, rank) => ({
+  id: Number(row.pid),
+  rank,
+  name: String(row.name),
+  score: Number(row.score),
+  distance: Number(row.distance),
+  seeds: Number(row.seeds),
+  allies: Number(row.allies),
+  chapter: Number(row.chapter),
+  runner: String(row.runner),
+  prize: PRIZES[kind][rank - 1] ?? 0,
+});
+
+/** The period's leaders, best first; ties go to whoever got there first. */
+async function periodTop(db, kind, period, limit = TOP_LIMIT) {
+  const { sql, args } = periodInner(kind, period);
+  const result = await db.execute({ sql: `${sql} ORDER BY score DESC, id ASC LIMIT ?`, args: [...args, limit] });
+  return result.rows.map((row, i) => mapPeriod(kind)(row, i + 1));
 }
 
 // Periods this server instance already knows are paid, per database client, so the common
@@ -107,16 +113,17 @@ async function champion(db, kind, period) {
 }
 
 /** The live board for this day, week or month, with what each place wins and when it closes. */
-export async function prizeBoard(kind) {
+export async function prizeBoard(kind, paged = null) {
   const db = await getClient();
   await settlePrizes(db);
   const period = periodOf(kind, darDay(now()));
+  const { sql, args } = periodInner(kind, period);
   return {
     kind,
     period,
     endsAt: periodEnd(kind, period),
     prizes: PRIZES[kind],
-    top: await periodTop(db, kind, period),
+    ...(paged ? await boardPage(db, sql, args, paged, mapPeriod(kind)) : { top: await periodTop(db, kind, period) }),
     champion: await champion(db, kind, period),
   };
 }
