@@ -837,3 +837,20 @@ input { font: inherit; }
 .whats-new li { position: relative; padding: 10px 12px 10px 38px; border-radius: 14px; background: rgba(0,0,0,0.25); font-size: 14px; animation: rise 0.45s ease both; }
 .whats-new li:nth-child(2) { animation-delay: 0.08s; } .whats-new li:nth-child(3) { animation-delay: 0.16s; }
 .whats-new li::before { content: '✓'; position: absolute; left: 12px; top: 9px; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; background: var(--leaf); color: #fff; font-size: 11px; font-weight: 900; }
+
+/* ---------------------------------------------------------------- inbox */
+.inbox-btn { position: relative; }
+.inbox-btn .count { position: absolute; top: -4px; right: -4px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 99px; display: grid; place-items: center;
+  background: var(--ember); color: #fff; font-size: 11px; font-weight: 900; box-shadow: 0 0 0 2px var(--earth); animation: pop 0.35s ease both; }
+.inbox-list { display: flex; flex-direction: column; gap: 8px; }
+.msg { position: relative; display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 12px; border-radius: 16px; background: rgba(36, 22, 12, 0.94); border: 1px solid rgba(255, 228, 170, 0.12); animation: rise 0.4s ease both; }
+.msg .ic { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; font-size: 22px; background: rgba(255,244,222,0.08); }
+.msg .tx { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.msg .tx b { font-size: 15px; line-height: 1.25; }
+.msg .tx span { font-size: 13px; color: rgba(255,244,222,0.78); line-height: 1.35; }
+.msg small { font-size: 11.5px; font-weight: 800; color: rgba(255,244,222,0.55); white-space: nowrap; }
+.msg.gold .ic { background: linear-gradient(180deg, rgba(255,224,138,0.35), rgba(255,201,64,0.15)); }
+.msg.news .ic { background: linear-gradient(180deg, rgba(60,199,181,0.35), rgba(27,153,139,0.15)); }
+.msg.new { background: linear-gradient(rgba(255,201,64,0.12), rgba(255,201,64,0.12)), rgba(36, 22, 12, 0.96); border-color: rgba(255,201,64,0.55); }
+.msg.new::after { content: ''; position: absolute; top: 12px; left: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--sun); }
+.inbox-foot { margin: 6px 4px 0; text-align: center; font-size: 12px; }

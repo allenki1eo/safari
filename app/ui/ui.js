@@ -1,6 +1,7 @@
 import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO, OUTFITS, outfitId, HUNT_WORDS, BOOSTS, DERBY, derbyLive, derbyShown, wearable } from '../data/content.js';
 import { adoptSide, fetchDerby, joinSide, km } from './derby.js';
 import { applyUpdate, markUpdateSeen, unseenUpdate, updateWaiting } from './updates.js';
+import { ago, describe, fetchInbox, markInboxRead, unreadCount } from './inbox.js';
 import { REGIONS, COUNTRIES } from '../data/regions.js';
 import {
   save, persist, ensureMissions, checkMissions, claimMissionSet, multiplier, claimDaily, hasProgress,
@@ -176,6 +177,7 @@ export class UI {
           </div>
           <div class="title-actions">
             ${install.offered ? `<button class="install-pill" data-act="install" data-click aria-label="${t('Install Kimbia! on this device')}">${ICON.install}<span>${t('Install')}</span></button>` : ''}
+            <button class="icon-btn inbox-btn" data-act="inbox" data-click aria-label="${t('Inbox')}" title="${t('Inbox')}">📬<b class="count" hidden></b></button>
             <button class="icon-btn" data-act="board" data-click aria-label="${t('Leaderboard')}" title="${t('Leaderboard')}">🏆</button>
             <button class="icon-btn" data-act="settings" data-click aria-label="${t('Settings')}">${ICON.gear}</button>
           </div>
@@ -221,12 +223,14 @@ export class UI {
       else if (act === 'install') this.installApp();
       else if (act === 'take-bet') this.takeBet(e.target.closest('button'));
       else if (act === 'derby') this.derbySheet();
+      else if (act === 'inbox') this.showInbox();
     });
     this.show(el);
     this.collectWinnings();
     this.collectPrizeMoney();
     this.checkForUpdate(el);
     this.maybeShowWhatsNew();
+    this.paintInboxCount(el);
     const ends = el.querySelector('[data-ends]');
     const tick = setInterval(() => {
       if (!ends?.isConnected) return clearInterval(tick);
@@ -1258,6 +1262,62 @@ export class UI {
       return;
     }
     this.submitRun(root, run, decision.name);
+  }
+
+  /* ------------------------------------------------------------ inbox */
+  /** The unread count on the title screen's 📬 button. */
+  async paintInboxCount(root = this.screen) {
+    try {
+      const n = unreadCount(await fetchInbox());
+      const badge = root?.querySelector('.inbox-btn .count');
+      if (!badge) return;
+      badge.hidden = n === 0;
+      badge.textContent = n > 9 ? '9+' : String(n);
+    } catch {
+      /* no badge when offline */
+    }
+  }
+
+  /** Prizes, bet results and announcements, newest first; opening it marks them read. */
+  showInbox() {
+    this.root.querySelector('.inbox-screen')?.remove();
+    const el = $(`
+      <div class="screen scrim-full inbox-screen">
+        <div class="sheet-head">
+          <button class="icon-btn" data-act="back" data-click aria-label="${t('Back')}">${ICON.back}</button>
+          <h2>${t('Inbox')}</h2>
+          <div class="chip">📬</div>
+        </div>
+        <div class="sheet-body"><p class="muted">${t('Loading…')}</p></div>
+      </div>`);
+    const body = el.querySelector('.sheet-body');
+    el.querySelector('[data-act=back]').addEventListener('click', () => {
+      el.remove();
+      this.paintInboxCount();
+    });
+    this.overlay(el);
+    (async () => {
+      try {
+        const messages = await fetchInbox(true);
+        if (!body.isConnected) return;
+        const seen = save.inboxSeen ?? 0;
+        body.innerHTML = messages.length
+          ? `<div class="inbox-list">${messages.map((m, i) => {
+            const d = describe(m);
+            return `
+              <div class="msg ${d.tone ?? ''} ${m.at > seen ? 'new' : ''}" style="animation-delay:${Math.min(i, 8) * 0.04}s">
+                <span class="ic">${d.icon}</span>
+                <span class="tx"><b>${esc(d.title)}</b>${d.body ? `<span>${esc(d.body)}</span>` : ''}</span>
+                <small>${ago(m.at)}</small>
+              </div>`;
+          }).join('')}</div>
+            <p class="muted inbox-foot">${t('Messages stay here for 30 days.')}</p>`
+          : `<div class="panel lb-empty-card"><div class="e">📭</div><p>${t('Nothing yet. Prizes you win, your bet results and news from the game will show up here.')}</p></div>`;
+        markInboxRead(messages);
+      } catch (err) {
+        if (body.isConnected) body.innerHTML = `<div class="panel lb-empty-card"><div class="e">🌫️</div><p>${esc(err.message)}</p></div>`;
+      }
+    })();
   }
 
   showBoard() {

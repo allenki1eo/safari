@@ -5,6 +5,15 @@
  */
 export const UPDATES = [
   {
+    id: '2026-10-09-inbox',
+    emoji: '📬',
+    title: 'Your inbox is here',
+    items: [
+      'Tap 📬 on the home screen to see your prizes, bet results and news.',
+      'Announcements from the game show up there too — even without notifications.',
+    ],
+  },
+  {
     id: '2026-10-09-derby',
     emoji: '⚽',
     title: 'The Kariakoo Derby Special is here!',

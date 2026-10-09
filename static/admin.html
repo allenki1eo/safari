@@ -197,15 +197,15 @@
     <!-- notifications -->
     <section data-pane="notify" hidden>
       <div class="card">
-        <h2>Send a notification to everyone <span class="pill" id="push-status">…</span></h2>
-        <p>Goes to every phone that turned notifications on. Keep it short and worth it — one every 10 minutes at most.</p>
+        <h2>Send an announcement to everyone <span class="pill" id="push-status">…</span></h2>
+        <p>Lands in every player's in-game 📬 inbox, and pops up on phones that turned notifications on. Keep it short and worth it — one every 10 minutes at most.</p>
         <form id="bc">
           <label for="bc-title">Title</label>
           <input id="bc-title" maxlength="60" placeholder="⚽ Kariakoo Derby tonight!" required />
           <label for="bc-body">Message</label>
           <textarea id="bc-body" maxlength="160" placeholder="Pick your side and pull the rope before the whistle." required></textarea>
           <div class="preview"><img src="/icons/icon-192.png" alt="" /><div><b id="pv-title">⚽ Kariakoo Derby tonight!</b><span id="pv-body">Pick your side and pull the rope before the whistle.</span></div></div>
-          <div class="row" style="margin-top:14px"><button class="btn" type="submit">Send to everyone</button><span class="muted" id="bc-out"></span></div>
+          <div class="row" style="margin-top:14px"><button class="btn" type="submit">Send announcement</button><span class="muted" id="bc-out"></span></div>
         </form>
       </div>
       <div class="card">
@@ -516,13 +516,13 @@
     $('bc-body').addEventListener('input', preview);
     $('bc').addEventListener('submit', async (e) => {
       e.preventDefault();
-      if (!confirm('Send this notification to every player who turned them on?')) return;
+      if (!confirm("Send this to every player's inbox (and as a notification to phones that turned them on)?")) return;
       const btn = e.target.querySelector('button');
       btn.disabled = true;
       $('bc-out').textContent = 'Sending…';
       try {
         const r = await admin('broadcast', { title: $('bc-title').value, body: $('bc-body').value });
-        $('bc-out').innerHTML = `<span class="ok">Sent: ${fmt(r.sent)} of ${fmt(r.devices)} phones took it.</span>`;
+        $('bc-out').innerHTML = `<span class="ok">In every inbox${r.devices ? ` · ${fmt(r.sent)} of ${fmt(r.devices)} phones notified` : ''}.</span>`;
       } catch (err) { $('bc-out').innerHTML = `<span class="err">${esc(err.message)}</span>`; }
       btn.disabled = false;
     });
