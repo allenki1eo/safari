@@ -13,6 +13,7 @@ import { ROUTE_RE } from '../app/data/daily.js';
 import { REGIONS } from '../app/data/regions.js';
 import { validTrack } from '../app/game/ghostTrack.js';
 import { RUNNER_IDS, TOKEN_RE, cleanName, fail, getClient, hashToken, now, strictInt } from './leaderboard.js';
+import { MAX_MULT, plausibleRun } from './plausible.js';
 import { notifyBetSettled, notifyBetTaken } from './push.js';
 
 export const STAKE_MAX = 5000;
@@ -48,6 +49,12 @@ export function validateChallenge(body) {
   const stake = strictInt(body.stake ?? 0, STAKE_MAX);
   if (stake == null) return { ok: false, error: `Bets go from 0 to ${STAKE_MAX} coins.` };
   const runner = RUNNER_IDS.has(body.runner) ? body.runner : 'zuri';
+  const mult = body.mult == null ? null : strictInt(body.mult, MAX_MULT);
+  if (body.mult != null && (mult == null || mult < 1)) return { ok: false, error: 'Multiplier is not valid.' };
+  const seeds = body.seeds == null ? 0 : strictInt(body.seeds, 999_999);
+  if (seeds == null) return { ok: false, error: 'Run numbers are not valid.' };
+  // the run a challenge (and any bet on it) stands on must be one that could have happened
+  if (!plausibleRun({ score, distance, duration, seeds, mult }).ok) return { ok: false, implausible: true, error: "That run doesn't add up, so it can't be a challenge." };
   return { ok: true, value: { token: body.token, name, score, distance, duration, startRegion, route: body.route, track, stake, runner } };
 }
 
@@ -83,6 +90,7 @@ function publicView(row) {
 
 async function createChallenge(body) {
   const parsed = validateChallenge(body);
+  if (parsed.implausible) return { status: 422, body: { error: parsed.error, code: 'IMPLAUSIBLE' } };
   if (!parsed.ok) return bad(parsed.error);
   const v = parsed.value;
   const db = await getClient();
@@ -137,6 +145,16 @@ async function finishChallenge(body) {
   if (!ID_RE.test(String(body.id || ''))) return bad('Challenge id is not valid.');
   const score = strictInt(body.score, 99_999_999);
   if (score == null) return bad('Score must be a non-negative integer.');
+  const distance = strictInt(body.distance ?? 0, 9_999_999);
+  const duration = strictInt(body.duration ?? 0, 100_000);
+  const seeds = strictInt(body.seeds ?? 0, 999_999);
+  const mult = body.mult == null ? null : strictInt(body.mult, MAX_MULT);
+  if (distance == null || duration == null || seeds == null || (body.mult != null && !(mult >= 1))) return bad('Run numbers are not valid.');
+  // a run that couldn't have happened settles nothing and pays nothing. The bet stays open for
+  // a real run; left unfinished it lapses like any abandoned bet (settleStale).
+  if (!plausibleRun({ score, distance, duration, seeds, mult }).ok) {
+    return { status: 422, body: { error: "That run doesn't add up, so it can't settle the bet.", code: 'IMPLAUSIBLE' } };
+  }
   const db = await getClient();
   const th = hashToken(body.token);
   const upd = await db.execute({

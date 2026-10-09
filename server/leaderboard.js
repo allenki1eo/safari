@@ -12,7 +12,7 @@ import { REGIONS } from '../app/data/regions.js';
 import { loadLocalEnv } from './env.js';
 import { KINDS, claimPrizes, prizeBoard } from './prizes.js';
 import { cleanSide, derbyBoard, derbyRun, pickSide } from './derby.js';
-import { MAX_MULT, fairRunSql, plausibleRun } from './plausible.js';
+import { MAX_MULT, fairRunSql, plausibleRun, prizeScore, prizeScoreSql } from './plausible.js';
 
 loadLocalEnv();
 
@@ -337,15 +337,21 @@ async function recordDaily(db, playerId, v) {
     });
   }
   const rankId = storedScore === v.score ? Number(stored.id) : 0;
-  const rank = await dailyRank(db, day, v.score, rankId);
+  // ranked the way the day prize board ranks: fair runs only, multiplier counted up to the cap
+  const rank = await dailyRank(db, day, prizeScore(v.score, v.mult), rankId);
   return { day, rank, score: v.score, distance: v.distance };
 }
 
-async function dailyRank(db, day, score, id) {
+async function dailyRank(db, day, pscore, id) {
   const result = await db.execute({
-    sql: `SELECT COUNT(*) AS n FROM daily_scores
-          WHERE day = ? AND (score > ? OR (score = ? AND id < ?))`,
-    args: [day, score, score, id],
+    sql: `SELECT COUNT(*) AS n FROM (
+            SELECT d.id, ${prizeScoreSql('d', 'm')} AS pscore
+            FROM daily_scores d
+            LEFT JOIN run_meta m ON m.day = d.day AND m.player_id = d.player_id
+            WHERE d.day = ? AND ${fairRunSql('d')} AND d.player_id NOT IN (SELECT player_id FROM banned)
+          )
+          WHERE id != ? AND (pscore > ? OR (pscore = ? AND id < ?))`,
+    args: [day, id, pscore, pscore, id],
   });
   return Number(result.rows[0].n) + 1;
 }

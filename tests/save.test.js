@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
-  save, ensureMissions, checkMissions, claimMissionSet, multiplier, claimDaily,
+  save, ensureMissions, checkMissions, claimMissionSet, multiplier, claimDaily, dailyDue,
   collectMission, skipMission, skipCost, uncollected, missionSetReady,
 } from '../app/data/save.js';
 
@@ -10,6 +10,7 @@ describe('progress & missions', () => {
     save.missionLevel = 0;
     save.seeds = 0;
     save.lastDaily = '';
+    save.dailyDay = '';
     save.streak = 0;
   });
 
@@ -74,6 +75,60 @@ describe('progress & missions', () => {
     const first = claimDaily();
     expect(first).toMatchObject({ streak: 1, reward: 50 });
     expect(claimDaily()).toBeNull();
+  });
+
+  const at = (iso) => new Date(iso);
+
+  it('resets the daily reward at midnight in Dar es Salaam, not UTC', () => {
+    // 20:30 UTC = 23:30 in Dar on 9 Oct
+    expect(claimDaily(at('2026-10-09T20:30:00Z'))).toMatchObject({ streak: 1 });
+    expect(save.dailyDay).toBe('2026-10-09');
+    expect(dailyDue(at('2026-10-09T20:59:00Z'))).toBe(false);
+    // 21:00 UTC = midnight in Dar: a new day, the streak carries on
+    expect(dailyDue(at('2026-10-09T21:00:00Z'))).toBe(true);
+    expect(claimDaily(at('2026-10-09T21:00:00Z'))).toMatchObject({ streak: 2, reward: 100 });
+    expect(claimDaily(at('2026-10-10T20:59:00Z'))).toBeNull();
+    // missing a whole Dar day starts the streak over
+    expect(claimDaily(at('2026-10-11T21:30:00Z'))).toMatchObject({ streak: 1 });
+  });
+
+  it('builds to the day-7 bonus on Dar days', () => {
+    for (let d = 1; d <= 7; d++) {
+      const r = claimDaily(at(`2026-10-${String(d).padStart(2, '0')}T22:00:00Z`)); // 01:00 in Dar
+      expect(r.streak).toBe(d);
+      if (d === 7) expect(r.reward).toBe(850);
+    }
+  });
+
+  describe('saves from the UTC-midnight days', () => {
+    beforeEach(() => {
+      save.lastDaily = '2026-10-09';
+      save.streak = 3;
+    });
+
+    it('does not pay twice on the switchover before the UTC day ends', () => {
+      // already 00:30 on the 10th in Dar, but still the 9th in UTC: the old claim covers it
+      expect(dailyDue(at('2026-10-09T21:30:00Z'))).toBe(false);
+      expect(claimDaily(at('2026-10-09T21:30:00Z'))).toBeNull();
+      expect(claimDaily(at('2026-10-09T10:00:00Z'))).toBeNull();
+    });
+
+    it('pays the next Dar day and keeps the streak', () => {
+      const r = claimDaily(at('2026-10-10T06:00:00Z'));
+      expect(r).toMatchObject({ streak: 4, reward: 200 });
+      expect(save.dailyDay).toBe('2026-10-10');
+      expect(claimDaily(at('2026-10-10T20:00:00Z'))).toBeNull();
+      expect(claimDaily(at('2026-10-10T21:05:00Z'))).toMatchObject({ streak: 5 });
+    });
+
+    it('keeps the streak for a claim made just after midnight in Dar', () => {
+      // a 22:00 UTC claim on the 9th was already the 10th in Dar; coming back on the 11th is consecutive
+      expect(claimDaily(at('2026-10-11T08:00:00Z'))).toMatchObject({ streak: 4 });
+    });
+
+    it('starts over after a real gap', () => {
+      expect(claimDaily(at('2026-10-12T08:00:00Z'))).toMatchObject({ streak: 1 });
+    });
   });
 });
 
