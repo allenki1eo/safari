@@ -13,12 +13,12 @@ import {
 import { World, Particles, LANE_W } from './world.js';
 import { audio } from './audio.js';
 import { t } from '../i18n.js';
-import { makeChunk, KINDS, TRUCK_LEN, JUMP_V, GRAVITY } from './patterns.js';
+import { makeChunk, tutorialChunk, TUTORIAL_GAP, TUTORIAL_START, KINDS, TRUCK_LEN, JUMP_V, GRAVITY } from './patterns.js';
 import { RUNNERS, ALLIES, ALLY_IDS, TUTORIAL, SHOUTS, outfitId, HUNT_WORDS, HUNT_PER_LETTER, HUNT_COOLDOWN, BOOSTS, BOOST_IDS } from '../data/content.js';
 import { REGIONS, regionIndexAt, regionAt } from '../data/regions.js';
 import { save, persist, multiplier } from '../data/save.js';
 import {
-  chunkPlan, darDay, newRoute, ghostDistance, huntWord, lionClip, nearMissSpec, rngAt, waterClear, wildebeestFill,
+  chunkPlan, cruiseSpeed, darDay, newRoute, ghostDistance, huntWord, lionClip, nearMissSpec, rngAt, waterClear, wildebeestFill,
 } from '../data/daily.js';
 
 const LANES = [-LANE_W, 0, LANE_W];
@@ -257,7 +257,7 @@ export class Game {
     this.chaseT = 0;
     this.chaseDist = 14;
     this.stumbleT = 0;
-    this.nextChunk = 45;
+    this.nextChunk = TUTORIAL_START;
     this.chapter = -1;
     this.region = -1;
     // every run deals a fresh layout of obstacles, prizes and herds; a challenge replays the
@@ -267,6 +267,10 @@ export class Game {
     this.recorder = new GhostRecorder();
     this.sinking = false;
     this.tutorialIdx = 0;
+    // first runs open with the scripted lesson; the day's route picks up right after it
+    // (a friend's challenge keeps its exact route, so it skips the lesson)
+    this.tutorialRun = !save.tutorialDone && this.linkedRoute == null;
+    this.tutorialChunkIdx = 0;
     this.cardMoment = null;
     this.freeze = 0;
     this.ghostPassed = false;
@@ -318,6 +322,8 @@ export class Game {
     this.world.setDay(this.day);
     this.world.reset(this.J);
     this.state = 'menu';
+    // the outfit preview cuts straight to its framing, so a slow phone never shows a half-way shot
+    if (mode === 'select' && this.camMode !== 'select') this.camSnap = true;
     this.camMode = mode;
     audio.setIntensity(0);
     audio.muffle(false);
@@ -482,7 +488,7 @@ export class Game {
     const prevD = this.D;
 
     // ---- speed & distance
-    const base = 15 + 21 * (1 - Math.exp(-this.D / 4200));
+    const base = cruiseSpeed(this.D);
     const target = base * (pw.duma ? 1.75 : 1) * (pw.tai ? 1.25 : 1) * (this.boosts.slow ? 0.7 : 1);
     this.speed = damp(this.speed, target, 3, dt);
     const step = this.speed * dt;
@@ -1014,6 +1020,7 @@ export class Game {
       region: REGIONS[this.region]?.id ?? 'serengeti',
       lap: this.lap,
       duration: Math.max(0, Math.round(this.runTime)),
+      mult: multiplier(), // the server's fair-play checks size the score ceiling by it
       revives: this.revives,
       day: this.today,
       route: this.day,
@@ -1034,6 +1041,16 @@ export class Game {
       this.emit('hunt', { word: this.huntWord().word, got: save.hunt.got, delay: 0 });
     }
     while (this.nextChunk < this.D + 170) {
+      if (this.tutorialRun) {
+        const lesson = tutorialChunk(this.tutorialChunkIdx, this.nextChunk);
+        if (lesson) {
+          this.applyChunk(lesson.ops);
+          this.nextChunk += lesson.len + TUTORIAL_GAP;
+          this.tutorialChunkIdx++;
+          continue;
+        }
+        this.tutorialRun = false;
+      }
       const plan = chunkPlan(this.day, this.nextChunk);
       const chunk = makeChunk({
         z: plan.z,
@@ -1598,12 +1615,19 @@ export class Game {
     if (this.camMode === 'menu') {
       const s = Math.sin(this.time * 0.15);
       tp.set(1.35 + s * 0.25, 1.6, 4.3);
-      tl.set(-1.0, 1.75, -8);
+      // on a tall phone the menu cards fill the lower half: tilt down so the runner stands above them
+      tl.set(-1.0, cam.aspect < 0.8 ? -1.1 : 1.75, -8);
       k = 2;
     } else if (this.camMode === 'select') {
-      // the outfit card sits on the bottom of the phone, so frame the face and chest above it
-      tp.set(0.2, 1.15, -2.55);
-      tl.set(0, 1.48, 0);
+      // the outfit card sits on the bottom of the phone: on a tall screen frame the whole runner
+      // in the space above it, so the outfit you are choosing is fully in view
+      if (cam.aspect < 0.8) {
+        tp.set(0.25, 1.1, -2.9);
+        tl.set(0, 0.62, 0);
+      } else {
+        tp.set(0.2, 1.15, -2.55);
+        tl.set(0, 1.48, 0);
+      }
       k = 4;
     } else {
       const fly = this.powers.tai ? Math.min(1, p.y / 7.5) : 0;
@@ -1622,6 +1646,11 @@ export class Game {
         tl.set(p.x, 0.5 + p.y, 1.6);
         k = 2.4;
       }
+    }
+    if (this.camSnap) {
+      this.camSnap = false;
+      this.camPos.copy(tp);
+      this.camLook.copy(tl);
     }
     this.camPos.x = damp(this.camPos.x, tp.x, k * 1.2, dt);
     this.camPos.y = damp(this.camPos.y, tp.y, k * 0.6, dt);

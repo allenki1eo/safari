@@ -12,11 +12,12 @@ import { REGIONS } from '../app/data/regions.js';
 import { loadLocalEnv } from './env.js';
 import { KINDS, claimPrizes, prizeBoard } from './prizes.js';
 import { cleanSide, derbyBoard, derbyRun, pickSide } from './derby.js';
+import { MAX_MULT, fairRunSql, plausibleRun } from './plausible.js';
 
 loadLocalEnv();
 
 // Applied in order on first use; every statement is idempotent.
-const SCHEMA_SQL = ['001_scores.sql', '002_players.sql', '003_daily.sql', '004_challenges.sql', '005_transfers.sql', '006_accounts.sql', '007_prizes.sql', '008_push.sql', '009_derby.sql', '010_banned.sql', '011_inbox.sql']
+const SCHEMA_SQL = ['001_scores.sql', '002_players.sql', '003_daily.sql', '004_challenges.sql', '005_transfers.sql', '006_accounts.sql', '007_prizes.sql', '008_push.sql', '009_derby.sql', '010_banned.sql', '011_inbox.sql', '012_fair_play.sql']
   .map((file) => readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8'))
   .join('\n');
 export const TOKEN_RE = /^[a-f0-9]{64}$/;
@@ -156,9 +157,12 @@ export function validateSubmission(body) {
     }
     runner = body.runner;
   }
+  // the permanent multiplier the run was made with (newer clients send it; older ones don't)
+  const mult = body.mult == null ? null : strictInt(body.mult, MAX_MULT);
+  if (body.mult != null && (mult == null || mult < 1)) return { ok: false, error: 'Multiplier is not valid.' };
   // Derby Day: the side this runner is on (ignored outside the event or if not a real side)
   const side = cleanSide(body.side);
-  return { ok: true, value: { token: body.token, name, score, distance, seeds, allies, chapter, runner, duration, side } };
+  return { ok: true, value: { token: body.token, name, score, distance, seeds, allies, chapter, runner, duration, mult, side } };
 }
 
 function mapRow(row, rank) {
@@ -228,12 +232,13 @@ export async function playerIdForToken(db, th) {
  * Finds (or creates) the player behind `token`, makes sure they own `name`,
  * then keeps the run only if it beats their best.
  */
-export async function submitScore(body) {
+export async function submitScore(body, ctx = null) {
   const parsed = validateSubmission(body);
   if (!parsed.ok) return { status: 400, body: { error: parsed.error } };
   const v = parsed.value;
   const db = await getClient();
   const th = hashToken(v.token);
+  if (ctx && !(await withinRateLimit(db, th, ctx.ip))) return slowDown();
   const key = nameKey(v.name);
 
   const pid = await playerIdForToken(db, th);
@@ -265,6 +270,12 @@ export async function submitScore(body) {
   player = id0 == null ? null : (await db.execute({ sql: `SELECT ${COLS} FROM players WHERE id = ?`, args: [id0] })).rows[0];
   if (!player) return taken(); // lost a race for the name
   const id = Number(player.id);
+
+  // a run that could not have happened is turned away (the name above is still theirs)
+  const real = plausibleRun(v);
+  if (!real.ok) {
+    return { status: 422, body: { error: "That run doesn't add up, so it wasn't saved.", code: 'IMPLAUSIBLE', reason: real.reason } };
+  }
 
   let improved = false;
   if (v.score > 0) {
@@ -318,6 +329,13 @@ async function recordDaily(db, playerId, v) {
     args: [day, playerId],
   })).rows[0];
   const storedScore = Number(stored.score);
+  if (storedScore === v.score && v.mult != null) {
+    await db.execute({
+      sql: `INSERT INTO run_meta (day, player_id, mult) VALUES (?, ?, ?)
+            ON CONFLICT (day, player_id) DO UPDATE SET mult = excluded.mult`,
+      args: [day, playerId, v.mult],
+    });
+  }
   const rankId = storedScore === v.score ? Number(stored.id) : 0;
   const rank = await dailyRank(db, day, v.score, rankId);
   return { day, rank, score: v.score, distance: v.distance };
@@ -348,9 +366,9 @@ function mapDaily(row, rank) {
 
 const DAILY_TOP_SQL = `
   SELECT id, name, score, distance, duration, seeds, allies, chapter, runner
-  FROM daily_scores
-  WHERE day = ? AND score > 0 AND player_id NOT IN (SELECT player_id FROM banned)
-  ORDER BY score DESC, id ASC
+  FROM daily_scores d
+  WHERE d.day = ? AND ${fairRunSql('d')} AND d.player_id NOT IN (SELECT player_id FROM banned)
+  ORDER BY d.score DESC, d.id ASC
   LIMIT ?
 `;
 
@@ -386,7 +404,37 @@ async function dailyBoard() {
   return { day, top: await queryDaily(db, day), yesterday: await yesterdayBest(db, day) };
 }
 
-export async function handleScoreRequest(method, body, query) {
+/* ------------------------------------------------------------- rate limits */
+// a device posts one run per game; a few a minute is plenty. A network (many phones behind one
+// mobile carrier address) gets a much bigger allowance.
+export const RATE = { windowMs: 60_000, perDevice: 8, perNetwork: 120 };
+
+const slowDown = () => ({ status: 429, body: { error: 'Too many runs at once. Wait a moment and try again.', code: 'RATE_LIMITED' } });
+
+async function bump(db, key, limit, t) {
+  const row = (await db.execute({
+    sql: `INSERT INTO rate_limits (key, window_start, n) VALUES (?, ?, 1)
+          ON CONFLICT (key) DO UPDATE SET
+            n = CASE WHEN ? - rate_limits.window_start >= ? THEN 1 ELSE rate_limits.n + 1 END,
+            window_start = CASE WHEN ? - rate_limits.window_start >= ? THEN ? ELSE rate_limits.window_start END
+          RETURNING n`,
+    args: [key, t, t, RATE.windowMs, t, RATE.windowMs, t],
+  })).rows[0];
+  return Number(row.n) <= limit;
+}
+
+/** Counts this post against its device and its network; false once either is over the limit. */
+export async function withinRateLimit(db, tokenHash, ip) {
+  const t = now().getTime();
+  if (Math.random() < 0.02) {
+    await db.execute({ sql: 'DELETE FROM rate_limits WHERE window_start < ?', args: [t - 24 * 60 * 60 * 1000] });
+  }
+  const device = await bump(db, `d:${tokenHash}`, RATE.perDevice, t);
+  const network = ip ? await bump(db, `n:${hashToken(`ip:${ip}`)}`, RATE.perNetwork, t) : true;
+  return device && network;
+}
+
+export async function handleScoreRequest(method, body, query, ctx = null) {
   try {
     if (method === 'GET') {
       if (query?.board === 'daily') return { status: 200, body: await dailyBoard() };
@@ -396,7 +444,7 @@ export async function handleScoreRequest(method, body, query) {
     }
     if (method === 'POST' && body?.action === 'prizes') return await claimPrizes(body);
     if (method === 'POST' && body?.action === 'side') return await pickSide(body);
-    if (method === 'POST') return await submitScore(body);
+    if (method === 'POST') return await submitScore(body, ctx);
     return { status: 405, body: { error: 'Method not allowed.' } };
   } catch (err) {
     return fail(err);

@@ -217,6 +217,11 @@ export function claimMissionSet() {
 export const multiplier = () => 1 + save.missionLevel;
 
 /* ------------------------------------------------------------------- daily */
+/** True when today's login reward hasn't been collected yet. */
+export function dailyDue() {
+  return save.lastDaily !== new Date().toISOString().slice(0, 10);
+}
+
 export function claimDaily() {
   const today = new Date().toISOString().slice(0, 10);
   if (save.lastDaily === today) return null;

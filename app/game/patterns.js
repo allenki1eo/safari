@@ -70,10 +70,14 @@ export function makeChunk({ z, D, speed, region, wantTotem = false, wantBox = fa
   /** lead distance so a charger moving at v arrives around the chunk position */
   const lead = (v) => (z - D) * (v / Math.max(speed, 1));
 
+  // late-run pressure: past ~2 km the easy single blocks thin out and the two-step patterns
+  // (switchback, gauntlet) take their place, ramping in over the next few kilometres
+  const late = Math.min(1, Math.max(0, D - 2000) / 4000);
   const pats = [
-    ['single', 3], ['double', D > 300 ? 3 : 1], ['logs', 2], ['gates', 2], ['mix', D > 400 ? 3 : 1],
+    ['single', 3 - 1.5 * late], ['double', D > 300 ? 3 + 0.8 * late : 1], ['logs', 2], ['gates', 2], ['mix', D > 400 ? 3 + 0.8 * late : 1],
+    ['switchback', D > 1500 ? 0.8 + 1.4 * late : 0], ['gauntlet', D > 2500 ? 0.6 + 1.2 * late : 0],
     ['trucks', region.trucks ? (D > 250 ? 3.5 : 0.5) : 0], ['oncoming', region.trucks && D > 900 ? 2 : 0],
-    ['snake', 1.2], ['zigzag', D > 500 ? 2 : 0], ['logrun', D > 350 ? 1.4 : 0],
+    ['snake', 1.2], ['zigzag', D > 500 ? 2 + 0.8 * late : 0], ['logrun', D > 350 ? 1.4 : 0],
     // Daily route moments: a river you have to jump, a lion that can clip you,
     // and a wildebeest close enough to fill the screen. Same weights everywhere,
     // so the day's seed — not the region — decides when they show up.
@@ -314,6 +318,27 @@ export function makeChunk({ z, D, speed, region, wantTotem = false, wantBox = fa
       }
       return { len: 30, ops, pat };
     }
+    case 'switchback': {
+      // two walls back to back with different gaps: change lanes, then change again
+      const first = randi(3);
+      const second = first === 1 ? pick([0, 2]) : 1;
+      const gap = Math.max(14, speed * 0.55);
+      L.filter((l) => l !== first).forEach((l) => obs(block(), l, z + 2));
+      L.filter((l) => l !== second).forEach((l) => obs(block(), l, z + 2 + gap));
+      line(first, z - 6, z + 4);
+      line(second, z + 6, z + 4 + gap);
+      prize(second, z + gap + 8);
+      return { len: gap + 6, ops, pat };
+    }
+    case 'gauntlet': {
+      // a row of logs, then a row of branches: jump, land, slide
+      const gap = Math.max(18, speed * 1.0);
+      L.forEach((l) => obs('log', l, z + 2));
+      L.forEach((l) => obs('gate', l, z + 2 + gap));
+      arc(randi(3), z + 2);
+      line(randi(3), z + gap - 2, z + gap + 6, 1.5, 0.6);
+      return { len: gap + 4, ops, pat };
+    }
     case 'logrun': {
       const l = randi(3);
       for (let k = 0; k < 3; k++) {
@@ -325,6 +350,23 @@ export function makeChunk({ z, D, speed, region, wantTotem = false, wantBox = fa
     }
   }
   return { len: 8, ops, pat };
+}
+
+/** Where the scripted opening starts on a fresh run, and the breather between its chunks. */
+export const TUTORIAL_START = 45;
+export const TUTORIAL_GAP = 18;
+
+/** The whole scripted opening laid out from the start of a run: each chunk's z, and where the route resumes. */
+export function tutorialPlan(start = TUTORIAL_START) {
+  const chunks = [];
+  let z = start;
+  for (let i = 0; ; i++) {
+    const c = tutorialChunk(i, z);
+    if (!c) break;
+    chunks.push({ i, z, ...c });
+    z += c.len + TUTORIAL_GAP;
+  }
+  return { chunks, end: z };
 }
 
 /** Gentle scripted opening for first-time players. Returns null when finished. */

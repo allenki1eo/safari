@@ -24,11 +24,17 @@ export default async function handler(req, res) {
     }
   }
   const query = queryOf(req);
-  const result = await handleScoreRequest(req.method, req.body, query);
+  const result = await handleScoreRequest(req.method, req.body, query, { ip: clientIp(req) });
   // Boards are the same for everyone: Vercel's CDN answers repeat reads for a few seconds, so a
   // rush of players opening the leaderboard costs one database read, not one each.
   if (req.method === 'GET' && result.status === 200) res.setHeader('Vercel-CDN-Cache-Control', 'max-age=5');
   send(res, result.status, result.body);
+}
+
+/** The caller's address as Vercel's edge saw it (first hop of x-forwarded-for). */
+function clientIp(req) {
+  const fwd = String(req.headers?.['x-forwarded-for'] ?? '').split(',')[0].trim();
+  return fwd || String(req.headers?.['x-real-ip'] ?? '') || req.socket?.remoteAddress || '';
 }
 
 function queryOf(req) {
