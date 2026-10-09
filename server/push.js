@@ -140,6 +140,12 @@ async function tell(db, subs, build) {
   return sent;
 }
 
+/** Admin: one message to every browser that has notifications on. Returns how many took it. */
+export async function broadcast(db, build) {
+  const subs = (await db.execute('SELECT * FROM push_subs')).rows;
+  return { devices: subs.length, sent: await tell(db, subs, build) };
+}
+
 /* ------------------------------------------------------- challenge news */
 /** A friend took your bet. Called from the challenge handlers; quiet on any failure. */
 export async function notifyBetTaken(db, hostHash, { name, stake, id }) {

@@ -78,6 +78,9 @@
     "api/cron/evening.js": {
       "includeFiles": "migrations/**",
       "maxDuration": 60
+    },
+    "api/admin.js": {
+      "includeFiles": "migrations/**"
     }
   },
   "crons": [

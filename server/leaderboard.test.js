@@ -624,3 +624,62 @@ test('Derby Day: a side sticks, runs pull the rope, nothing counts outside the e
     assert.equal((await post({ action: 'side', token: T.hanki, side: 'red' })).body.code, 'CLOSED');
   });
 });
+
+test('admin dashboard: key required, stats add up, a ban clears the boards, broadcasts are spaced', async () => {
+  const { handleAdminRequest } = await import('./admin.js');
+  const push = await import('./push.js');
+  const prev = { key: process.env.KIMBIA_ADMIN_KEY, pub: process.env.VAPID_PUBLIC_KEY, priv: process.env.VAPID_PRIVATE_KEY };
+  process.env.KIMBIA_ADMIN_KEY = 'admin-test-key';
+  process.env.VAPID_PUBLIC_KEY = 'test-public';
+  process.env.VAPID_PRIVATE_KEY = 'test-private';
+  const sent = [];
+  push.setPushSender(async (sub, payload) => sent.push(payload));
+  const admin = (body) => handleAdminRequest('POST', { adminKey: 'admin-test-key', ...body });
+  try {
+    await withDb(async () => {
+      setLeaderboardClock(() => new Date('2026-10-10T09:00:00Z'));
+      assert.equal((await handleAdminRequest('POST', { action: 'overview', adminKey: 'nope' })).status, 403);
+      await post({ token: T.juma, name: 'Juma', score: 9000, distance: 900, duration: 120, side: 'green' });
+      await post({ token: T.neema, name: 'Neema', score: 4000, distance: 400, duration: 120 });
+      await post({ token: T.thief, name: 'Thief', score: 90000, distance: 2000, duration: 120, side: 'red' });
+      await push.handlePushRequest('POST', { action: 'subscribe', token: T.juma, subscription: { endpoint: 'https://push.example/j', keys: { p256dh: 'B'.repeat(87), auth: 'a'.repeat(22) } } });
+
+      const o = (await admin({ action: 'overview' })).body;
+      assert.equal(o.players, 3);
+      assert.equal(o.activeToday, 3);
+      assert.equal(o.runsAll, 3); // runs carry the database's own clock, so check the total, not today's
+      assert.equal(o.notify, 1);
+      assert.equal(o.series.length, 14);
+      assert.equal(o.series.at(-1).players, 3);
+      assert.equal(o.derby.sides.red.distance, 2000);
+
+      const found = (await admin({ action: 'players', q: 'thi' })).body.players;
+      assert.deepEqual(found.map((p) => p.name), ['Thief']);
+      const thief = found[0];
+      assert.equal(thief.side, 'red');
+
+      // ban: off the all-time and day boards; later runs don't pull the derby rope
+      await admin({ action: 'ban', id: thief.id, banned: true, reason: 'impossible score' });
+      const top = (await handleScoreRequest('GET', undefined, {})).body.top.map((r) => r.name);
+      assert.ok(!top.includes('Thief'));
+      const day = (await handleScoreRequest('GET', undefined, { board: 'day' })).body.top.map((r) => r.name);
+      assert.deepEqual(day, ['Juma', 'Neema']);
+      await post({ token: T.thief, name: 'Thief', score: 95000, distance: 2500, duration: 120 });
+      assert.equal((await handleScoreRequest('GET', undefined, { board: 'derby' })).body.sides.red.distance, 2000);
+      assert.equal((await admin({ action: 'player', id: thief.id })).body.player.banned, 'impossible score');
+      await admin({ action: 'ban', id: thief.id, banned: false });
+      assert.ok((await handleScoreRequest('GET', undefined, {})).body.top.map((r) => r.name).includes('Thief'));
+
+      // broadcast reaches subscribers, then waits 10 minutes
+      const b = await admin({ action: 'broadcast', title: 'Derby tonight!', body: 'Pick your side and run.' });
+      assert.deepEqual(b.body, { devices: 1, sent: 1 });
+      assert.equal(sent[0].title, 'Derby tonight!');
+      assert.equal((await admin({ action: 'broadcast', title: 'Again', body: 'Too soon' })).status, 429);
+    });
+  } finally {
+    push.setPushSender(null);
+    for (const [k, v] of [['KIMBIA_ADMIN_KEY', prev.key], ['VAPID_PUBLIC_KEY', prev.pub], ['VAPID_PRIVATE_KEY', prev.priv]]) {
+      if (v == null) delete process.env[k]; else process.env[k] = v;
+    }
+  }
+});
