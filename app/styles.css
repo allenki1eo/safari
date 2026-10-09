@@ -931,3 +931,20 @@ input { font: inherit; }
   .title .prize-ribbon { min-height: 44px; }
   .over .card { max-height: calc(100dvh - 16px - var(--safe-t) - var(--safe-b)); }
 }
+
+/* ------------------------------------------------------------ paged boards */
+.lb-count { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 2px 4px -2px; font-size: 13px; font-weight: 800; color: rgba(255,244,222,0.72); }
+.lb-count b { color: var(--cream); }
+.lb-count .me { padding: 3px 10px; border-radius: 99px; background: rgba(255,201,64,0.16); border: 1px solid rgba(255,201,64,0.5); color: var(--sun-2); }
+.lb-count .me b { color: var(--sun-2); }
+.lb-load { width: 100%; min-height: 50px; font-size: 16px; }
+.lb-load[hidden] { display: none; }
+.lb-load:disabled { opacity: 0.7; }
+/* your own row, pinned to the bottom of the board until it scrolls into the list */
+.lb-you {
+  position: sticky; bottom: -8px; z-index: 2; margin: 0 -4px -8px; padding: 18px 4px calc(10px + var(--safe-b));
+  background: linear-gradient(to top, rgb(43,26,14) 72%, rgba(43,26,14,0));
+}
+.lb-you[hidden] { display: none; }
+.lb-you .k { margin: 0 8px 5px; font-size: 11px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sun-2); }
+.lb-you .lb-row { box-shadow: 0 -6px 18px rgba(0,0,0,0.35); }

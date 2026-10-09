@@ -871,3 +871,34 @@ test('fair play: the "Today #n" rank on the share card matches the day board', a
     assert.equal(day2.body.top.findIndex((r) => r.name === 'Kito') + 1, 3);
   });
 });
+
+test('boards page past the top 20, count every runner and find you wherever you are', async () => {
+  await withDb(async () => {
+    setLeaderboardClock(() => new Date('2026-10-09T09:00:00Z'));
+    const tokens = Array.from({ length: 120 }, (_, i) => tok(1000 + i));
+    for (const [i, token] of tokens.entries()) {
+      const res = await post({ token, name: `Runner${i}`, score: 1000 + i * 10, distance: 200, duration: 60 });
+      assert.equal(res.status, 200);
+    }
+    const lowest = (await post({ token: tokens[0], name: 'Runner0', score: 1, distance: 1, duration: 1 })).body.entry.id;
+    for (const board of ['all', 'day', 'week', 'month']) {
+      const get = (q) => handleScoreRequest('GET', undefined, board === 'all' ? q : { board, ...q }).then((r) => r.body);
+      // old clients still get the top 20
+      assert.equal((await get({})).top.length, 20, board);
+      const p1 = await get({ from: '0', me: String(lowest) });
+      assert.equal(p1.total, 120, board);
+      assert.equal(p1.top.length, 50);
+      assert.equal(p1.more, true);
+      assert.deepEqual([p1.top[0].rank, p1.top[0].name], [1, 'Runner119']);
+      assert.deepEqual([p1.you.rank, p1.you.name], [120, 'Runner0'], `${board}: the last runner sees their own place`);
+      const p3 = await get({ from: '100' });
+      assert.equal(p3.top.length, 20);
+      assert.equal(p3.more, false);
+      assert.deepEqual([p3.top[0].rank, p3.top.at(-1).rank, p3.top.at(-1).name], [101, 120, 'Runner0']);
+      assert.equal(p3.you, null);
+      if (board !== 'all') assert.deepEqual([p1.top[0].prize > 0, p3.top[0].prize], [true, 0]);
+      // nonsense paging falls back to the start
+      assert.equal((await get({ from: '-5', me: 'x' })).from, 0);
+    }
+  });
+});

@@ -10,7 +10,7 @@ import {
 } from '../data/save.js';
 import { audio } from '../game/audio.js';
 import { challengeUrl, makeCard, shareText } from './share.js';
-import { fetchBoard, leaveDecision, postScore, renderRows, runnerName, scoreSavePlan } from './leaderboard.js';
+import { BOARD_PAGE, fetchBoard, leaveDecision, postScore, renderRows, rowHtml, runnerName, scoreSavePlan } from './leaderboard.js';
 import { darDay, ghostFrom, huntWord, parseShareLink, routeForLink } from '../data/daily.js';
 import { disableNotifications, enableNotifications, notifyState, pushReady, pushReadyNow } from './notify.js';
 import { MEDAL, PRIZES, closesAt, collectPrizes, ordinal, periodName, timeLeft } from './prizes.js';
@@ -1387,7 +1387,7 @@ export class UI {
     body.innerHTML = `<p class="muted">${daily ? t("Loading today's route…") : t('Loading the savanna board…')}</p>`;
     try {
       if (this._submitTask) await this._submitTask;
-      const data = await fetchBoard(daily ? 'daily' : undefined);
+      const data = await fetchBoard(daily ? 'daily' : undefined, daily ? null : this.boardPageAt(0));
       if (!body.isConnected) return;
       const youId = save.playerId ?? null;
       const top = data.top || [];
@@ -1397,7 +1397,9 @@ export class UI {
       const empty = daily
         ? `<div class="panel lb-empty-card"><div class="e">🌅</div><p>${t("No scores on today's route yet. Finish a run and it lands here.")}</p></div>`
         : `<div class="panel lb-empty-card"><div class="e">🌱</div><p>${t('No scores yet. Finish a run and put your name on the board.')}</p></div>`;
-      body.innerHTML = top.length ? `${intro}${renderRows(top, { youId, youName: '' })}` : empty;
+      if (!top.length) body.innerHTML = empty;
+      else if (daily) body.innerHTML = `${intro}${renderRows(top, { youId, youName: '' })}`;
+      else this.pagedRows(body, intro, '', data, board, { youId, youName: '' });
     } catch (err) {
       if (!body.isConnected) return;
       body.innerHTML = `
@@ -1415,14 +1417,14 @@ export class UI {
     body.innerHTML = `<p class="muted">${t('Loading the board…')}</p>`;
     try {
       if (this._submitTask) await this._submitTask;
-      const data = await fetchBoard(kind);
+      const data = await fetchBoard(kind, this.boardPageAt(0));
       if (!body.isConnected) return;
       const top = data.top || [];
       const title = { day: t("Today's prizes"), week: t("This week's prizes"), month: t("This month's prizes") }[kind];
       const last = { day: t("Yesterday's champion"), week: t("Last week's champion"), month: t("Last month's champion") }[kind];
       const p = data.prizes || PRIZES[kind];
       const champ = data.champion;
-      body.innerHTML = `
+      const head = `
         <div class="prize-card">
           <div class="prize-top"><b>🎁 ${title}</b><span class="ends">⏳ <span data-ends>${timeLeft(data.endsAt)}</span></span></div>
           <div class="podium">
@@ -1430,11 +1432,13 @@ export class UI {
           </div>
           <div class="prize-rest">${t('4th–10th place: {n} each', { n: `<b>${fmt(p[3])}</b>` })}<i class="seed"></i></div>
           ${champ ? `<div class="champ">👑 ${last}: <b>${esc(champ.name)}</b> · ${fmt(champ.score)}</div>` : ''}
-        </div>
-        ${top.length
-          ? renderRows(top, { youId: save.playerId ?? null, youName: save.playerId == null ? save.name || '' : '', crown: champ?.name })
-          : `<div class="panel lb-empty-card"><div class="e">🌅</div><p>${t('Nobody has run yet. Finish a run and the top spot is yours.')}</p></div>`}
-        <p class="muted lb-foot">${t('Your best run in the period counts. Prizes land in your bank the next time you open the game.')}</p>`;
+        </div>`;
+      const foot = `<p class="muted lb-foot">${t('Your best run in the period counts. Prizes land in your bank the next time you open the game.')}</p>`;
+      if (top.length) {
+        this.pagedRows(body, head, foot, data, kind, { youId: save.playerId ?? null, youName: save.playerId == null ? save.name || '' : '', crown: champ?.name });
+      } else {
+        body.innerHTML = `${head}<div class="panel lb-empty-card"><div class="e">🌅</div><p>${t('Nobody has run yet. Finish a run and the top spot is yours.')}</p></div>${foot}`;
+      }
       const ends = body.querySelector('[data-ends]');
       this.boardTick = setInterval(() => {
         if (!ends.isConnected) return clearInterval(this.boardTick);
@@ -1449,6 +1453,57 @@ export class UI {
           <button class="btn" data-act="retry" data-click style="margin-top:14px">${t('Try again')}</button>
         </div>`;
     }
+  }
+
+  /** The page of a board starting at `from`, asking for this runner's own place on the first one. */
+  boardPageAt(from) {
+    return { from, me: from === 0 ? save.playerId ?? null : null };
+  }
+
+  /**
+   * A board's rows a page at a time, so every runner has a place on it: "Show more" adds the next
+   * 50, and until your own row has loaded it stays pinned to the bottom of the screen.
+   */
+  pagedRows(body, head, foot, data, board, rowOpts) {
+    const total = data.total ?? data.top.length;
+    body.innerHTML = `
+      ${head}
+      <div class="lb-count"><span>👥 ${t('{n} runners', { n: `<b>${fmt(total)}</b>` })}</span>${data.you ? `<span class="me">${t('You: {rank}', { rank: `<b>#${fmt(data.you.rank)}</b>` })}</span>` : ''}</div>
+      <div class="lb-list" data-rows>${data.top.map((row) => rowHtml(row, rowOpts)).join('')}</div>
+      <button class="btn ghost lb-load" type="button" data-act="more" data-click hidden></button>
+      ${foot}
+      <div class="lb-you" data-you hidden></div>`;
+    const list = body.querySelector('[data-rows]');
+    const more = body.querySelector('[data-act=more]');
+    const pin = body.querySelector('[data-you]');
+    const shown = new Set(data.top.map((row) => row.id));
+    let next = data.from + data.top.length;
+    const sync = (hasMore) => {
+      more.hidden = !hasMore;
+      more.disabled = false;
+      more.innerHTML = t('Show more · {a}–{b} of {n}', { a: fmt(next + 1), b: fmt(Math.min(next + BOARD_PAGE, total)), n: fmt(total) });
+      const you = data.you;
+      pin.hidden = !you || shown.has(you.id);
+      if (!pin.hidden) pin.innerHTML = `<div class="k">${t('Your place')}</div>${rowHtml(you, rowOpts)}`;
+    };
+    sync(data.more);
+    more.addEventListener('click', async () => {
+      more.disabled = true;
+      more.textContent = t('Loading…');
+      try {
+        const page = await fetchBoard(board, this.boardPageAt(next));
+        if (!list.isConnected) return;
+        const fresh = (page.top || []).filter((row) => !shown.has(row.id)); // a run can shuffle rows between pages
+        fresh.forEach((row) => shown.add(row.id));
+        list.insertAdjacentHTML('beforeend', fresh.map((row) => rowHtml(row, rowOpts)).join(''));
+        next = page.from + (page.top || []).length;
+        sync(page.more);
+      } catch {
+        if (!list.isConnected) return;
+        sync(true);
+        this.toast('📡', t('Could not load the board'));
+      }
+    });
   }
 
   /** Prizes won on a board that has closed, collected when the title screen opens. */

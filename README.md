@@ -113,7 +113,7 @@ app/
   ui/ui.js           all screens (title, intro, HUD, game over, shop…)
   ui/leaderboard.js  fetch + render the global board (no database credentials)
   ui/share.js        share-card renderer + Web Share
-api/scores.js        Vercel function: GET the top 20, POST a score
+api/scores.js        Vercel function: GET a board (top 20, or a page with ?from=&me=), POST a score
 server/              libSQL access, validation, and the Vite dev/preview middleware
 migrations/          SQL schema for the scores table
 tests/               vitest suites (pattern fairness, regions, save data)
@@ -147,7 +147,7 @@ Scores live in [Turso](https://turso.tech) (libSQL). The browser only calls `/ap
 - **Automatic posting.** Players pick a name once, on their first game over. After that, every run posts by itself and the card shows their rank and whether they set a new personal best.
 - **Migrations.** `migrations/001_scores.sql` and `002_players.sql` run in order through `npm run db:init`, or automatically on the API's first request. `002` folds the old one-row-per-run table into one player per name, keeping each name's best. The first device to post under a folded name claims it.
 
-The board returns the top 20 runners by best score, with earlier players ahead on ties. Rank is computed in SQL and anything the client sends as a rank is ignored.
+The board returns the top 20 runners by best score, with earlier players ahead on ties. The full leaderboard screen asks for pages instead (`GET /api/scores?board=day&from=50&me=<player id>`): 50 rows at a time, the number of runners on the board, and the asking runner's own row and rank wherever they stand, so every player has a place on it. Rank is computed in SQL and anything the client sends as a rank is ignored.
 
 ## Analytics
 
