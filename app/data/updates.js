@@ -5,6 +5,16 @@
  */
 export const UPDATES = [
   {
+    id: '2026-10-09-names',
+    emoji: '🏷️',
+    title: 'Saving your name is easier',
+    items: [
+      'See right away if a name is free — and tap a suggestion if it is taken.',
+      'Emoji in names now save whole, and your phone no longer autocorrects them.',
+      'Names set in Settings or a challenge now save to the leaderboard too.',
+    ],
+  },
+  {
     id: '2026-10-09-inbox',
     emoji: '📬',
     title: 'Your inbox is here',

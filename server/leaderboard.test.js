@@ -732,6 +732,32 @@ test('inbox: prizes, bet results and announcements reach the game, with or witho
   }
 });
 
+test('name check: free, yours, taken with free suggestions; saving a taken name suggests too', async () => {
+  await withDb(async () => {
+    await post({ token: T.juma, name: 'Juma', score: 100, distance: 10, duration: 10 });
+    const check = (token, name) => handleScoreRequest('POST', { action: 'check', token, name }).then((r) => r.body);
+    assert.deepEqual(await check(T.neema, 'Neema'), { ok: true, name: 'Neema' });
+    assert.deepEqual(await check(T.juma, 'juma'), { ok: true, name: 'juma', yours: true });
+    const taken = await check(T.neema, ' JUMA ');
+    assert.equal(taken.ok, false);
+    assert.equal(taken.reason, 'taken');
+    assert.ok(taken.suggestions.length >= 2 && taken.suggestions.every((n) => n.toLowerCase().startsWith('juma')));
+    for (const n of taken.suggestions) assert.equal((await check(T.neema, n)).ok, true, `${n} is free`);
+    assert.equal((await check(T.neema, '   ')).reason, 'invalid');
+    assert.equal((await check(T.neema, 'x'.repeat(17))).reason, 'invalid');
+    // trying to save it anyway: 409 with suggestions, and one of them saves fine
+    const res = await post({ token: T.neema, name: 'Juma', score: 50, distance: 5, duration: 10 });
+    assert.equal(res.status, 409);
+    assert.equal(res.body.code, 'NAME_TAKEN');
+    const ok = await post({ token: T.neema, name: res.body.suggestions[0], score: 50, distance: 5, duration: 10 });
+    assert.equal(ok.status, 200);
+    // a 16-character name with emoji counts by characters, like the game does
+    const emoji = 'Gee🥀🥀🥀🥀🥀🥀🥀🥀🥀🥀🥀🥀🥀';
+    assert.equal([...emoji].length, 16);
+    assert.equal((await post({ token: T.amani, name: emoji, score: 1, distance: 1, duration: 1 })).status, 200);
+  });
+});
+
 test('fair play: runs that could not have happened are turned away; real ones still save', async () => {
   // validation keeps the multiplier only when it is a real one
   assert.equal(validateSubmission({ token: T.juma, name: 'Juma', score: 10, mult: 31 }).ok, false);
