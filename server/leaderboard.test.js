@@ -799,3 +799,49 @@ test('fair play: prize boards skip impossible runs and count the multiplier up t
     assert.equal(all.body.top[0].score, 30_000);
   });
 });
+
+test('fair play: friend bets turn away runs that could not have happened, and pay nothing for them', async () => {
+  await withDb(async () => {
+    // an impossible run cannot open a bet
+    const bad = await chPost(host({ score: 99_999_999, distance: 1000, duration: 100 }));
+    assert.equal(bad.status, 422);
+    assert.equal(bad.body.code, 'IMPLAUSIBLE');
+    assert.equal((await chPost(host({ score: 50_000, distance: 1000, duration: 100, mult: 1 }))).status, 422);
+    assert.equal((await chPost(host({ score: 50_000, distance: 1000, duration: 100, mult: 3 }))).status, 200, 'a ×3 runner can');
+    assert.equal((await chPost(host({ mult: 31 }))).status, 400);
+
+    const { id } = (await chPost(host())).body;
+    await chPost({ action: 'accept', token: T.neema, id, name: 'Neema' });
+    // a rival's impossible answer does not settle the bet
+    const fake = await chPost({ action: 'finish', token: T.neema, id, score: 99_999_999, distance: 1000, duration: 100 });
+    assert.equal(fake.status, 422);
+    assert.equal(fake.body.code, 'IMPLAUSIBLE');
+    const tooFast = await chPost({ action: 'finish', token: T.neema, id, score: 6000, distance: 5000, duration: 10 });
+    assert.equal(tooFast.status, 422);
+    assert.equal((await chPost({ action: 'finish', token: T.neema, id, score: 6000, distance: 'far' })).status, 400);
+    assert.equal((await chGet(id)).body.challenge.status, 'taken');
+    assert.equal((await chPost({ action: 'collect', token: T.neema })).body.payouts.length, 0, 'no coins for a fake run');
+    // a real run still settles it
+    const fin = await chPost({ action: 'finish', token: T.neema, id, score: 7000, distance: 800, duration: 60, seeds: 60, mult: 2 });
+    assert.deepEqual(fin.body, { winner: 'rival', pot: 200, hostName: 'Juma', hostScore: 5000 });
+  });
+});
+
+test('fair play: the "Today #n" rank on the share card matches the day board', async () => {
+  await withDb(async () => {
+    setLeaderboardClock(() => new Date('2026-10-05T09:00:00Z'));
+    const neema = await post({ token: T.neema, name: 'Neema', score: 12_000, distance: 1000, duration: 60, mult: 2 });
+    assert.equal(neema.body.daily.rank, 1);
+    const amani = await post({ token: T.amani, name: 'Amani', score: 11_000, distance: 1000, duration: 60 });
+    assert.equal(amani.body.daily.rank, 2);
+    // a ×30 veteran's 30,000 counts as 10,000 for the day, so it is third, not first
+    const juma = await post({ token: T.juma, name: 'Juma', score: 30_000, distance: 1000, duration: 60, mult: 30 });
+    assert.equal(juma.body.daily.rank, 3);
+    const day = await handleScoreRequest('GET', undefined, { board: 'day' });
+    assert.deepEqual(day.body.top.map((r) => r.name), ['Neema', 'Amani', 'Juma']);
+    const kito = await post({ token: T.kito, name: 'Kito', score: 10_500, distance: 1000, duration: 60, mult: 2 });
+    assert.equal(kito.body.daily.rank, 3, 'Kito\'s 10,500 beats Juma\'s capped 10,000');
+    const day2 = await handleScoreRequest('GET', undefined, { board: 'day' });
+    assert.equal(day2.body.top.findIndex((r) => r.name === 'Kito') + 1, 3);
+  });
+});

@@ -35,6 +35,13 @@ export function plausibleRun({ score = 0, distance = 0, duration = 0, seeds = 0,
   return { ok: true };
 }
 
+/** A run's prize-board score in JS, matching prizeScoreSql (SQLite integer division floors). */
+export function prizeScore(score, mult) {
+  const m = Number(mult);
+  if (!m || m <= PRIZE_MULT_CAP) return score;
+  return Math.floor((score * PRIZE_MULT_CAP) / m);
+}
+
 /** The same checks as SQL over a daily_scores row aliased `t` (prize boards and settling). */
 export const fairRunSql = (t) =>
   `${t}.score > 0 AND ${t}.duration > 0` +

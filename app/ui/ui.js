@@ -894,7 +894,7 @@ export class UI {
     const slot = root?.querySelector('.bet-slot');
     if (slot) slot.innerHTML = `<div class="bet-result pending">🤝 ${t('Checking the bet…')}</div>`;
     try {
-      const res = await finishBet(bet.id, run.score);
+      const res = await finishBet(bet.id, run);
       if (this.remote?.id === bet.id) this.remote = { ...this.remote, status: 'settled' };
       const won = res.winner === 'rival';
       const html = won
