@@ -15,7 +15,10 @@ import { BOARD_PAGE, fetchBoard, leaveDecision, postScore, renderRows, rowHtml, 
 import { darDay, ghostFrom, huntWord, parseShareLink, routeForLink } from '../data/daily.js';
 import { disableNotifications, enableNotifications, notifyState, pushReady, pushReadyNow } from './notify.js';
 import { MEDAL, PRIZES, closesAt, collectPrizes, ordinal, periodName, timeLeft } from './prizes.js';
-import { STAKES, acceptBet, collectBets, createChallenge, fetchChallenge, finishBet, linkOrigin } from './challenges.js';
+import {
+  STAKES, acceptBet, challengeKey, collectBets, createChallenge, fetchChallenge, finishBet, isChallengeDone, linkOrigin,
+  markChallengeDone, rememberChallengeDone, withoutChallenge,
+} from './challenges.js';
 import { install, device, standalone } from './install.js';
 import { VIEW_MIN, VIEW_MAX } from '../game/game.js';
 import { recoverRunner, setRecoveryPin, syncSave } from './account.js';
@@ -101,6 +104,10 @@ export class UI {
     this.ghostRun = ghostFrom(this.route.friend);
     this.remote = null; // the challenge as the server has it (recording, bet)
     this.bet = null; // a bet taken on this device, settled when the next run ends
+    // a challenge you've already played, turned down or that ran out isn't shown again
+    this.challengeKey = this.challenge ? challengeKey(this.route.id, this.link) : null;
+    this.challengeDone = isChallengeDone(this.challengeKey);
+    if (this.challengeDone) this.forgetChallengeLink();
     if (this.route.id) this.loadChallenge(this.route.id);
     // progress carried over from another browser (the iPhone home-screen app opens with this)
     const restore = cleanCode(this.params.get('restore'));
@@ -231,6 +238,7 @@ export class UI {
       else if (act === 'board') this.showBoard();
       else if (act === 'install') this.installApp();
       else if (act === 'take-bet') this.takeBet(e.target.closest('button'));
+      else if (act === 'decline-challenge') this.closeChallenge('declined');
       else if (act === 'derby') this.derbySheet();
       else if (act === 'inbox') this.showInbox();
       else if (act === 'invite') this.inviteSheet();
@@ -768,6 +776,8 @@ export class UI {
   bankRun(run) {
     if (this.bankedId === this.game.runId) return this.lastBank;
     this.bankedId = this.game.runId;
+    // racing a friend's challenge answers it: its card won't wait on the title screen again
+    if (this.challenge && !this.challengeDone) this.closeChallenge('played');
     const newBest = run.score > save.best;
     save.seeds += run.seeds;
     save.runs++;
@@ -843,6 +853,7 @@ export class UI {
     try {
       const ch = await fetchChallenge(id);
       this.remote = ch;
+      if (ch.done && !this.bet) this.closeChallenge(null);
       this.route = { ...this.route, id: ch.id, route: ch.route, startRegion: ch.startRegion };
       this.challenge = { name: ch.name, score: ch.score };
       this.ghostRun = ghostFrom(ch);
@@ -852,8 +863,38 @@ export class UI {
     }
   }
 
+  /**
+   * You're finished with the friend's challenge (`reason`: played or declined; null when the
+   * server says so already): its card goes, here, after a reload and on your other devices.
+   */
+  closeChallenge(reason) {
+    if (!this.challenge || this.challengeDone) return;
+    this.challengeDone = true;
+    rememberChallengeDone(this.challengeKey);
+    if (reason && this.route.id) markChallengeDone(this.route.id, reason);
+    this.forgetChallengeLink();
+    if (reason === 'declined') {
+      // turned down: the next run is your own again, without their route or shadow runner
+      this.challenge = null;
+      this.remote = null;
+      this.ghostRun = null;
+      this.route = routeForLink(null);
+    }
+    const card = this.screen?.querySelector('.challenge-card:not(.invite-card)');
+    if (card) this.title();
+  }
+
+  forgetChallengeLink() {
+    try {
+      const search = withoutChallenge(location.search);
+      if (search !== location.search) history.replaceState(history.state, '', location.pathname + search + location.hash);
+    } catch {
+      /* not in a browser */
+    }
+  }
+
   challengeCardHtml() {
-    if (!this.challenge) return '';
+    if (!this.challenge || this.challengeDone) return '';
     const ch = this.remote;
     const name = `<b>${esc(this.challenge.name)}</b>`;
     let bet = '';
@@ -876,6 +917,7 @@ export class UI {
     }
     return `
       <div class="challenge challenge-card">
+        ${this.bet ? '' : `<button class="ch-close" data-act="decline-challenge" data-click aria-label="${t('Dismiss')}" title="${t('Dismiss')}">✕</button>`}
         <span class="ch-ico">🔥</span>
         <div class="ch-body">
           <div>${t('{name} challenges you to beat {score}!', { name, score: `<b>${fmt(this.challenge.score)}</b>` })}</div>

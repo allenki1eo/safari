@@ -559,7 +559,9 @@ input { font: inherit; }
 .toast-reward .seed { width: 14px; height: 14px; }
 
 /* ------------------------------------------------------- friend challenges */
-.challenge-card { align-items: flex-start; text-align: left; }
+.challenge-card { align-items: flex-start; text-align: left; position: relative; }
+.challenge-card .ch-close { position: absolute; top: 4px; right: 4px; width: 32px; height: 32px; border: 0; border-radius: 50%; background: rgba(0,0,0,0.18); color: #fff; font-size: 14px; line-height: 1; cursor: pointer; }
+.challenge-card:has(.ch-close) .ch-body { padding-right: 26px; }
 .challenge-card .ch-ico { font-size: 28px; line-height: 1; }
 .challenge-card .ch-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .ch-sub { font-size: 13px; font-weight: 800; opacity: 0.92; }

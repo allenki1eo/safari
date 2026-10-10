@@ -714,7 +714,8 @@ test('inbox: prizes, bet results and announcements reach the game, with or witho
       await handleScoreRequest('POST', { action: 'prizes', token: T.neema });
 
       const j = await inbox(T.juma);
-      assert.deepEqual(j.map((m) => m.kind), ['prize', 'broadcast', 'bet-won', 'bet-taken']);
+      // the result replaces "Neema took your bet": one message for the challenge
+      assert.deepEqual(j.map((m) => m.kind), ['prize', 'broadcast', 'bet-won']);
       assert.deepEqual(j[0].data, { kind: 'day', period: '2026-10-05', rank: 1, amount: 1000, score: 9000 });
       assert.equal(j[1].data.title, 'Derby tonight!');
       assert.equal(j[2].data.name, 'Neema');
@@ -973,4 +974,91 @@ test('invite links: a friend who joins and runs pays both sides once, up to the 
     if (prevKey === undefined) delete process.env.KIMBIA_ADMIN_KEY;
     else process.env.KIMBIA_ADMIN_KEY = prevKey;
   }
+});
+
+test('challenge notifications clear once the friend has played, declined, or the bet ran out', async () => {
+  const push = await import('./push.js');
+  const prevPub = process.env.VAPID_PUBLIC_KEY;
+  delete process.env.VAPID_PUBLIC_KEY;
+  const inbox = async (token) => (await push.handlePushRequest('POST', { action: 'inbox', token })).body;
+  const view = async (token, id) => (await chPost({ action: 'view', token, id })).body.challenge;
+  try {
+    await withDb(async () => {
+      const t0 = Date.parse('2026-10-05T08:00:00Z');
+      setLeaderboardClock(() => new Date(t0));
+      await post({ token: T.juma, name: 'Juma', score: 5000, distance: 700, duration: 50 });
+      await post({ token: T.neema, name: 'Neema', score: 100, distance: 70, duration: 10 });
+
+      // a free challenge: waiting for Neema until she plays it, then gone on every device
+      const free = (await chPost(host({ stake: 0 }))).body.id;
+      assert.deepEqual([(await view(T.neema, free)).done, (await view(T.neema, free)).you], [false, null]);
+      assert.equal((await view(T.juma, free)).you, 'host');
+      assert.equal((await view(T.juma, free)).done, true, 'your own challenge never waits for you');
+      assert.equal((await chPost({ action: 'done', token: T.neema, id: free })).status, 200);
+      assert.equal((await view(T.neema, free)).done, true);
+      assert.equal((await view(T.kito, free)).done, false, 'only for the one who played');
+      // declining works the same, and twice is harmless
+      await chPost({ action: 'done', token: T.kito, id: free, reason: 'declined' });
+      await chPost({ action: 'done', token: T.kito, id: free, reason: 'declined' });
+      assert.equal((await view(T.kito, free)).done, true);
+      assert.equal((await chPost({ action: 'done', token: T.kito, id: 'zzzzzzzz' })).status, 404);
+      assert.equal((await chPost({ action: 'view', token: 'bad', id: free })).status, 400);
+
+      // a bet: "Neema took your bet" while it runs, then only the result
+      const bet = (await chPost(host())).body.id;
+      await chPost({ action: 'accept', token: T.neema, id: bet, name: 'Neema' });
+      assert.deepEqual((await inbox(T.juma)).messages.map((m) => m.kind), ['bet-taken']);
+      assert.equal((await view(T.neema, bet)).done, false, 'still to run');
+      await chPost({ action: 'finish', token: T.neema, id: bet, score: 7000, distance: 800, duration: 60 });
+      assert.equal((await view(T.neema, bet)).done, true);
+      const after = await inbox(T.juma);
+      assert.deepEqual(after.messages.map((m) => m.kind), ['bet-lost']);
+      assert.equal(after.seen, 0);
+
+      // read on one device: read everywhere, and it never goes backwards
+      const read = await push.handlePushRequest('POST', { action: 'inbox-read', token: T.juma, at: after.messages[0].at });
+      assert.equal(read.body.seen, after.messages[0].at);
+      await push.handlePushRequest('POST', { action: 'inbox-read', token: T.juma, at: 5 });
+      assert.equal((await inbox(T.juma)).seen, after.messages[0].at);
+      assert.equal((await push.handlePushRequest('POST', { action: 'inbox-read', token: T.juma, at: 'x' })).status, 400);
+
+      // a bet the friend never finished lapses: the host gets one result, "took your bet" goes
+      const lapse = (await chPost(host({ stake: 50 }))).body.id;
+      await chPost({ action: 'accept', token: T.neema, id: lapse, name: 'Neema' });
+      assert.equal((await inbox(T.juma)).messages[0].kind, 'bet-taken');
+      setLeaderboardClock(() => new Date(t0 + TAKEN_TTL + 1000));
+      const lapsed = (await inbox(T.juma)).messages;
+      assert.deepEqual(lapsed.map((m) => m.kind), ['bet-won', 'bet-lost']);
+      assert.equal(lapsed[0].data.forfeit, true);
+      assert.equal((await view(T.neema, lapse)).done, true);
+      // and its coins are still paid once
+      assert.deepEqual((await chPost({ action: 'collect', token: T.juma })).body.payouts.filter((p) => p.id === lapse).map((p) => p.kind), ['forfeit']);
+
+      // an open bet that ran out is done for anyone who opens it
+      const old = (await chPost(host({ stake: 50 }))).body.id;
+      setLeaderboardClock(() => new Date(t0 + OPEN_TTL + TAKEN_TTL + 5000));
+      assert.equal((await view(T.kito, old)).done, true);
+    });
+  } finally {
+    if (prevPub != null) process.env.VAPID_PUBLIC_KEY = prevPub;
+  }
+});
+
+test('stale "took your bet" messages from before results replaced them are tidied on fetch', async () => {
+  const push = await import('./push.js');
+  const { postInbox } = await import('./inbox.js');
+  const { getClient, playerIdForToken } = await import('./leaderboard.js');
+  await withDb(async () => {
+    setLeaderboardClock(() => new Date('2026-10-05T08:00:00Z'));
+    await post({ token: T.juma, name: 'Juma', score: 5000, distance: 700, duration: 50 });
+    const bet = (await chPost(host())).body.id;
+    await chPost({ action: 'accept', token: T.neema, id: bet, name: 'Neema' });
+    await chPost({ action: 'finish', token: T.neema, id: bet, score: 100, distance: 70, duration: 10 });
+    // as an older server left it: the taken message is still there next to the result
+    const db = await getClient();
+    const jumaId = await playerIdForToken(db, hashToken(T.juma));
+    await postInbox(db, jumaId, 'bet-taken', { name: 'Neema', stake: 100 }, `bet-taken:${bet}`);
+    const kinds = (await push.handlePushRequest('POST', { action: 'inbox', token: T.juma })).body.messages.map((m) => m.kind);
+    assert.deepEqual(kinds, ['bet-won']);
+  });
 });
