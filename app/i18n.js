@@ -404,6 +404,7 @@ const SW = {
   'Hop the logs and stones': 'Ruka kwenye magogo na mawe',
   '{name} challenges you to beat {score}!': '{name} anakupa changamoto ya kushinda {score}!',
   'Their shadow runner races you on the same route.': 'Kivuli chake kinakimbia nawe kwenye njia ile ile.',
+  'Dismiss': 'Ondoa',
   'Bet on! Beat {score} to win {pot}': 'Dau limewekwa! Shinda {score} upate {pot}',
   'Your bet: {stake} coins on this run': 'Dau lako: sarafu {stake} kwenye mbio hizi',
   'Bet {stake} coins · winner takes {pot}': 'Dau la sarafu {stake} · mshindi anachukua {pot}',

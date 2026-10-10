@@ -57,8 +57,49 @@ export async function createChallenge(run, stake, name) {
   return data;
 }
 
+/** A friend's challenge, plus `done`: whether you're already finished with it (any device). */
 export async function fetchChallenge(id) {
-  return (await call('GET', null, `?id=${encodeURIComponent(id)}`)).challenge;
+  return (await call('POST', { action: 'view', token: playerToken(), id })).challenge;
+}
+
+/* ------------------------------------------- challenges you're finished with */
+const DONE_MAX = 60;
+/** The URL parameters a challenge link carries. */
+export const CHALLENGE_PARAMS = ['ch', 'c', 'm', 's', 'n', 'from', 'r', 'rt', 'day'];
+
+/** A stable key for a challenge link: its server id, or (older links) its numbers. */
+export function challengeKey(id, link) {
+  if (id) return `ch:${id}`;
+  if (!link) return null;
+  return `ln:${link.name ?? ''}|${link.score ?? ''}|${link.route ?? link.day ?? ''}`;
+}
+
+export const isChallengeDone = (key) => !!key && (save.challengesDone ?? []).includes(key);
+
+/** Remembers on this device that a challenge was played, declined or ran out. */
+export function rememberChallengeDone(key) {
+  if (!key || isChallengeDone(key)) return;
+  save.challengesDone = [...(save.challengesDone ?? []), key].slice(-DONE_MAX);
+  persist();
+}
+
+/** Tells the server too, so the challenge stays gone on your other devices. Quiet on failure. */
+export async function markChallengeDone(id, reason = 'played') {
+  if (!id) return false;
+  try {
+    await call('POST', { action: 'done', token: playerToken(), id, reason });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The page's query string without the challenge link in it (so a reload doesn't bring it back). */
+export function withoutChallenge(search) {
+  const params = new URLSearchParams(search);
+  for (const k of CHALLENGE_PARAMS) params.delete(k);
+  const rest = params.toString();
+  return rest ? `?${rest}` : '';
 }
 
 /** Takes a friend's bet: the matching stake leaves the bank when the server confirms. */

@@ -20,18 +20,38 @@ export async function fetchInbox(fresh = false) {
     body: JSON.stringify({ action: 'inbox', token: playerToken() }),
   });
   if (!res.ok) throw new Error(t('The inbox is unavailable.'));
-  cache = (await res.json()).messages ?? [];
+  const data = await res.json();
+  cache = data.messages ?? [];
   fetchedAt = Date.now();
+  // read on another device counts as read here too
+  const seen = Number(data.seen) || 0;
+  if (seen > (save.inboxSeen ?? 0)) {
+    save.inboxSeen = seen;
+    persist();
+  }
   return cache;
 }
 
 export const unreadCount = (messages) => messages.filter((m) => m.at > (save.inboxSeen ?? 0)).length;
 
+/** Marks everything shown as read, here and on the server (so other devices agree). */
 export function markInboxRead(messages) {
   const newest = Math.max(save.inboxSeen ?? 0, ...messages.map((m) => m.at));
   if (newest !== save.inboxSeen) {
     save.inboxSeen = newest;
     persist();
+  }
+  if (newest > 0 && newest > (save.inboxSynced ?? 0)) {
+    fetch('/api/push', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({ action: 'inbox-read', token: playerToken(), at: newest }),
+    }).then((res) => {
+      if (res.ok) {
+        save.inboxSynced = newest;
+        persist();
+      }
+    }).catch(() => { /* next time */ });
   }
 }
 
@@ -52,6 +72,7 @@ export function describe(m) {
     case 'bet-taken':
       return { icon: '🎯', title: t('{name} took your bet', { name: d.name }), body: t("{n} seeds each — they're racing your shadow now.", { n: fmt(d.stake) }) };
     case 'bet-won':
+      if (d.forfeit) return { icon: '🏆', title: t('{name} never finished your challenge', { name: d.name }), body: t('You won the {pot}-seed pot.', { pot: fmt(d.pot) }), tone: 'gold' };
       return { icon: '🏆', title: t("{name} couldn't beat you", { name: d.name }), body: t('You won the {pot}-seed pot.', { pot: fmt(d.pot) }), tone: 'gold' };
     case 'bet-lost':
       return { icon: '😬', title: t('{name} beat your challenge', { name: d.name }), body: t('{score} took the {pot}-seed pot. Run it back?', { score: fmt(d.score), pot: fmt(d.pot) }) };

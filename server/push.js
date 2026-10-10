@@ -13,7 +13,7 @@ import { PRIZES } from '../app/data/content.js';
 import { darDay } from '../app/data/daily.js';
 import { TOKEN_RE, fail, getClient, hashToken, now, playerIdForToken } from './leaderboard.js';
 import { settlePrizes } from './prizes.js';
-import { inboxFor, postInbox } from './inbox.js';
+import { dropInbox, inboxFor, inboxRead, postInbox } from './inbox.js';
 
 const ENDPOINT_MAX = 1024;
 const KEY_RE = /^[A-Za-z0-9_-]{16,200}={0,2}$/;
@@ -170,10 +170,12 @@ export async function notifyBetTaken(db, hostHash, { name, stake, id }) {
 }
 
 /** A friend finished your challenge: tell the host who won. */
-export async function notifyBetSettled(db, hostHash, { name, winner, score, pot, id }) {
+export async function notifyBetSettled(db, hostHash, { name, winner, score, pot, id, forfeit = false }) {
   const hostId = await playerIdForToken(db, hostHash).catch(() => null);
+  // the result replaces "they took your bet": one message per challenge in the host's inbox
+  await dropInbox(db, `bet-taken:${id}`);
   if (hostId != null) {
-    await postInbox(db, hostId, winner === 'rival' ? 'bet-lost' : 'bet-won', { name, score, pot }, `bet-settled:${id}`);
+    await postInbox(db, hostId, winner === 'rival' ? 'bet-lost' : 'bet-won', forfeit ? { name, pot, forfeit: true } : { name, score, pot }, `bet-settled:${id}`);
   }
   if (!pushKeys()) return;
   try {
@@ -372,6 +374,7 @@ export async function handlePushRequest(method, body) {
       case 'unsubscribe': return await unsubscribe(body);
       case 'test': return await test(body);
       case 'inbox': return await inboxFor(body);
+      case 'inbox-read': return await inboxRead(body);
       default: return bad('Unknown action.');
     }
   } catch (err) {

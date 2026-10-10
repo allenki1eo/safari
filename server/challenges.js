@@ -59,16 +59,54 @@ export function validateChallenge(body) {
 }
 
 /** Lazily closes bets whose time ran out: untaken ones expire, abandoned ones go to the host. */
-async function settleStale(db) {
+export async function settleStale(db) {
   const t = ms();
+  const lapsed = (await db.execute({
+    sql: "SELECT id, host_hash, rival_name, stake FROM challenges WHERE status = 'taken' AND taken_ms < ?",
+    args: [t - TAKEN_TTL],
+  })).rows;
   await db.execute({
     sql: "UPDATE challenges SET status = 'expired', settled_ms = ? WHERE status = 'open' AND stake > 0 AND created_ms < ?",
     args: [t, t - OPEN_TTL],
   });
-  await db.execute({
-    sql: "UPDATE challenges SET status = 'settled', winner = 'host', settled_ms = ? WHERE status = 'taken' AND taken_ms < ?",
-    args: [t, t - TAKEN_TTL],
-  });
+  for (const row of lapsed) {
+    const upd = await db.execute({
+      sql: "UPDATE challenges SET status = 'settled', winner = 'host', settled_ms = ? WHERE id = ? AND status = 'taken'",
+      args: [t, row.id],
+    });
+    // the friend never finished: one result for the host, in place of "they took your bet"
+    if (upd.rowsAffected) {
+      await notifyBetSettled(db, String(row.host_hash), {
+        name: String(row.rival_name ?? ''), winner: 'host', score: null, pot: Number(row.stake) * 2, id: String(row.id), forfeit: true,
+      });
+    }
+  }
+}
+
+/** Marks a challenge finished for one runner (played or declined). Never throws. */
+async function markDone(db, id, playerHash, reason) {
+  try {
+    await db.execute({
+      sql: 'INSERT OR IGNORE INTO challenge_done (challenge_id, player_hash, reason, done_ms) VALUES (?, ?, ?, ?)',
+      args: [id, playerHash, reason, ms()],
+    });
+  } catch (err) {
+    console.error('challenge_done:', err?.message || err);
+  }
+}
+
+/**
+ * Whether this challenge should still show as something waiting for this runner: not when it's
+ * their own, when they've played or declined it, when their bet on it is settled, or when it has
+ * expired.
+ */
+async function doneFor(db, row, playerHash) {
+  if (!playerHash) return row.status === 'expired';
+  if (row.host_hash === playerHash) return true;
+  if (row.status === 'expired') return true;
+  if (row.rival_hash === playerHash && row.status === 'settled') return true;
+  const hit = await db.execute({ sql: 'SELECT 1 FROM challenge_done WHERE challenge_id = ? AND player_hash = ?', args: [row.id, playerHash] });
+  return hit.rows.length > 0;
 }
 
 function publicView(row) {
@@ -119,6 +157,30 @@ async function getChallenge(id) {
   return { status: 200, body: { challenge: publicView(row) } };
 }
 
+/** POST { action: 'view', id, token }: the challenge, plus whether this runner is done with it. */
+async function viewChallenge(body) {
+  if (typeof body?.token !== 'string' || !TOKEN_RE.test(body.token)) return bad('Player token is missing or invalid.');
+  const got = await getChallenge(body.id);
+  if (got.status !== 200) return got;
+  const db = await getClient();
+  const row = (await db.execute({ sql: 'SELECT * FROM challenges WHERE id = ?', args: [body.id] })).rows[0];
+  const th = hashToken(body.token);
+  const you = row.host_hash === th ? 'host' : row.rival_hash === th ? 'rival' : null;
+  return { status: 200, body: { challenge: { ...got.body.challenge, you, done: await doneFor(db, row, th) } } };
+}
+
+/** POST { action: 'done', id, token, reason }: this runner played (or turned down) the challenge. */
+async function doneChallenge(body) {
+  if (typeof body?.token !== 'string' || !TOKEN_RE.test(body.token)) return bad('Player token is missing or invalid.');
+  if (!ID_RE.test(String(body.id || ''))) return bad('Challenge id is not valid.');
+  const reason = body.reason === 'declined' ? 'declined' : 'played';
+  const db = await getClient();
+  const row = (await db.execute({ sql: 'SELECT id FROM challenges WHERE id = ?', args: [body.id] })).rows[0];
+  if (!row) return { status: 404, body: { error: 'That challenge has gone.' } };
+  await markDone(db, body.id, hashToken(body.token), reason);
+  return { status: 200, body: { done: true } };
+}
+
 async function acceptChallenge(body) {
   if (typeof body?.token !== 'string' || !TOKEN_RE.test(body.token)) return bad('Player token is missing or invalid.');
   if (!ID_RE.test(String(body.id || ''))) return bad('Challenge id is not valid.');
@@ -166,6 +228,7 @@ async function finishChallenge(body) {
   });
   const row = (await db.execute({ sql: 'SELECT * FROM challenges WHERE id = ?', args: [body.id] })).rows[0];
   if (!row || row.rival_hash !== th || row.status !== 'settled') return conflict('This bet is not yours to finish.', 'NOT_RIVAL');
+  await markDone(db, String(row.id), th, 'played');
   if (upd.rowsAffected) {
     await notifyBetSettled(db, String(row.host_hash), {
       name: String(row.rival_name), winner: String(row.winner), score, pot: Number(row.stake) * 2, id: String(row.id),
@@ -224,6 +287,8 @@ export async function handleChallengeRequest(method, body, query) {
       case 'accept': return await acceptChallenge(body);
       case 'finish': return await finishChallenge(body);
       case 'collect': return await collectWinnings(body);
+      case 'view': return await viewChallenge(body);
+      case 'done': return await doneChallenge(body);
       default: return bad('Unknown action.');
     }
   } catch (err) {
