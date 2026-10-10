@@ -259,6 +259,7 @@ export function challengeUrl(run, origin = LIVE_ORIGIN) {
   if (run?.name) params.set('n', String(run.name));
   params.set('from', String(Math.max(0, Math.floor(Number(run?.startRegion) || 0))));
   if (run?.runner) params.set('r', String(run.runner));
+  if (run?.ref) params.set('ref', String(run.ref)); // a friend who joins through it counts as invited
   return `${origin}/?${params.toString()}`;
 }
 

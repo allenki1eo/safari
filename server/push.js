@@ -66,6 +66,8 @@ const TEXT = {
     wonBody: 'You kept your crown — {pot} seeds are yours. Open Kimbia to collect.',
     lostTitle: '😬 {name} beat your challenge',
     lostBody: '{score} beat your run and took the {pot}-seed pot. Run it back?',
+    friendTitle: '🤝 {name} joined with your link!',
+    friendBody: '{amount} seeds are waiting for you. Open Kimbia to collect.',
     testTitle: '🔔 Notifications are on',
     testBody: 'This is how Kimbia! will tell you about prizes and challenges.',
     board: { day: 'daily', week: 'weekly', month: 'monthly' },
@@ -87,6 +89,8 @@ const TEXT = {
     wonBody: 'Bado wewe ni bingwa — mbegu {pot} ni zako. Fungua Kimbia uchukue.',
     lostTitle: '😬 {name} ameshinda changamoto yako',
     lostBody: '{score} imeshinda mbio zako na kuchukua mbegu {pot}. Jaribu tena?',
+    friendTitle: '🤝 {name} amejiunga kwa kiungo chako!',
+    friendBody: 'Mbegu {amount} zinakusubiri. Fungua Kimbia uzichukue.',
     testTitle: '🔔 Arifa zimewashwa',
     testBody: 'Hivi ndivyo Kimbia! itakavyokuambia kuhusu zawadi na changamoto.',
     board: { day: 'siku', week: 'wiki', month: 'mwezi' },
@@ -176,6 +180,23 @@ export async function notifyBetSettled(db, hostHash, { name, winner, score, pot,
     await tell(db, await subsForTokenHash(db, hostHash), (T) => winner === 'rival'
       ? { title: fill(T.lostTitle, { name }), body: fill(T.lostBody, { score: fmt(score), pot: fmt(pot) }), tag: `bet-${id}`, url: '/' }
       : { title: fill(T.wonTitle, { name }), body: fill(T.wonBody, { pot: fmt(pot) }), tag: `bet-${id}`, url: '/', urgency: 'high' });
+  } catch (err) {
+    console.error('push:', err?.message || err);
+  }
+}
+
+/* ---------------------------------------------------------- invite news */
+/** A friend joined through your link and finished their first real run. Quiet on any failure. */
+export async function notifyFriendJoined(db, referrerId, { name, amount, friendId }) {
+  await postInbox(db, referrerId, 'ref-joined', { name, amount }, `ref-joined:${friendId}`);
+  if (!pushKeys()) return;
+  try {
+    await tell(db, await subsForPlayer(db, referrerId), (T) => ({
+      title: fill(T.friendTitle, { name }),
+      body: fill(T.friendBody, { amount: fmt(amount) }),
+      tag: `ref-${friendId}`,
+      url: '/',
+    }));
   } catch (err) {
     console.error('push:', err?.message || err);
   }

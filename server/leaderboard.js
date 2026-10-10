@@ -13,11 +13,12 @@ import { loadLocalEnv } from './env.js';
 import { KINDS, claimPrizes, prizeBoard } from './prizes.js';
 import { cleanSide, derbyBoard, derbyRun, pickSide } from './derby.js';
 import { MAX_MULT, fairRunSql, plausibleRun, prizeScore, prizeScoreSql } from './plausible.js';
+import { claimReferrals, inviterOf, qualifyReferral, recordReferral, socialLinks } from './referrals.js';
 
 loadLocalEnv();
 
 // Applied in order on first use; every statement is idempotent.
-const SCHEMA_SQL = ['001_scores.sql', '002_players.sql', '003_daily.sql', '004_challenges.sql', '005_transfers.sql', '006_accounts.sql', '007_prizes.sql', '008_push.sql', '009_derby.sql', '010_banned.sql', '011_inbox.sql', '012_fair_play.sql']
+const SCHEMA_SQL = ['001_scores.sql', '002_players.sql', '003_daily.sql', '004_challenges.sql', '005_transfers.sql', '006_accounts.sql', '007_prizes.sql', '008_push.sql', '009_derby.sql', '010_banned.sql', '011_inbox.sql', '012_fair_play.sql', '013_referrals.sql']
   .map((file) => readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8'))
   .join('\n');
 export const TOKEN_RE = /^[a-f0-9]{64}$/;
@@ -162,7 +163,9 @@ export function validateSubmission(body) {
   if (body.mult != null && (mult == null || mult < 1)) return { ok: false, error: 'Multiplier is not valid.' };
   // Derby Day: the side this runner is on (ignored outside the event or if not a real side)
   const side = cleanSide(body.side);
-  return { ok: true, value: { token: body.token, name, score, distance, seeds, allies, chapter, runner, duration, mult, side } };
+  // the invite code of the friend who brought a brand-new runner (only read when they are created)
+  const ref = typeof body.ref === 'string' ? body.ref.slice(0, 12) : null;
+  return { ok: true, value: { token: body.token, name, score, distance, seeds, allies, chapter, runner, duration, mult, side, ref } };
 }
 
 function mapRow(row, rank) {
@@ -338,7 +341,8 @@ export async function submitScore(body, ctx = null) {
       } else if (owner) {
         return await takenFor(db, v.name);
       } else {
-        await db.execute({ sql: 'INSERT INTO players (name, name_key, token_hash) VALUES (?, ?, ?)', args: [v.name, key, th] });
+        const made = await db.execute({ sql: 'INSERT INTO players (name, name_key, token_hash) VALUES (?, ?, ?) RETURNING id', args: [v.name, key, th] });
+        if (v.ref && made.rows[0]) await recordReferral(db, Number(made.rows[0].id), v.ref);
       }
     } else if (player.name_key !== key) {
       if (owner) return await takenFor(db, v.name);
@@ -361,6 +365,9 @@ export async function submitScore(body, ctx = null) {
   if (!real.ok) {
     return { status: 422, body: { error: "That run doesn't add up, so it wasn't saved.", code: 'IMPLAUSIBLE', reason: real.reason } };
   }
+
+  // a friend's first real run makes their invite count
+  if (v.score > 0) await qualifyReferral(db, id, String(player.name), v.distance);
 
   let improved = false;
   if (v.score > 0) {
@@ -532,12 +539,15 @@ export async function handleScoreRequest(method, body, query, ctx = null) {
       const paged = pageQuery(query);
       if (KINDS.includes(query?.board)) return { status: 200, body: await prizeBoard(query.board, paged) };
       if (query?.board === 'derby') return { status: 200, body: await derbyBoard() };
+      if (query?.board === 'social') return { status: 200, body: await socialLinks() };
+      if (query?.ref != null) return await inviterOf(query.ref);
       if (paged) return { status: 200, body: await allTimePage(paged) };
       return { status: 200, body: { top: await listTop() } };
     }
     if (method === 'POST' && body?.action === 'prizes') return await claimPrizes(body);
     if (method === 'POST' && body?.action === 'side') return await pickSide(body);
     if (method === 'POST' && body?.action === 'check') return await checkName(body);
+    if (method === 'POST' && body?.action === 'referrals') return await claimReferrals(body);
     if (method === 'POST') return await submitScore(body, ctx);
     return { status: 405, body: { error: 'Method not allowed.' } };
   } catch (err) {

@@ -902,3 +902,75 @@ test('boards page past the top 20, count every runner and find you wherever you 
     }
   });
 });
+
+test('invite links: a friend who joins and runs pays both sides once, up to the cap', async () => {
+  const { REFERRAL } = await import('../app/data/content.js');
+  const { refCode, refId, cleanHandle } = await import('./referrals.js');
+  const { handleAdminRequest } = await import('./admin.js');
+  assert.equal(refId(refCode(1234)), 1234);
+  for (const bad of ['', 'ZZ ZZ', '../1', 'x'.repeat(11), '0', null]) assert.equal(refId(bad), null, String(bad));
+  assert.equal(cleanHandle('@kimbia.game'), 'kimbia.game');
+  assert.equal(cleanHandle('https://www.tiktok.com/@kimbia_tz?lang=en'), 'kimbia_tz');
+  assert.equal(cleanHandle('not a handle!'), null);
+
+  const prevKey = process.env.KIMBIA_ADMIN_KEY;
+  process.env.KIMBIA_ADMIN_KEY = 'admin-test-key';
+  try {
+    await withDb(async () => {
+      setLeaderboardClock(() => new Date('2026-10-10T09:00:00Z'));
+      const claim = (token) => handleScoreRequest('POST', { action: 'referrals', token }).then((r) => r.body);
+      const juma = (await post({ token: T.juma, name: 'Juma', score: 500, distance: 100, duration: 20 })).body.entry;
+      const code = (await claim(T.juma)).code;
+      assert.equal(code, refCode(juma.id));
+      assert.deepEqual((await handleScoreRequest('GET', undefined, { ref: code })).body, { name: 'Juma', best: 500, welcome: REFERRAL.welcome });
+      assert.equal((await handleScoreRequest('GET', undefined, { ref: 'zzzz' })).status, 404);
+
+      // Neema joins with Juma's link; a short run does not count yet
+      await post({ token: T.neema, name: 'Neema', score: 100, distance: 50, duration: 10, ref: code });
+      let mine = await claim(T.juma);
+      assert.deepEqual([mine.joined, mine.pending, mine.collected], [0, 1, 0]);
+      assert.deepEqual(mine.friends, [{ name: 'Neema', done: false }]);
+      // a real run makes it count: Juma collects once, Neema gets her welcome once
+      await post({ token: T.neema, name: 'Neema', score: 6000, distance: REFERRAL.qualifyM + 10, duration: 60, ref: code });
+      mine = await claim(T.juma);
+      assert.deepEqual([mine.joined, mine.pending, mine.collected, mine.earned], [1, 0, REFERRAL.reward, REFERRAL.reward]);
+      assert.equal((await claim(T.juma)).collected, 0, 'paid only once');
+      assert.equal((await claim(T.neema)).welcome, REFERRAL.welcome);
+      assert.equal((await claim(T.neema)).welcome, 0);
+      // Juma hears about it in his inbox
+      const inbox = (await (await import('./inbox.js')).inboxFor({ token: T.juma })).body.messages;
+      assert.deepEqual([inbox[0].kind, inbox[0].data.name], ['ref-joined', 'Neema']);
+
+      // only brand-new runners can be referred, and nobody refers themselves
+      await post({ token: T.amani, name: 'Amani', score: 100, distance: 50, duration: 10 });
+      await post({ token: T.amani, name: 'Amani', score: 6000, distance: 900, duration: 60, ref: code });
+      const amani = await claim(T.amani);
+      await post({ token: T.kito, name: 'Kito', score: 6000, distance: 900, duration: 60, ref: amani.code });
+      assert.equal((await claim(T.amani)).joined, 1);
+      assert.equal((await claim(T.juma)).joined, 1, 'Amani existed before the link');
+      await post({ token: T.hanki, name: 'Hanki', score: 6000, distance: 900, duration: 60, ref: 'zz9' });
+      assert.equal((await claim(T.hanki)).welcome, 0, 'an invite from nobody pays nothing');
+
+      // past the cap, friends still count but no longer pay the inviter
+      for (let i = 0; i < REFERRAL.cap + 2; i++) {
+        await post({ token: tok(200 + i), name: `Pal${i}`, score: 6000, distance: 900, duration: 60, ref: code });
+      }
+      mine = await claim(T.juma);
+      assert.equal(mine.joined, REFERRAL.cap + 3);
+      assert.equal(mine.earned, REFERRAL.cap * REFERRAL.reward);
+      assert.equal(mine.collected, (REFERRAL.cap - 1) * REFERRAL.reward);
+
+      // the admin sets the TikTok handle; the game reads it
+      const admin = (body) => handleAdminRequest('POST', { adminKey: 'admin-test-key', ...body }).then((r) => r);
+      assert.equal((await admin({ action: 'social', tiktok: 'bad handle!' })).status, 400);
+      assert.equal((await admin({ action: 'social', tiktok: '@kimbia.game' })).body.tiktok, 'kimbia.game');
+      assert.deepEqual((await handleScoreRequest('GET', undefined, { board: 'social' })).body, { tiktok: 'kimbia.game' });
+      assert.equal((await admin({ action: 'overview' })).body.invitesJoined, REFERRAL.cap + 4);
+      assert.equal((await admin({ action: 'social', tiktok: '' })).body.tiktok, null);
+      assert.deepEqual((await handleScoreRequest('GET', undefined, { board: 'social' })).body, { tiktok: null });
+    });
+  } finally {
+    if (prevKey === undefined) delete process.env.KIMBIA_ADMIN_KEY;
+    else process.env.KIMBIA_ADMIN_KEY = prevKey;
+  }
+});

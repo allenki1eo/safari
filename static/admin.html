@@ -152,6 +152,7 @@
       <button data-tab="derby">⚽ Kariakoo Derby</button>
       <button data-tab="prizes">🎁 Prizes</button>
       <button data-tab="notify">🔔 Notifications</button>
+      <button data-tab="social">🔗 Social</button>
     </nav>
 
     <!-- overview -->
@@ -192,6 +193,24 @@
     <!-- prizes -->
     <section data-pane="prizes" hidden>
       <div class="card" id="prizes"></div>
+    </section>
+
+    <!-- social -->
+    <section data-pane="social" hidden>
+      <div class="card">
+        <h2>TikTok <span class="pill" id="tt-status">…</span></h2>
+        <p>Your game's TikTok account. Once it is set, a <b>Follow us on TikTok</b> button shows on the home screen and in Settings. Paste the username or the profile link; leave it empty to hide the button.</p>
+        <form id="tt" class="row">
+          <input class="grow" id="tt-handle" maxlength="80" placeholder="@kimbia.game or https://www.tiktok.com/@kimbia.game" autocomplete="off" />
+          <button class="btn" type="submit">Save</button>
+        </form>
+        <p class="muted" id="tt-out" style="margin-top:10px"></p>
+      </div>
+      <div class="card">
+        <h2>Invite links</h2>
+        <p>Every runner has their own invite link (Home → 🤝 Invite, and every challenge they share). A friend who joins through it and runs a real race earns the inviter seeds, and the friend gets a welcome gift too.</p>
+        <div class="tiles" id="invite-tiles"></div>
+      </div>
     </section>
 
     <!-- notifications -->
@@ -318,6 +337,7 @@
           ['Recovery PINs', fmt(o.pins), 'runners protected'],
           ['Open bets', fmt(o.openBets), `${fmt(o.coinsInBets)} coins at stake`],
           ['Off the boards', fmt(o.banned), 'banned runners'],
+          ['Joined by invite', fmt(o.invitesJoined), `${fmt(o.invited)} opened an invite`],
         ];
         $('tiles').innerHTML = tiles.map(([k, v, s]) => `<div class="tile"><span>${k}</span><b>${v}</b><small>${s}</small></div>`).join('');
         drawChart(o.series);
@@ -498,6 +518,40 @@
         box.innerHTML = `<p class="err">${esc(err.message)}</p>`;
       }
     };
+
+    /* ----------------------------------------------------------- social */
+    const showHandle = (h) => {
+      $('tt-status').textContent = h ? `@${h}` : 'not set';
+      $('tt-status').className = `pill ${h ? 'on' : 'off'}`;
+      $('tt-out').innerHTML = h ? `Players open <a href="https://www.tiktok.com/@${encodeURIComponent(h)}" target="_blank" rel="noopener">tiktok.com/@${esc(h)}</a>` : 'The TikTok button is hidden.';
+    };
+    loaders.social = async () => {
+      try {
+        const [{ tiktok }, o] = await Promise.all([admin('social'), admin('overview')]);
+        $('tt-handle').value = tiktok ? `@${tiktok}` : '';
+        showHandle(tiktok);
+        $('invite-tiles').innerHTML = [
+          ['Opened an invite', fmt(o.invited), 'new runners from a link'],
+          ['Joined for real', fmt(o.invitesJoined), 'finished a qualifying run'],
+        ].map(([k, v, sub]) => `<div class="tile"><span>${k}</span><b>${v}</b><small>${sub}</small></div>`).join('');
+      } catch (err) {
+        $('tt-out').innerHTML = `<span class="err">${esc(err.message)}</span>`;
+      }
+    };
+    $('tt').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = e.target.querySelector('button');
+      btn.disabled = true;
+      try {
+        const { tiktok } = await admin('social', { tiktok: $('tt-handle').value });
+        $('tt-handle').value = tiktok ? `@${tiktok}` : '';
+        showHandle(tiktok);
+      } catch (err) {
+        $('tt-out').innerHTML = `<span class="err">${esc(err.message)}</span>`;
+      } finally {
+        btn.disabled = false;
+      }
+    });
 
     /* ---------------------------------------------------- notifications */
     loaders.notify = async () => {

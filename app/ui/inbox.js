@@ -55,6 +55,8 @@ export function describe(m) {
       return { icon: '🏆', title: t("{name} couldn't beat you", { name: d.name }), body: t('You won the {pot}-seed pot.', { pot: fmt(d.pot) }), tone: 'gold' };
     case 'bet-lost':
       return { icon: '😬', title: t('{name} beat your challenge', { name: d.name }), body: t('{score} took the {pot}-seed pot. Run it back?', { score: fmt(d.score), pot: fmt(d.pot) }) };
+    case 'ref-joined':
+      return { icon: '🤝', title: t('{name} joined with your link!', { name: d.name }), body: t('{n} seeds are yours — they land in your bank on the home screen.', { n: fmt(d.amount) }), tone: 'gold' };
     case 'broadcast':
       return { icon: '📣', title: String(d.title ?? ''), body: String(d.body ?? ''), tone: 'news' };
     default:

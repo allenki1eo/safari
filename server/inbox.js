@@ -8,7 +8,7 @@ import { TOKEN_RE, getClient, hashToken, now, playerIdForToken } from './leaderb
 
 export const INBOX_DAYS = 30;
 export const INBOX_MAX = 40;
-export const KINDS = ['broadcast', 'prize', 'bet-taken', 'bet-won', 'bet-lost'];
+export const KINDS = ['broadcast', 'prize', 'bet-taken', 'bet-won', 'bet-lost', 'ref-joined'];
 
 /** Writes one message: to a runner, or to everyone when `playerId` is null. Never throws. */
 export async function postInbox(db, playerId, kind, data, ref = null) {
