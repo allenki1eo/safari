@@ -8,6 +8,7 @@
  *   ban        take a runner off (or back onto) every board, prize and derby total
  *   prizes     the latest prizes and whether they were collected
  *   broadcast  one notification to everyone who turned them on (at most every 10 minutes)
+ *   social     the game's TikTok handle (read it with no `tiktok`, set or clear it with one)
  */
 import { timingSafeEqual } from 'node:crypto';
 import { DERBY, PRIZES } from '../app/data/content.js';
@@ -16,6 +17,7 @@ import { cleanName, fail, getClient, nameKey, now } from './leaderboard.js';
 import { derbyBoard } from './derby.js';
 import { broadcast, pushKeys } from './push.js';
 import { postInbox } from './inbox.js';
+import { setSocialLinks, socialLinks } from './referrals.js';
 
 const BROADCAST_GAP = 10 * 60 * 1000;
 const TITLE_MAX = 60;
@@ -40,7 +42,7 @@ async function overview() {
   const today = darDay(now());
   const week = darWeekStart(today);
   const from = shiftDarDay(today, -13);
-  const [players, fresh, todayP, weekP, runsToday, runsAll, push, pins, bets, banned] = await Promise.all([
+  const [players, fresh, todayP, weekP, runsToday, runsAll, push, pins, bets, banned, invites] = await Promise.all([
     one(db, 'SELECT COUNT(*) AS n, SUM(best_score > 0) AS scored FROM players'),
     one(db, 'SELECT COUNT(*) AS n FROM players WHERE created_at >= ?', [dayStartIso(today)]),
     one(db, 'SELECT COUNT(*) AS n FROM daily_scores WHERE day = ?', [today]),
@@ -51,6 +53,7 @@ async function overview() {
     one(db, 'SELECT COUNT(*) AS n FROM accounts WHERE pin_hash IS NOT NULL'),
     one(db, "SELECT COUNT(*) AS n, COALESCE(SUM(stake), 0) AS coins FROM challenges WHERE stake > 0 AND status IN ('open', 'taken')"),
     one(db, 'SELECT COUNT(*) AS n FROM banned'),
+    one(db, 'SELECT COUNT(*) AS n, COUNT(qualified_ms) AS joined FROM referrals'),
   ]);
   const daily = (await db.execute({
     sql: 'SELECT day, COUNT(*) AS players FROM daily_scores WHERE day BETWEEN ? AND ? GROUP BY day',
@@ -82,6 +85,8 @@ async function overview() {
       openBets: num(bets.n),
       coinsInBets: num(bets.coins),
       banned: num(banned.n),
+      invited: num(invites.n),
+      invitesJoined: num(invites.joined),
       pushReady: !!pushKeys(),
       series,
       derby: await derbyBoard(),
@@ -215,6 +220,7 @@ export async function handleAdminRequest(method, body) {
       case 'ban': return await ban(body);
       case 'prizes': return await prizes();
       case 'broadcast': return await sendBroadcast(body);
+      case 'social': return body?.tiktok === undefined ? { status: 200, body: await socialLinks() } : await setSocialLinks(body);
       default: return bad('Unknown action.');
     }
   } catch (err) {

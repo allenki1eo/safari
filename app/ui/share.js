@@ -160,6 +160,7 @@ export function challengeUrl(run) {
     ...run,
     name: run.name || save.name,
     runner: run.runner || save.runner,
+    ref: run.ref ?? (save.playerId != null ? Number(save.playerId).toString(36) : undefined),
   });
 }
 

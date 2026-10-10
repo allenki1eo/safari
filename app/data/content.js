@@ -241,6 +241,12 @@ export const SHOUTS = ['Hakuna shida!', 'Safi sana!', 'Pole pole? Never!', 'Kimb
  * Sized against the shop: a week's win buys Amani, a month's win buys Kito.
  */
 const podium = (gold, silver, bronze, rest) => [gold, silver, bronze, ...Array(7).fill(rest)];
+/**
+ * Invite links: the inviter earns `reward` seeds for each friend who joins through their link and
+ * finishes a run of `qualifyM` metres (up to `cap` friends); the friend gets `welcome` seeds too.
+ */
+export const REFERRAL = { reward: 500, welcome: 250, qualifyM: 500, cap: 20 };
+
 export const PRIZES = {
   day: podium(1000, 600, 400, 100),
   week: podium(6000, 3000, 1500, 400),

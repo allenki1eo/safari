@@ -102,10 +102,15 @@ export async function postScore(entry) {
       duration: entry.duration ?? 0,
       mult: entry.mult ?? undefined,
       side: save.side ?? undefined, // Derby Day
+      ref: save.ref ?? undefined, // the friend whose invite brought this runner (read once, when they are created)
     }),
   });
   const data = await readJson(res);
   if (!res.ok) throw Object.assign(new Error(data.error || 'Could not post your score'), { status: res.status, code: data.code, suggestions: data.suggestions ?? [] });
+  if (save.ref) {
+    delete save.ref; // their runner exists now; the invite has done its job
+    persist();
+  }
   return data;
 }
 

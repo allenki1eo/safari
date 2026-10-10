@@ -948,3 +948,81 @@ input { font: inherit; }
 .lb-you[hidden] { display: none; }
 .lb-you .k { margin: 0 8px 5px; font-size: 11px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sun-2); }
 .lb-you .lb-row { box-shadow: 0 -6px 18px rgba(0,0,0,0.35); }
+
+/* ------------------------------------------------------- invites & TikTok */
+/* home: best run on the left, the invite chip on the right */
+.title-meta { display: flex; align-items: center; justify-content: center; gap: 8px; }
+/* the best run gives way first on narrow phones, so the row stays one line */
+.title-meta .best-line { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.title-meta > button, .title-meta > a { flex: none; }
+@media (max-width: 380px) {
+  .title-meta .best-line { font-size: 12.5px; }
+  .invite-chip { min-height: 34px; padding: 0 10px 0 8px; font-size: 12.5px; }
+  .tt-icon { width: 34px; height: 34px; }
+}
+.invite-chip {
+  display: inline-flex; align-items: center; gap: 5px; min-height: 36px; padding: 0 12px 0 10px; border-radius: 99px;
+  background: linear-gradient(180deg, rgba(60,199,181,0.32), rgba(20,128,111,0.42)); border: 1px solid rgba(60,199,181,0.7);
+  color: var(--cream); font-size: 13px; font-weight: 900; box-shadow: 0 4px 14px rgba(0,0,0,0.25); white-space: nowrap;
+}
+.invite-chip b { color: var(--sun-2); }
+.invite-chip:active { transform: scale(0.95); }
+.invite-card { background: linear-gradient(90deg, rgba(20,128,111,0.94), rgba(60,199,181,0.9)); }
+
+/* the TikTok note, on dark glass so its colours read */
+.tt { width: 22px; height: 22px; display: block; flex: none; }
+.tt-icon { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: #111; border: 1px solid rgba(255,255,255,0.22); box-shadow: 0 4px 14px rgba(0,0,0,0.25); flex: none; }
+.tt-icon:active { transform: scale(0.93); }
+.tt-icon .tt { width: 20px; height: 20px; }
+.tt-label { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tt-label .row-note { flex-basis: 100%; }
+.btn.tt-btn { --c1: #2b2b2b; --c2: #111; --edge: #000; --ink: #fff; text-decoration: none; }
+
+/* results: a quiet nudge under the challenges */
+.invite-line {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; margin-top: 12px;
+  padding: 10px 12px; border-radius: 14px; background: rgba(60,199,181,0.14); border: 1px dashed rgba(60,199,181,0.6);
+  color: var(--cream); font-size: 13.5px; font-weight: 800; text-align: left;
+}
+.invite-line .e { font-size: 22px; }
+.invite-line b { color: var(--sun-2); }
+.invite-line .go { font-size: 22px; color: var(--sun-2); }
+
+/* the invite screen */
+.invite-hero {
+  position: relative; overflow: hidden; padding: 18px 16px 16px; border-radius: 22px; text-align: center;
+  background: radial-gradient(120% 90% at 50% 0%, rgba(60,199,181,0.45), rgba(20,128,111,0.25) 45%, rgba(0,0,0,0.25)); border: 1px solid rgba(60,199,181,0.45);
+}
+.invite-hero .gifts span { display: inline-grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; font-size: 36px; background: rgba(0,0,0,0.25); box-shadow: inset 0 0 0 2px rgba(255,201,64,0.5); animation: pop 0.5s ease both; }
+.invite-hero h3 { margin: 10px 0 12px; font-family: var(--display); font-size: 24px; line-height: 1.1; }
+.invite-hero .deal { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.invite-hero .deal div { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px; padding: 10px 6px; border-radius: 16px; background: rgba(0,0,0,0.28); }
+.invite-hero .deal b { font-family: var(--display); font-size: 26px; color: var(--sun-2); }
+.invite-hero .deal small { flex-basis: 100%; font-size: 12px; font-weight: 800; color: rgba(255,244,222,0.75); }
+.invite-hero p { margin: 12px 4px 0; font-size: 13.5px; color: rgba(255,244,222,0.85); }
+.invite-body { display: flex; flex-direction: column; gap: 12px; }
+.invite-link { display: flex; gap: 8px; align-items: stretch; padding: 6px; border-radius: 16px; background: rgba(0,0,0,0.3); border: 1px solid var(--line); }
+.invite-link input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--cream); font: inherit; font-size: 14px; font-weight: 800; padding: 0 8px; }
+.invite-link .btn { min-height: 44px; }
+.invite-share { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.invite-share .btn { min-height: 52px; display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; font-size: 18px; }
+.invite-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.invite-tiles div { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px; border-radius: 14px; background: rgba(0,0,0,0.25); }
+.invite-tiles b { font-family: var(--display); font-size: 24px; color: var(--sun-2); }
+.invite-tiles small { font-size: 11.5px; font-weight: 800; color: rgba(255,244,222,0.72); text-align: center; }
+.invite-friends { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.invite-friends span { padding: 5px 10px; border-radius: 99px; background: rgba(0,0,0,0.25); font-size: 13px; font-weight: 800; color: rgba(255,244,222,0.75); }
+.invite-friends span.done { background: rgba(127,174,58,0.25); color: #d6f5a8; }
+.invite-empty { margin: 10px 4px 0; font-size: 13px; text-align: center; }
+.invite-name { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 18px; background: rgba(0,0,0,0.28); border: 1px solid var(--line); text-align: left; }
+.invite-name b { font-size: 16px; }
+.invite-name .btn { margin-top: 4px; }
+.invite-name p { margin: 0; font-size: 13px; }
+.tt-card {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 18px;
+  background: linear-gradient(90deg, #111, #1d1d1d); border: 1px solid rgba(255,255,255,0.14); color: var(--cream); text-decoration: none;
+}
+.tt-card .tt { width: 30px; height: 30px; }
+.tt-card b { display: block; font-size: 15px; }
+.tt-card small { display: block; font-size: 12px; color: rgba(255,244,222,0.65); }
+.tt-card .go { padding: 7px 14px; border-radius: 99px; background: #FE2C55; color: #fff; font-weight: 900; font-size: 13px; }

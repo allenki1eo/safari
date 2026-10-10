@@ -1,4 +1,5 @@
-import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO, OUTFITS, outfitId, HUNT_WORDS, BOOSTS, DERBY, derbyLive, derbyShown, wearable } from '../data/content.js';
+import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO, OUTFITS, outfitId, HUNT_WORDS, BOOSTS, DERBY, REFERRAL, derbyLive, derbyShown, wearable } from '../data/content.js';
+import { TIKTOK_ICON, captureInvite, fetchInviter, fetchInvites, fetchSocial, inviteLink, tiktokUrl } from './social.js';
 import { adoptSide, fetchDerby, joinSide, km } from './derby.js';
 import { applyUpdate, markUpdateSeen, unseenUpdate, updateWaiting } from './updates.js';
 import { ago, describe, fetchInbox, markInboxRead, unreadCount } from './inbox.js';
@@ -104,6 +105,9 @@ export class UI {
     // progress carried over from another browser (the iPhone home-screen app opens with this)
     const restore = cleanCode(this.params.get('restore'));
     if (restore) this.restoreFromLink(restore);
+    // a friend's invite link: kept on a brand-new device so the invite counts once they run
+    const invite = captureInvite(this.params);
+    if (invite) this.greetInvite(invite);
     this.missionTick = 0;
     this.selIdx = Math.max(0, RUNNERS.findIndex((r) => r.id === save.runner));
     this.postedRunId = null;
@@ -188,13 +192,17 @@ export class UI {
           <div class="sub">${t('SPIRIT OF THE SERENGETI')}</div>
         </div>
         <div class="title-bottom">
-          ${this.challengeCardHtml()}
+          ${this.challengeCardHtml() || this.inviteCardHtml()}
           ${derbyShown() ? this.derbyCardHtml() : `<button class="prize-ribbon" data-act="board" data-click>
             <span class="gift">🎁</span>
             <span class="what">${t("Today's #1 wins {n}", { n: `<b>${fmt(PRIZES.day[0])}</b>` })}<i class="seed"></i></span>
             <span class="ends" data-ends>${timeLeft(closesAt('day'))}</span>
           </button>`}
-          ${save.best ? `<div class="best-line">${t('Best run {score} pts · {dist}m', { score: `<b>${fmt(save.best)}</b>`, dist: `<b>${fmt(save.bestDistance)}` })}</b></div>` : ''}
+          <div class="title-meta">
+            ${save.best ? `<div class="best-line">${t('Best run {score} pts · {dist}m', { score: `<b>${fmt(save.best)}</b>`, dist: `<b>${fmt(save.bestDistance)}` })}</b></div>` : ''}
+            <button class="invite-chip" data-act="invite" data-click>🤝 ${t('Invite')} <b>+${fmt(REFERRAL.reward)}</b><i class="seed"></i></button>
+            ${save.tiktok ? this.tiktokButtonHtml() : ''}
+          </div>
           <button class="start-chip" data-act="journey" data-click>
             <span class="flag">${COUNTRIES[start.country].flag}</span>
             <span><small>${t('Starting at')}</small><b>${esc(start.name)}</b></span>
@@ -225,10 +233,13 @@ export class UI {
       else if (act === 'take-bet') this.takeBet(e.target.closest('button'));
       else if (act === 'derby') this.derbySheet();
       else if (act === 'inbox') this.showInbox();
+      else if (act === 'invite') this.inviteSheet();
     });
     this.show(el);
     this.collectWinnings();
     this.collectPrizeMoney();
+    this.collectInvites();
+    this.paintTiktok(el);
     this.checkForUpdate(el);
     // the daily reward greets you on the title screen only; it never opens over a run
     if (save.introSeen && dailyDue()) {
@@ -797,6 +808,7 @@ export class UI {
           <div class="story-unlock"><span class="e">${COUNTRIES[reg.country].flag}</span><div><b>${esc(reg.name)} · ${esc(reg.title)}</b><br><span class="muted">${next ? t('Next: {place}', { place: `${COUNTRIES[next.country].flag} ${esc(next.name)}` }) : t('You crossed all three countries!')}</span></div></div>
           <div class="bet-slot"></div>
           <div class="chal-slot"></div>
+          <button class="invite-line" type="button" data-act="invite"><span class="e">🤝</span><span>${t('Invite a friend: you get {a}, they get {b}', { a: `<b>${fmt(REFERRAL.reward)}</b>`, b: `<b>${fmt(REFERRAL.welcome)}</b>` })}<i class="seed"></i></span><span class="go">›</span></button>
           <div class="over-actions">
             <button class="btn again" type="button" data-act="again">${t('↻ Run again')}</button>
             <button class="btn teal share" type="button" data-act="share" aria-label="WhatsApp">${ICON.share.replace('<svg', '<svg width="22" height="22"')}<span>WhatsApp</span></button>
@@ -814,6 +826,8 @@ export class UI {
         this.challengeSheet(run);
       } else if (act === 'board') {
         this.showBoard();
+      } else if (act === 'invite') {
+        this.inviteSheet();
       }
     });
     this.overlay(el);
@@ -2598,6 +2612,8 @@ export class UI {
           ${this.notifyRow()}
           ${install.offered ? `<div class="toggle-row"><span>${t('📲 Play from your home screen')}</span><button class="btn small" data-act="install" data-click>${t('Install')}</button></div>` : ''}
           ${save.name ? `<div class="toggle-row"><span>${t('🔐 Recovery PIN')}${save.pinSet ? ` <em class="pin-on">${t('on')}</em>` : ''}</span><button class="btn small ${save.pinSet ? 'ghost' : ''}" data-act="pin" data-click>${save.pinSet ? t('Change') : t('Set PIN')}</button></div>` : ''}
+          <div class="toggle-row"><span>${t('🤝 Invite friends')}<small class="row-note">${t('+{n} seeds for each friend who joins', { n: fmt(REFERRAL.reward) })}</small></span><button class="btn small" data-act="invite" data-click>${t('Invite')}</button></div>
+          ${save.tiktok ? `<div class="toggle-row"><span class="tt-label">${TIKTOK_ICON} ${t('Follow us on TikTok')}<small class="row-note">@${esc(save.tiktok)}</small></span><a class="btn small tt-btn" href="${tiktokUrl(save.tiktok)}" target="_blank" rel="noopener" data-click>${t('Follow')}</a></div>` : ''}
           <div class="toggle-row"><span>${t('🔑 Get my runner back')}</span><button class="btn small ghost" data-act="recover" data-click>${t('Open')}</button></div>
           <div class="toggle-row"><span>${t('📦 Move my progress')}</span><button class="btn small ghost" data-act="progress" data-click>${t('Open')}</button></div>
           <div style="margin:18px 0 6px" class="muted">${t('Your runner name (shown on challenges)')}</div>
@@ -2614,6 +2630,7 @@ export class UI {
       if (e.target.closest('[data-act=progress]')) return this.progressSheet();
       if (e.target.closest('[data-act=pin]')) return this.pinSheet();
       if (e.target.closest('[data-act=recover]')) return this.recoverSheet();
+      if (e.target.closest('[data-act=invite]')) return this.inviteSheet();
       const lb = e.target.closest('[data-lang]');
       if (lb) return setLang(lb.dataset.lang);
       const qb = e.target.closest('[data-q]');
@@ -2730,6 +2747,200 @@ export class UI {
   /** True while the title screen is what the player sees (no run, no other modal on top). */
   onTitle() {
     return this.game.state === 'menu' && !!this.screen?.classList.contains('title') && !document.querySelector('.modal-wrap');
+  }
+
+  /* ------------------------------------------------------- invites & TikTok */
+  /** A friend's invite opened this brand-new game: find out who, for the welcome card. */
+  async greetInvite(code) {
+    const who = await fetchInviter(code);
+    if (!who) {
+      // not a real invite: forget it
+      delete save.ref;
+      delete save.invitedBy;
+      persist();
+      return;
+    }
+    save.invitedBy = { code, name: who.name };
+    persist();
+    const card = this.screen?.querySelector('.invite-card');
+    if (card) card.outerHTML = this.inviteCardHtml();
+  }
+
+  /** "Juma invited you": shown until their first qualifying run. */
+  inviteCardHtml() {
+    const by = save.invitedBy;
+    if (!by || (save.bestDistance ?? 0) >= REFERRAL.qualifyM) return '';
+    const who = by.name ? `<b>${esc(by.name)}</b>` : t('A friend');
+    return `
+      <div class="challenge challenge-card invite-card">
+        <span class="ch-ico">🤝</span>
+        <div class="ch-body">
+          <div>${t('{name} invited you to Kimbia!', { name: who })}</div>
+          <div class="ch-sub">${t('Run {m} m and you both get seeds: {n} for you.', { m: fmt(REFERRAL.qualifyM), n: `<b>${fmt(REFERRAL.welcome)}</b>&nbsp;<span class="seed"></span>` })}</div>
+        </div>
+      </div>`;
+  }
+
+  tiktokButtonHtml() {
+    return `<a class="tt-icon" href="${tiktokUrl(save.tiktok)}" target="_blank" rel="noopener" data-click aria-label="${t('Follow us on TikTok')}" title="${t('Follow us on TikTok')}">${TIKTOK_ICON}</a>`;
+  }
+
+  /** Learns (or forgets) the game's TikTok, then shows or hides its button on the home screen. */
+  async paintTiktok(el) {
+    if (this.socialAt && Date.now() - this.socialAt < 10 * 60 * 1000) return;
+    this.socialAt = Date.now();
+    const handle = await fetchSocial();
+    if (!el.isConnected) return;
+    const btn = el.querySelector('.tt-icon');
+    if (!handle) return btn?.remove();
+    const html = this.tiktokButtonHtml();
+    if (btn) btn.outerHTML = html;
+    else el.querySelector('.invite-chip')?.insertAdjacentHTML('afterend', html);
+  }
+
+  /** Seeds for friends who joined (and a newcomer's welcome gift), collected on the home screen. */
+  async collectInvites() {
+    if (save.playerId == null || this.collectingInvites || Date.now() - (this.invitesAt ?? 0) < 60000) return;
+    this.collectingInvites = true;
+    try {
+      const data = await fetchInvites();
+      this.invitesAt = Date.now();
+      if (data.welcome > 0) {
+        const by = save.invitedBy?.name;
+        delete save.invitedBy;
+        persist();
+        this.screen?.querySelector('.invite-card')?.remove();
+        this.toast('🎁', by ? t('Welcome gift from {name}: +{n} seeds', { name: `<b>${esc(by)}</b>`, n: fmt(data.welcome) }) : t('Welcome gift: +{n} seeds', { n: fmt(data.welcome) }), 3600);
+      }
+      if (data.collected > 0) {
+        this.later(() => this.toast('🤝', t('Your friends joined! +{n} seeds', { n: fmt(data.collected) }), 3600), data.welcome > 0 ? 3800 : 0);
+      }
+      if (data.welcome > 0 || data.collected > 0) {
+        audio.buy();
+        const chip = this.screen?.querySelector('.title-top .chip span:last-child');
+        if (chip) chip.textContent = fmt(save.seeds);
+      }
+    } catch {
+      /* try again next time */
+    } finally {
+      this.collectingInvites = false;
+    }
+  }
+
+  /** Your invite link, how to send it, and the friends who came with it. */
+  inviteSheet() {
+    this.root.querySelector('.invite-screen')?.remove();
+    const el = $(`
+      <div class="screen scrim-full lb-screen invite-screen">
+        <div class="sheet-head">
+          <button class="icon-btn" data-act="back" data-click aria-label="${t('Back')}">${ICON.back}</button>
+          <h2>${t('Invite friends')}</h2>
+          <div class="chip">🤝</div>
+        </div>
+        <div class="sheet-body">
+          <div class="invite-hero">
+            <div class="gifts"><span>🤝</span></div>
+            <h3>${t('Bring your friends, earn seeds')}</h3>
+            <div class="deal">
+              <div><b>+${fmt(REFERRAL.reward)}</b><i class="seed"></i><small>${t('for you')}</small></div>
+              <div><b>+${fmt(REFERRAL.welcome)}</b><i class="seed"></i><small>${t('for your friend')}</small></div>
+            </div>
+            <p>${t('When a friend opens your link, picks a name and runs {m} m, you both get seeds.', { m: fmt(REFERRAL.qualifyM) })}</p>
+          </div>
+          <div class="invite-body"><p class="muted">${t('Loading…')}</p></div>
+          ${save.tiktok ? `<a class="tt-card" href="${tiktokUrl(save.tiktok)}" target="_blank" rel="noopener" data-click>${TIKTOK_ICON}<span><b>${t('Follow us on TikTok')}</b><small>@${esc(save.tiktok)} · ${t('clips, events and prize news')}</small></span><span class="go">${t('Follow')}</span></a>` : ''}
+        </div>
+      </div>`);
+    const body = el.querySelector('.invite-body');
+    el.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('[data-click]')) audio.click();
+    });
+    el.querySelector('[data-act=back]').addEventListener('click', () => el.remove());
+    this.overlay(el);
+    this.fillInvites(body);
+  }
+
+  async fillInvites(body) {
+    if (save.playerId == null) {
+      // the link is made from their runner, so they pick a name first
+      body.innerHTML = `
+        <div class="invite-name">
+          <b>${t('First, pick your runner name')}</b>
+          <p class="muted">${t('Your friends will see it when they open your link.')}</p>
+          <input class="name-input" data-invite-name placeholder="${t('e.g. Zuri')}" value="${esc(save.name)}" ${NAME_ATTRS} />
+          <div class="name-status" data-name-status></div>
+          <button class="btn" data-act="claim" data-click>${t('Get my invite link')}</button>
+        </div>`;
+      const input = body.querySelector('[data-invite-name]');
+      const field = bindNameField(input, body.querySelector('[data-name-status]'), { current: save.name });
+      const go = async () => {
+        const name = runnerName(clampName(input.value));
+        if (!name) return input.focus();
+        const btn = body.querySelector('[data-act=claim]');
+        btn.disabled = true;
+        btn.textContent = t('Saving…');
+        const res = await this.claimName(name, { quiet: true });
+        if (!body.isConnected) return;
+        btn.disabled = false;
+        btn.textContent = t('Get my invite link');
+        if (res.taken) return field.taken(name, res.suggestions);
+        if (res.error || save.playerId == null) return this.toast('📡', t("Couldn't reach the leaderboard. Your name wasn't changed."));
+        this.fillInvites(body);
+      };
+      body.querySelector('[data-act=claim]').addEventListener('click', go);
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          go();
+        }
+      });
+      return;
+    }
+    const link = inviteLink();
+    const message = t('Run with me in KIMBIA! 🦁 Use my link and we both get free seeds:');
+    body.innerHTML = `
+      <div class="invite-link">
+        <input readonly value="${esc(link)}" aria-label="${t('Your invite link')}" />
+        <button class="btn small" data-act="copy" data-click>${t('Copy')}</button>
+      </div>
+      <div class="invite-share">
+        <a class="btn teal" href="https://wa.me/?text=${encodeURIComponent(`${message} ${link}`)}" target="_blank" rel="noopener" data-click>${ICON.share.replace('<svg', '<svg width="20" height="20"')} WhatsApp</a>
+        ${navigator.share ? `<button class="btn ghost" data-act="share" data-click>📤 ${t('More')}</button>` : ''}
+      </div>
+      <div class="invite-stats" data-stats><p class="muted">${t('Loading…')}</p></div>`;
+    body.querySelector('[data-act=copy]').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      try {
+        await navigator.clipboard.writeText(link);
+      } catch {
+        const input = body.querySelector('.invite-link input');
+        input.select();
+        document.execCommand?.('copy');
+      }
+      btn.textContent = t('Copied ✓');
+      setTimeout(() => btn.isConnected && (btn.textContent = t('Copy')), 1800);
+    });
+    body.querySelector('[data-act=share]')?.addEventListener('click', () => {
+      navigator.share({ title: 'KIMBIA!', text: message, url: link }).catch(() => {});
+    });
+    const stats = body.querySelector('[data-stats]');
+    try {
+      const data = await fetchInvites();
+      if (!stats.isConnected) return;
+      if (data.collected > 0) this.toast('🤝', t('Your friends joined! +{n} seeds', { n: fmt(data.collected) }), 3200);
+      const full = data.joined >= data.cap;
+      stats.innerHTML = `
+        <div class="invite-tiles">
+          <div><b>${fmt(data.joined)}</b><small>${t('friends joined')}</small></div>
+          <div><b>${fmt(data.pending)}</b><small>${t('on their way')}</small></div>
+          <div><b>${fmt(data.earned)}</b><small>${t('seeds earned')}</small></div>
+        </div>
+        ${data.friends.length ? `<div class="invite-friends">${data.friends.map((f) => `<span class="${f.done ? 'done' : ''}">${f.done ? '✓' : '⏳'} ${esc(f.name)}</span>`).join('')}</div>` : `<p class="muted invite-empty">${t('No friends yet. Send your link on WhatsApp — every friend who runs {m} m earns you {n} seeds.', { m: fmt(REFERRAL.qualifyM), n: fmt(REFERRAL.reward) })}</p>`}
+        <p class="muted lb-foot">${full ? t('You have earned the most seeds invites can give — thank you for spreading the word!') : t('Seeds for up to {n} friends. ⏳ means they still need to run {m} m.', { n: fmt(data.cap), m: fmt(REFERRAL.qualifyM) })}</p>`;
+    } catch {
+      if (!stats.isConnected) return;
+      stats.innerHTML = `<p class="muted">${t("Couldn't load your friends right now. Your link still works.")}</p>`;
+    }
   }
 
   /** One pop-up per visit: a nudge only shows if nothing else has asked this visit. */

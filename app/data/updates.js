@@ -5,6 +5,16 @@
  */
 export const UPDATES = [
   {
+    id: '2026-10-10-invite',
+    emoji: '🤝',
+    title: 'Invite friends, earn seeds',
+    items: [
+      'Tap 🤝 Invite on the home screen to get your own link.',
+      'Every friend who joins and runs 500 m earns you 500 seeds — and they get 250 too.',
+      'Your challenge links count as invites as well.',
+    ],
+  },
+  {
     id: '2026-10-09-board',
     emoji: '🏆',
     title: 'Every runner is on the board',
