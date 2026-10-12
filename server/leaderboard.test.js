@@ -1062,3 +1062,21 @@ test('stale "took your bet" messages from before results replaced them are tidie
     assert.deepEqual(kinds, ['bet-won']);
   });
 });
+
+test('prize boards show the real run next to what it counts for', async () => {
+  await withDb(async () => {
+    setLeaderboardClock(() => new Date('2026-10-12T09:00:00Z'));
+    await post({ token: T.juma, name: 'Juma', score: 26_000, distance: 1000, duration: 60, mult: 13 });
+    await post({ token: T.neema, name: 'Neema', score: 12_000, distance: 1000, duration: 60, mult: 2 });
+    for (const board of ['day', 'week', 'month']) {
+      for (const q of [{ board }, { board, from: '0', me: '1' }]) {
+        const { top, you } = (await handleScoreRequest('GET', undefined, q)).body;
+        const juma = top.find((r) => r.name === 'Juma');
+        assert.deepEqual([juma.run, juma.score, juma.mult], [26_000, 20_000, 13], `${board} ${JSON.stringify(q)}`);
+        const neema = top.find((r) => r.name === 'Neema');
+        assert.deepEqual([neema.run, neema.score], [12_000, 12_000]);
+        if (q.me) assert.equal(you.run, 26_000);
+      }
+    }
+  });
+});
