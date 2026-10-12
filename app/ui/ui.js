@@ -1,4 +1,4 @@
-import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO, OUTFITS, outfitId, HUNT_WORDS, BOOSTS, DERBY, REFERRAL, derbyLive, derbyShown, wearable } from '../data/content.js';
+import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO, OUTFITS, outfitId, HUNT_WORDS, BOOSTS, DERBY, REFERRAL, TUTORIAL, derbyLive, derbyShown, wearable } from '../data/content.js';
 import { TIKTOK_ICON, captureInvite, fetchInviter, fetchInvites, fetchSocial, inviteLink, tiktokUrl } from './social.js';
 import { adoptSide, fetchDerby, joinSide, km } from './derby.js';
 import { applyUpdate, markUpdateSeen, unseenUpdate, updateWaiting } from './updates.js';
@@ -33,6 +33,19 @@ const $ = (html) => {
 };
 const fmt = (n) => Math.floor(n).toLocaleString();
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+/** The moves, for the controls card and How to play (gestures animate in styles.css). */
+const CONTROLS = [
+  { g: 'lr', act: 'lane', label: 'Swipe ← → to change lane', why: 'Dodge boulders, rhinos and trucks.' },
+  { g: 'up', act: 'up', label: 'Swipe ↑ to jump', why: 'Leap over logs and rivers.' },
+  { g: 'down', act: 'down', label: 'Swipe ↓ to slide', why: 'Duck under branches and gates.' },
+];
+
+/** The keyboard version of a move, on computers only. */
+function desktopKeys(act) {
+  if (typeof matchMedia !== 'function' || !matchMedia('(hover: hover) and (pointer: fine)').matches) return '';
+  return { lane: t('← → or A D keys'), up: t('↑, W or Space'), down: t('↓ or S') }[act] ?? '';
+}
 
 const ICON = {
   pause: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1.5"/><rect x="14" y="4" width="4" height="16" rx="1.5"/></svg>',
@@ -133,6 +146,10 @@ export class UI {
     });
     game.on('chapter', (c) => this.onChapter(c));
     game.on('tutorial', (t) => this.tip(t));
+    game.on('move', (a) => {
+      const want = this.coachAct;
+      if (want && (want === 'lane' ? a === 'left' || a === 'right' : a === want)) this.dismissCoach(true);
+    });
     game.on('shout', (s) => this.shout(s));
     game.on('over', (r) => this.onOver(r));
     game.on('pause', () => this.showPause());
@@ -366,6 +383,8 @@ export class UI {
     this.buildHud();
     this.game.start();
     this.missionTick = 0;
+    // the tutorial run teaches move by move; the next few runs open with the moves at a glance
+    if (save.tutorialDone && (save.runs ?? 0) < 4) this.controlsCard();
   }
 
   buildHud() {
@@ -591,8 +610,91 @@ export class UI {
     setTimeout(() => f.remove(), 650);
   }
 
+  /**
+   * A tutorial step, as a coach card over the trail: the move, an animated gesture, and how far
+   * through the lesson they are. It stays until the player makes that move (then cheers), so
+   * nobody misses it; a step with nothing to do fades on its own.
+   */
   tip(tp) {
-    this.feed({ icon: tp.icon, text: tp.text, kind: 'tip', ms: 3200 });
+    if (!this.hud) return;
+    this.dismissCoach(false, true);
+    const step = Math.max(0, TUTORIAL.indexOf(tp));
+    const keys = desktopKeys(tp.act);
+    const el = $(`
+      <div class="coach" role="status">
+        <div class="gest g-${tp.g ?? 'tap'}" aria-hidden="true"><i></i></div>
+        <div class="tx"><b>${esc(tp.text)}</b>${keys ? `<small>${keys}</small>` : ''}</div>
+        <div class="steps" aria-label="${t('Step {n} of {m}', { n: step + 1, m: TUTORIAL.length })}">${TUTORIAL.map((_, i) => `<i class="${i < step ? 'done' : i === step ? 'on' : ''}"></i>`).join('')}</div>
+      </div>`);
+    this.hud.appendChild(el);
+    this.coachEl = el;
+    this.coachAct = tp.act ?? null;
+    this.coachTimer = setTimeout(() => this.dismissCoach(false), tp.act ? 7000 : 4200);
+  }
+
+  /** Clears the coach card: with a cheer when they made the move, quietly otherwise. */
+  dismissCoach(done, now = false) {
+    const el = this.coachEl;
+    clearTimeout(this.coachTimer);
+    this.coachEl = null;
+    this.coachAct = null;
+    if (!el) return;
+    if (now) return el.remove();
+    if (done) {
+      el.classList.add('done');
+      el.querySelector('.tx').innerHTML = `<b>${t('✓ Nice!')}</b>`;
+      audio.tone('sine', 660, 990, 0.12, 0.08);
+      setTimeout(() => el.classList.add('out'), 520);
+    } else {
+      el.classList.add('out');
+    }
+    setTimeout(() => el.remove(), 900);
+  }
+
+  /** The moves at a glance, for a few seconds at the start of a player's early runs. */
+  controlsCard() {
+    if (!this.hud) return;
+    this.hud.querySelector('.controls-card')?.remove();
+    const el = $(`<div class="controls-card" aria-hidden="true">${CONTROLS.map((c) => `
+      <div class="ctl"><div class="gest g-${c.g}"><i></i></div><span>${t(c.label)}</span></div>`).join('')}</div>`);
+    this.hud.appendChild(el);
+    setTimeout(() => el.classList.add('out'), 4200);
+    setTimeout(() => el.remove(), 4800);
+  }
+
+  /** How to play: every move, the shield and the animal allies, with a practice run. */
+  howToPlay({ fromPause = false } = {}) {
+    const el = $(`
+      <div class="screen modal-wrap scrim-full">
+        <div class="panel modal how-to">
+          <h2>${t('How to play')}</h2>
+          <div class="muted">${t('Outrun Fisi the hyena king across Tanzania, Kenya and Uganda.')}</div>
+          <div class="how-list">
+            ${CONTROLS.map((c) => `
+              <div class="how-row"><div class="gest g-${c.g}"><i></i></div><div><b>${t(c.label)}</b><small>${t(c.why)}${desktopKeys(c.act) ? ` · ${desktopKeys(c.act)}` : ''}</small></div></div>`).join('')}
+            <div class="how-row"><div class="how-ico">🛡️</div><div><b>${t('Tap the shield')}</b><small>${t('An Ngao charm takes one crash for you. Get more in Allies.')}</small></div></div>
+            <div class="how-row"><div class="how-ico">🐾</div><div><b>${t('Grab glowing totems')}</b><small>${t('An animal ally joins you: ride Tembo, fly with Tai, dash with Duma…')}</small></div></div>
+            <div class="how-row"><div class="how-ico"><span class="seed"></span></div><div><b>${t('Collect seeds')}</b><small>${t('Spend them on runners and allies, and to revive after a crash.')}</small></div></div>
+          </div>
+          <div class="stack">
+            <button class="btn" data-act="ok" data-click>${fromPause ? t('▶ Back to the run') : t('Got it!')}</button>
+            ${fromPause ? '' : `<button class="btn ghost" data-act="practice" data-click>${t('🎓 Practice run')}</button>`}
+          </div>
+        </div>
+      </div>`);
+    el.addEventListener('click', (e) => {
+      const act = e.target.closest('[data-act]')?.dataset.act;
+      if (act === 'ok' || e.target === el) el.remove();
+      if (act === 'practice') {
+        // the next run is the scripted lesson again
+        save.tutorialDone = false;
+        persist();
+        el.remove();
+        this.root.querySelectorAll('.modal-wrap').forEach((m) => m.remove());
+        this.play();
+      }
+    });
+    this.overlay(el);
   }
 
   /** Shows the word being hunted, its found letters lit; a new word slides in fresh. */
@@ -674,6 +776,7 @@ export class UI {
           ${this.sizeControl()}
           <div class="stack">
             <button class="btn" data-act="resume" data-click>${t('▶ Keep running')}</button>
+            <button class="btn ghost" data-act="how" data-click>${t('❓ How to play')}</button>
             <div class="row2">
               <button class="btn ghost" data-act="sound" data-click>${save.music ? t('🔊 Music') : t('🔇 Music')}</button>
               <button class="btn ghost" data-act="home" data-click>${t('🏠 Home')}</button>
@@ -686,6 +789,8 @@ export class UI {
       if (act === 'resume') {
         el.remove();
         this.countdownResume();
+      } else if (act === 'how') {
+        this.howToPlay({ fromPause: true });
       } else if (act === 'sound') {
         save.music = !save.music;
         audio.setMusic(save.music);
@@ -2659,6 +2764,7 @@ export class UI {
           ${this.notifyRow()}
           ${install.offered ? `<div class="toggle-row"><span>${t('📲 Play from your home screen')}</span><button class="btn small" data-act="install" data-click>${t('Install')}</button></div>` : ''}
           ${save.name ? `<div class="toggle-row"><span>${t('🔐 Recovery PIN')}${save.pinSet ? ` <em class="pin-on">${t('on')}</em>` : ''}</span><button class="btn small ${save.pinSet ? 'ghost' : ''}" data-act="pin" data-click>${save.pinSet ? t('Change') : t('Set PIN')}</button></div>` : ''}
+          <div class="toggle-row"><span>${t('❓ How to play')}</span><button class="btn small ghost" data-act="how" data-click>${t('Open')}</button></div>
           <div class="toggle-row"><span>${t('🤝 Invite friends')}<small class="row-note">${t('+{n} seeds for each friend who joins', { n: fmt(REFERRAL.reward) })}</small></span><button class="btn small" data-act="invite" data-click>${t('Invite')}</button></div>
           ${save.tiktok ? `<div class="toggle-row"><span class="tt-label">${TIKTOK_ICON} ${t('Follow us on TikTok')}<small class="row-note">@${esc(save.tiktok)}</small></span><a class="btn small tt-btn" href="${tiktokUrl(save.tiktok)}" target="_blank" rel="noopener" data-click>${t('Follow')}</a></div>` : ''}
           <div class="toggle-row"><span>${t('🔑 Get my runner back')}</span><button class="btn small ghost" data-act="recover" data-click>${t('Open')}</button></div>
@@ -2678,6 +2784,7 @@ export class UI {
       if (e.target.closest('[data-act=pin]')) return this.pinSheet();
       if (e.target.closest('[data-act=recover]')) return this.recoverSheet();
       if (e.target.closest('[data-act=invite]')) return this.inviteSheet();
+      if (e.target.closest('[data-act=how]')) return this.howToPlay();
       const lb = e.target.closest('[data-lang]');
       if (lb) return setLang(lb.dataset.lang);
       const qb = e.target.closest('[data-q]');

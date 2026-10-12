@@ -1031,3 +1031,65 @@ input { font: inherit; }
 
 /* prize boards: what a run past the ×10 multiplier cap counts for */
 .lb-counts { font-family: var(--body); font-weight: 900; font-size: 10.5px; color: rgba(255,244,222,0.7); white-space: nowrap; }
+
+/* ------------------------------------------------------- how to play: coach */
+/* a tutorial step: big, low over the trail (the runner stays clear above it) */
+.coach {
+  position: absolute; left: 50%; bottom: calc(21% + var(--safe-b)); transform: translateX(-50%);
+  width: min(88vw, 360px); display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 14px; row-gap: 8px; align-items: center;
+  padding: 14px 16px 12px; border-radius: 22px; pointer-events: none;
+  background: linear-gradient(180deg, rgba(43,26,14,0.9), rgba(26,14,6,0.92)); border: 1.5px solid rgba(255,201,64,0.75);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.45), 0 0 0 4px rgba(255,201,64,0.12);
+  animation: coachIn 0.38s cubic-bezier(.2,1.4,.4,1) both;
+}
+.coach .tx { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.coach .tx b { font-family: var(--display); font-weight: 400; font-size: 21px; line-height: 1.1; color: var(--cream); }
+.coach .tx small { font-size: 12px; font-weight: 800; color: rgba(255,244,222,0.65); }
+.coach .steps { grid-column: 1 / -1; display: flex; justify-content: center; gap: 6px; }
+.coach .steps i { width: 18px; height: 5px; border-radius: 99px; background: rgba(255,244,222,0.2); }
+.coach .steps i.done { background: var(--leaf); }
+.coach .steps i.on { background: var(--sun); }
+.coach.done { border-color: var(--leaf); box-shadow: 0 10px 30px rgba(0,0,0,0.45), 0 0 0 6px rgba(127,174,58,0.28); }
+.coach.done .tx b { color: #d6f5a8; }
+.coach.done .gest i { animation: none; opacity: 0; }
+.coach.out { opacity: 0; transform: translateX(-50%) translateY(10px) scale(0.96); transition: opacity 0.3s, transform 0.3s; }
+@keyframes coachIn { from { opacity: 0; transform: translateX(-50%) translateY(16px) scale(0.9); } to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); } }
+
+/* an animated gesture: a fingertip travelling the way to swipe, on a little screen */
+.gest { position: relative; width: 52px; height: 52px; flex: none; border-radius: 15px; background: rgba(255,244,222,0.08); border: 1.5px solid rgba(255,244,222,0.22); overflow: hidden; }
+.gest i { position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; background: var(--sun); box-shadow: 0 0 0 5px rgba(255,201,64,0.25), 0 0 14px rgba(255,201,64,0.8); }
+.gest.g-lr i { animation: gLR 1.6s ease-in-out infinite; }
+.gest.g-up i { animation: gUp 1.2s ease-out infinite; }
+.gest.g-down i { animation: gDown 1.2s ease-out infinite; }
+.gest.g-totem { display: grid; place-items: center; font-size: 28px; }
+.gest.g-totem::before { content: '🐾'; animation: nudge 0.9s ease-in-out infinite; }
+.gest.g-totem i { display: none; }
+@keyframes gLR { 0%, 100% { transform: translateX(-13px); } 50% { transform: translateX(13px); } }
+@keyframes gUp { 0% { transform: translateY(13px); opacity: 0; } 15% { opacity: 1; } 80% { transform: translateY(-13px); opacity: 1; } 100% { transform: translateY(-15px); opacity: 0; } }
+@keyframes gDown { 0% { transform: translateY(-13px); opacity: 0; } 15% { opacity: 1; } 80% { transform: translateY(13px); opacity: 1; } 100% { transform: translateY(15px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .gest i, .gest.g-totem::before { animation: none; } }
+
+/* the moves at a glance, at the start of a player's early runs */
+.controls-card {
+  position: absolute; left: 50%; bottom: calc(21% + var(--safe-b)); transform: translateX(-50%);
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: min(92vw, 380px); padding: 12px; border-radius: 22px; pointer-events: none;
+  background: rgba(26,14,6,0.82); border: 1px solid rgba(255,244,222,0.18); box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+  animation: coachIn 0.38s cubic-bezier(.2,1.4,.4,1) both; transition: opacity 0.5s;
+}
+.controls-card.out { opacity: 0; }
+.controls-card .ctl { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+.controls-card .ctl span { font-size: 11.5px; font-weight: 900; line-height: 1.2; color: var(--cream); }
+.controls-card .gest { width: 46px; height: 46px; }
+
+/* the How to play sheet */
+.how-to { text-align: left; }
+.how-to h2 { text-align: center; }
+.how-to > .muted { text-align: center; }
+.how-list { display: flex; flex-direction: column; gap: 8px; margin: 14px 0 4px; }
+.how-row { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 12px; align-items: center; padding: 8px 10px; border-radius: 16px; background: rgba(0,0,0,0.22); }
+.how-row b { display: block; font-size: 15px; }
+.how-row small { display: block; font-size: 12.5px; color: rgba(255,244,222,0.7); font-weight: 700; }
+.how-ico { width: 52px; height: 52px; display: grid; place-items: center; font-size: 28px; border-radius: 15px; background: rgba(255,244,222,0.08); border: 1.5px solid rgba(255,244,222,0.22); }
+.how-ico .seed { width: 26px; height: 26px; }
+.coach.done .gest { display: grid; place-items: center; background: rgba(127,174,58,0.25); border-color: var(--leaf); }
+.coach.done .gest::after { content: '✓'; font-size: 26px; font-weight: 900; color: #d6f5a8; }

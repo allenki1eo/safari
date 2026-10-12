@@ -5,6 +5,16 @@
  */
 export const UPDATES = [
   {
+    id: '2026-10-12-howto',
+    emoji: '🎓',
+    title: 'How to play, made clearer',
+    items: [
+      'New runners get big step-by-step tips that wait until you make each move.',
+      'Your first few runs open with the moves at a glance.',
+      'Forgot a move? Tap ❓ How to play in the pause menu or Settings — or take a practice run.',
+    ],
+  },
+  {
     id: '2026-10-10-invite',
     emoji: '🤝',
     title: 'Invite friends, earn seeds',

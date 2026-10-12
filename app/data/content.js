@@ -154,11 +154,12 @@ export const INTRO = [
 
 export const TUTORIAL = [
   // each tip shows well before the scripted obstacle it teaches (patterns.js tutorialPlan):
-  // boulder ~87 m, logs ~123 m, branches ~157 m, totem ~191 m
-  { at: 20, text: 'Swipe ← → to switch lanes', icon: '↔️' },
-  { at: 92, text: 'Swipe ↑ to jump logs', icon: '⬆️' },
-  { at: 127, text: 'Swipe ↓ to slide under branches', icon: '⬇️' },
-  { at: 161, text: 'Grab glowing totems to call an animal ally!', icon: '🐾' },
+  // boulder ~87 m, logs ~123 m, branches ~157 m, totem ~191 m. A tip stays up until the player
+  // makes the move it teaches (`act`); `g` is the gesture the coach card animates.
+  { at: 20, text: 'Swipe ← → to switch lanes', icon: '↔️', act: 'lane', g: 'lr' },
+  { at: 92, text: 'Swipe ↑ to jump logs', icon: '⬆️', act: 'up', g: 'up' },
+  { at: 127, text: 'Swipe ↓ to slide under branches', icon: '⬇️', act: 'down', g: 'down' },
+  { at: 161, text: 'Grab glowing totems to call an animal ally!', icon: '🐾', act: null, g: 'totem' },
 ];
 
 /* -------------------------------------------------------------------------- */

@@ -369,6 +369,7 @@ export class Game {
   /* ------------------------------------------------------------- input */
   input(action) {
     if (this.state !== 'running') return;
+    this.emit('move', action); // the tutorial coach waits for the move it is teaching
     const p = this.p;
     const flying = !!this.powers.tai;
     switch (action) {
