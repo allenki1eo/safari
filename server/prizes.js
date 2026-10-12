@@ -27,8 +27,8 @@ const LOOKBACK = { day: 7, week: 3, month: 2 };
 function periodInner(kind, period) {
   const [from, to] = periodDays(kind, period);
   return {
-    sql: `SELECT player_id AS pid, id, name, pscore AS score, distance, seeds, allies, chapter, runner FROM (
-            SELECT d.*, ${prizeScoreSql('d', 'm')} AS pscore,
+    sql: `SELECT player_id AS pid, id, name, pscore AS score, raw_score AS raw, run_mult AS mult, distance, seeds, allies, chapter, runner FROM (
+            SELECT d.*, d.score AS raw_score, m.mult AS run_mult, ${prizeScoreSql('d', 'm')} AS pscore,
                    ROW_NUMBER() OVER (PARTITION BY d.player_id ORDER BY ${prizeScoreSql('d', 'm')} DESC, d.id ASC) AS pick
             FROM daily_scores d
             LEFT JOIN run_meta m ON m.day = d.day AND m.player_id = d.player_id
@@ -43,7 +43,9 @@ const mapPeriod = (kind) => (row, rank) => ({
   id: Number(row.pid),
   rank,
   name: String(row.name),
-  score: Number(row.score),
+  score: Number(row.score), // what counts for prizes: the multiplier up to PRIZE_MULT_CAP
+  run: Number(row.raw ?? row.score), // the run as the player saw it
+  mult: row.mult == null ? null : Number(row.mult),
   distance: Number(row.distance),
   seeds: Number(row.seeds),
   allies: Number(row.allies),

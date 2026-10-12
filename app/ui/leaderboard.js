@@ -121,10 +121,16 @@ function medal(rank) {
   return String(rank);
 }
 
-export function rowHtml(row, { youId, youName, crown }) {
+/**
+ * One board row. On prize boards a run made with more than a ×10 multiplier counts for less
+ * (server/plausible.js PRIZE_MULT_CAP): the row shows the real run and, under it, what it counts
+ * for (`counts` words that line in the player's language).
+ */
+export function rowHtml(row, { youId, youName, crown, counts }) {
   // prefer the server id; fall back to the (unique) name before this device has posted
   const yours = youId != null ? row.id === youId : !!youName && row.name.toLowerCase() === youName.toLowerCase();
   const emoji = EMOJI[row.runner] || '🏃';
+  const capped = row.run != null && row.run > row.score;
   return `
     <div class="lb-row${yours ? ' you' : ''}">
       <div class="lb-rank">${medal(row.rank)}</div>
@@ -132,7 +138,7 @@ export function rowHtml(row, { youId, youName, crown }) {
         <b>${emoji} ${esc(row.name)}${crown && row.name === crown ? ' <span class="crown" title="Last champion">👑</span>' : ''}${yours ? ' <span class="you-tag">you</span>' : ''}</b>
         <span>${fmt(row.distance)}m · ${fmt(row.seeds)} seeds · ${fmt(row.allies)} allies</span>
       </div>
-      <div class="lb-score">${fmt(row.score)}${row.prize ? `<span class="lb-prize">+${fmt(row.prize)}<i class="seed"></i></span>` : ''}</div>
+      <div class="lb-score">${fmt(capped ? row.run : row.score)}${capped ? `<span class="lb-counts" title="Prizes count the multiplier up to ×10">${counts ? counts(fmt(row.score)) : `counts ${fmt(row.score)}`}</span>` : ''}${row.prize ? `<span class="lb-prize">+${fmt(row.prize)}<i class="seed"></i></span>` : ''}</div>
     </div>`;
 }
 

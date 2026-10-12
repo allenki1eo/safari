@@ -170,6 +170,8 @@ const SW = {
   'Tap 🤝 Invite on the home screen to get your own link.': 'Gusa 🤝 Alika kwenye skrini ya mwanzo upate kiungo chako.',
   'Every friend who joins and runs 500 m earns you 500 seeds — and they get 250 too.': 'Kila rafiki anayejiunga na kukimbia mita 500 anakupatia mbegu 500 — naye anapata 250.',
   'Your challenge links count as invites as well.': 'Viungo vya changamoto zako pia vinahesabika kama mialiko.',
+  '⚖️ counts {n}': '⚖️ inahesabika {n}',
+  '⚖️ For prizes, multipliers count up to ×10 — so everyone has a fair shot.': '⚖️ Kwa zawadi, vizidisho vinahesabika hadi ×10 — ili kila mtu apate nafasi ya haki.',
   'Every runner is on the board': 'Kila mkimbiaji yuko kwenye ubao',
   Invite: 'Alika',
   'Invite friends': 'Alika marafiki',

@@ -1489,9 +1489,14 @@ export class UI {
           <div class="prize-rest">${t('4th–10th place: {n} each', { n: `<b>${fmt(p[3])}</b>` })}<i class="seed"></i></div>
           ${champ ? `<div class="champ">👑 ${last}: <b>${esc(champ.name)}</b> · ${fmt(champ.score)}</div>` : ''}
         </div>`;
-      const foot = `<p class="muted lb-foot">${t('Your best run in the period counts. Prizes land in your bank the next time you open the game.')}</p>`;
+      const foot = `<p class="muted lb-foot">${t('Your best run in the period counts. Prizes land in your bank the next time you open the game.')}<br>${t('⚖️ For prizes, multipliers count up to ×10 — so everyone has a fair shot.')}</p>`;
       if (top.length) {
-        this.pagedRows(body, head, foot, data, kind, { youId: save.playerId ?? null, youName: save.playerId == null ? save.name || '' : '', crown: champ?.name });
+        this.pagedRows(body, head, foot, data, kind, {
+          youId: save.playerId ?? null,
+          youName: save.playerId == null ? save.name || '' : '',
+          crown: champ?.name,
+          counts: (n) => t('⚖️ counts {n}', { n }),
+        });
       } else {
         body.innerHTML = `${head}<div class="panel lb-empty-card"><div class="e">🌅</div><p>${t('Nobody has run yet. Finish a run and the top spot is yours.')}</p></div>${foot}`;
       }
