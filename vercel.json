@@ -81,6 +81,9 @@
     },
     "api/admin.js": {
       "includeFiles": "migrations/**"
+    },
+    "api/pay.js": {
+      "includeFiles": "migrations/**"
     }
   },
   "crons": [

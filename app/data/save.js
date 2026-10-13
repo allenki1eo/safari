@@ -78,7 +78,7 @@ export function persist() {
 
 /* ---------------------------------------------------------- moving progress */
 // settings that belong to this device rather than to the player
-const DEVICE_ONLY = ['quality', 'iosNudge', 'restoreAsked', 'restoredCode', 'notify', 'notifyAsked', 'seenUpdate', 'inboxSeen', 'inboxSynced'];
+const DEVICE_ONLY = ['quality', 'iosNudge', 'restoreAsked', 'restoredCode', 'notify', 'notifyAsked', 'seenUpdate', 'inboxSeen', 'inboxSynced', 'hearts', 'lastOrder'];
 
 /** The player's progress, ready to carry to another browser. */
 export function exportSave() {

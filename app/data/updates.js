@@ -5,6 +5,16 @@
  */
 export const UPDATES = [
   {
+    id: '2026-10-13-shop',
+    emoji: '❤️',
+    title: 'The shop is open: hearts and seeds',
+    items: [
+      'Tap ❤️ on the home screen to get hearts — each one brings you back after a crash.',
+      'Seed packs for new runners and allies, paid by M-Pesa, Mixx, Airtel Money or Halotel.',
+      'Plus: big step-by-step tips for new runners, and ❓ How to play in the pause menu.',
+    ],
+  },
+  {
     id: '2026-10-12-howto',
     emoji: '🎓',
     title: 'How to play, made clearer',

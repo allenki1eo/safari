@@ -5,6 +5,7 @@ import { handleAccountRequest } from './accounts.js';
 import { handlePushRequest, runPushJob } from './push.js';
 import { handleAdminRequest } from './admin.js';
 import { cleanCode, handleTransferRequest, manifestFor } from './transfers.js';
+import { handlePayRequest } from './payments.js';
 
 /** Dev twin of api/transfer.js: GET ?manifest=CODE serves the manifest with the code in it. */
 function transferRoute(method, body, query) {
@@ -20,11 +21,12 @@ function transferRoute(method, body, query) {
 const ROUTES = { '/api/scores': handleScoreRequest, '/api/challenges': handleChallengeRequest, '/api/transfer': transferRoute, '/api/account': handleAccountRequest,
   '/api/push': handlePushRequest,
   '/api/admin': handleAdminRequest,
+  '/api/pay': handlePayRequest,
   '/api/cron/morning': () => runPushJob('morning'),
   '/api/cron/evening': () => runPushJob('evening'),
 };
 // a challenge carries its shadow-runner recording, so it may be bigger than a score
-const LIMITS = { '/api/scores': 4096, '/api/challenges': 65536, '/api/transfer': 40960, '/api/account': 40960, '/api/push': 4096, '/api/admin': 4096 };
+const LIMITS = { '/api/scores': 4096, '/api/challenges': 65536, '/api/transfer': 40960, '/api/account': 40960, '/api/push': 4096, '/api/admin': 4096, '/api/pay': 16384 };
 
 function send(res, status, body) {
   res.statusCode = status;
@@ -33,7 +35,7 @@ function send(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
-async function readJson(req, limit) {
+async function readRaw(req, limit) {
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {
@@ -45,9 +47,7 @@ async function readJson(req, limit) {
     }
     chunks.push(chunk);
   }
-  const raw = Buffer.concat(chunks).toString('utf8').trim();
-  if (!raw) return {};
-  return JSON.parse(raw);
+  return Buffer.concat(chunks).toString('utf8').trim();
 }
 
 async function scoresMiddleware(req, res, next) {
@@ -55,9 +55,11 @@ async function scoresMiddleware(req, res, next) {
   const handle = ROUTES[path];
   if (!handle) return next();
   try {
-    const body = req.method === 'POST' ? await readJson(req, LIMITS[path]) : undefined;
+    const raw = req.method === 'POST' ? await readRaw(req, LIMITS[path]) : '';
+    const body = req.method === 'POST' ? (raw ? JSON.parse(raw) : {}) : undefined;
     const query = Object.fromEntries(new URLSearchParams((req.url || '').split('?')[1] || ''));
-    const result = await handle(req.method, body, query);
+    // the payment webhook checks its signature against the raw body
+    const result = await handle(req.method, body, query, { raw, headers: req.headers, origin: `http://${req.headers.host}` });
     send(res, result.status, result.body);
   } catch (err) {
     if (err?.code === 'TOO_BIG' || err instanceof SyntaxError) {

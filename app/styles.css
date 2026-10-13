@@ -136,7 +136,7 @@ input { font: inherit; }
 .install-pill:active { transform: translateY(2px) scale(0.97); box-shadow: 0 2px 0 #b9790e, var(--shadow); }
 .install-pill.ready { animation: installGlow 2.4s ease-in-out infinite; }
 @keyframes installGlow { 50% { box-shadow: 0 4px 0 #b9790e, 0 0 0 6px rgba(255,201,64,0.25), 0 0 24px rgba(255,201,64,0.6); } }
-@media (max-width: 360px) { .install-pill span { display: none; } .install-pill { padding: 0 14px; } }
+@media (max-width: 420px) { .install-pill span { display: none; } .install-pill { padding: 0 14px; } }
 
 .btn.small { min-height: 40px; font-size: 16px; padding: 0 16px; border-radius: 12px; }
 .install-card { text-align: center; }
@@ -1093,3 +1093,52 @@ input { font: inherit; }
 .how-ico .seed { width: 26px; height: 26px; }
 .coach.done .gest { display: grid; place-items: center; background: rgba(127,174,58,0.25); border-color: var(--leaf); }
 .coach.done .gest::after { content: '✓'; font-size: 26px; font-weight: 900; color: #d6f5a8; }
+
+/* ------------------------------------------------------------------- shop */
+.chip-row { display: flex; gap: 6px; align-items: center; }
+.chip-row:empty { display: none; }
+.hearts-chip { display: inline-flex; align-items: center; gap: 5px; font-weight: 900; color: #fff; background: linear-gradient(180deg, rgba(255,93,115,0.42), rgba(196,30,58,0.5)); border-color: rgba(255,120,140,0.7); }
+.hearts-chip b { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: rgba(255,255,255,0.9); color: #c41e3a; font-size: 14px; line-height: 1; }
+.hearts-chip:active { transform: scale(0.95); }
+
+/* revive: a heart first, seeds second */
+.revive-stack { display: flex; flex-direction: column; gap: 12px; }
+.btn.heart-btn { --c1: #ff6b81; --c2: #c41e3a; --edge: #7d0f22; --ink: #fff; display: flex; align-items: center; justify-content: center; gap: 8px; position: relative; overflow: hidden; }
+.btn.heart-btn small { font-family: var(--body); font-size: 13px; font-weight: 900; opacity: 0.85; }
+
+.shop-tabs { grid-template-columns: repeat(2, 1fr); }
+.shop-tabs .seed, .pack .seed { width: 18px; height: 18px; vertical-align: -3px; }
+.shop-lead { margin: 0 4px; text-align: center; }
+.packs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.pack {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 18px 6px 10px; border-radius: 20px; text-align: center; color: var(--cream);
+  background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(0,0,0,0.25)); border: 1.5px solid rgba(255,244,222,0.18); box-shadow: 0 8px 22px rgba(0,0,0,0.25);
+}
+.pack:active { transform: scale(0.97); }
+.pack:disabled { opacity: 0.6; }
+.pack.hearts { border-color: rgba(255,120,140,0.55); }
+.pack.seeds { border-color: rgba(255,201,64,0.55); }
+.pack .tag { position: absolute; top: -9px; left: 50%; transform: translateX(-50%); padding: 3px 9px; border-radius: 99px; font-size: 10.5px; font-weight: 900; white-space: nowrap; background: var(--sun); color: var(--earth); }
+.pack .ico { font-size: 34px; line-height: 1; height: 38px; display: grid; place-items: center; }
+.pack .ico .seed { width: 34px; height: 34px; }
+.pack b { font-family: var(--display); font-weight: 400; font-size: 17px; line-height: 1.1; }
+.pack small { font-size: 10.5px; font-weight: 800; color: rgba(255,244,222,0.65); line-height: 1.2; min-height: 2.4em; }
+.pack .price { margin-top: 4px; width: 100%; padding: 8px 2px; border-radius: 12px; font-weight: 900; font-size: 13.5px; background: linear-gradient(180deg, var(--sun), var(--flame)); color: var(--earth); box-shadow: 0 3px 0 rgba(0,0,0,0.25); }
+.shop-notes { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 16px; background: rgba(0,0,0,0.22); }
+.shop-notes p { margin: 0; font-size: 12.5px; font-weight: 700; color: rgba(255,244,222,0.78); }
+.shop-wait, .shop-done { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 28px 16px; text-align: center; border-radius: 22px; background: rgba(0,0,0,0.25); }
+.shop-wait h3, .shop-done h3 { margin: 4px 0 0; font-family: var(--display); font-weight: 400; font-size: 24px; }
+.shop-wait p, .shop-done p { margin: 0; }
+.shop-wait .btn, .shop-done .btn { width: 100%; text-decoration: none; }
+.spin.big { width: 54px; height: 54px; border-radius: 50%; border: 5px solid rgba(255,244,222,0.18); border-top-color: var(--sun); animation: spin 0.9s linear infinite; }
+.shop-done .burst { font-size: 72px; line-height: 1; animation: pop 0.5s ease both; }
+.shop-done .burst .seed { width: 72px; height: 72px; }
+@media (max-width: 360px) { .packs { gap: 6px; } .pack b { font-size: 15px; } }
+
+/* small phones: the top bar's buttons slim down so the seed and multiplier chips never run under them */
+@media (max-width: 380px) and (orientation: portrait) {
+  .title .title-actions { gap: 6px; }
+  .title .title-actions .icon-btn, .title .title-actions .install-pill { width: 42px; height: 42px; }
+  .title .title-actions .install-pill { padding: 0; justify-content: center; }
+  .title .mult-word { display: none; }
+}

@@ -9,6 +9,7 @@
  *   prizes     the latest prizes and whether they were collected
  *   broadcast  one notification to everyone who turned them on (at most every 10 minutes)
  *   social     the game's TikTok handle (read it with no `tiktok`, set or clear it with one)
+ *   sales      the shop: takings and the latest orders
  */
 import { timingSafeEqual } from 'node:crypto';
 import { DERBY, PRIZES } from '../app/data/content.js';
@@ -18,6 +19,7 @@ import { derbyBoard } from './derby.js';
 import { broadcast, pushKeys } from './push.js';
 import { postInbox } from './inbox.js';
 import { setSocialLinks, socialLinks } from './referrals.js';
+import { payKeys, recentOrders, salesSummary } from './payments.js';
 
 const BROADCAST_GAP = 10 * 60 * 1000;
 const TITLE_MAX = 60;
@@ -87,6 +89,8 @@ async function overview() {
       banned: num(banned.n),
       invited: num(invites.n),
       invitesJoined: num(invites.joined),
+      sales: await salesSummary(db, Date.parse(dayStartIso(today))),
+      shopReady: !!payKeys(),
       pushReady: !!pushKeys(),
       series,
       derby: await derbyBoard(),
@@ -220,6 +224,10 @@ export async function handleAdminRequest(method, body) {
       case 'ban': return await ban(body);
       case 'prizes': return await prizes();
       case 'broadcast': return await sendBroadcast(body);
+      case 'sales': {
+        const db = await getClient();
+        return { status: 200, body: { ready: !!payKeys(), summary: await salesSummary(db, Date.parse(dayStartIso(darDay(now())))), orders: await recentOrders(db) } };
+      }
       case 'social': return body?.tiktok === undefined ? { status: 200, body: await socialLinks() } : await setSocialLinks(body);
       default: return bad('Unknown action.');
     }

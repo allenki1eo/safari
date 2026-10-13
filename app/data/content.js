@@ -248,6 +248,22 @@ const podium = (gold, silver, bronze, rest) => [gold, silver, bronze, ...Array(7
  */
 export const REFERRAL = { reward: 500, welcome: 250, qualifyM: 500, cap: 20 };
 
+/**
+ * The shop: hearts and seed packs bought with mobile money through a Snippe payment link
+ * (server/payments.js). A heart revives a runner after a crash. Prices are Tanzanian shillings
+ * (Snippe's minimum is 500). Bought seeds never go into a friend-challenge bet.
+ */
+export const SHOP_PACKS = [
+  { id: 'h3', kind: 'hearts', hearts: 3, seeds: 0, price: 1500 },
+  { id: 'h7', kind: 'hearts', hearts: 7, seeds: 0, price: 3000, tag: 'Popular' },
+  { id: 'h12', kind: 'hearts', hearts: 12, seeds: 0, price: 5000, tag: 'Best value' },
+  { id: 's5', kind: 'seeds', hearts: 0, seeds: 5000, price: 1500 },
+  { id: 's12', kind: 'seeds', hearts: 0, seeds: 12000, price: 3000, tag: 'Popular' },
+  { id: 's25', kind: 'seeds', hearts: 0, seeds: 25000, price: 5000, tag: 'Best value' },
+];
+/** Revives in one run: two with seeds, a third only with a heart. */
+export const MAX_REVIVES = 3;
+
 export const PRIZES = {
   day: podium(1000, 600, 400, 100),
   week: podium(6000, 3000, 1500, 400),

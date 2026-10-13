@@ -153,6 +153,7 @@
       <button data-tab="prizes">🎁 Prizes</button>
       <button data-tab="notify">🔔 Notifications</button>
       <button data-tab="social">🔗 Social</button>
+      <button data-tab="shop">💳 Shop</button>
     </nav>
 
     <!-- overview -->
@@ -193,6 +194,16 @@
     <!-- prizes -->
     <section data-pane="prizes" hidden>
       <div class="card" id="prizes"></div>
+    </section>
+
+    <!-- shop -->
+    <section data-pane="shop" hidden>
+      <div class="card">
+        <h2>Shop <span class="pill" id="shop-status">…</span></h2>
+        <p>Players buy hearts and seed packs through a Snippe payment link (mobile money). Hearts land the moment Snippe confirms the payment; seeds land in the player's bank the next time they open the game. Bought seeds can't be staked in friend-challenge bets.</p>
+        <div class="tiles" id="shop-tiles"></div>
+      </div>
+      <div class="card" id="shop-orders"></div>
     </section>
 
     <!-- social -->
@@ -338,6 +349,7 @@
           ['Open bets', fmt(o.openBets), `${fmt(o.coinsInBets)} coins at stake`],
           ['Off the boards', fmt(o.banned), 'banned runners'],
           ['Joined by invite', fmt(o.invitesJoined), `${fmt(o.invited)} opened an invite`],
+          ['Shop takings', `TSh ${fmt(o.sales?.revenue ?? 0)}`, o.shopReady ? `TSh ${fmt(o.sales?.today ?? 0)} today · ${fmt(o.sales?.paid ?? 0)} orders` : 'add Snippe keys to open'],
         ];
         $('tiles').innerHTML = tiles.map(([k, v, s]) => `<div class="tile"><span>${k}</span><b>${v}</b><small>${s}</small></div>`).join('');
         drawChart(o.series);
@@ -516,6 +528,27 @@
           ${prizes.length ? `<table><tr><th>Board</th><th>Runner</th><th class="num">Place</th><th class="num">Seeds</th><th>Collected</th></tr>${prizes.map((p) => `<tr><td>${p.kind} ${p.period}</td><td>${esc(p.name)}</td><td class="num">#${p.rank}</td><td class="num">${fmt(p.amount)}</td><td>${p.claimed ? '✓' : 'waiting'}</td></tr>`).join('')}</table>` : '<p>No prizes handed out yet.</p>'}`;
       } catch (err) {
         box.innerHTML = `<p class="err">${esc(err.message)}</p>`;
+      }
+    };
+
+    /* ------------------------------------------------------------- shop */
+    loaders.shop = async () => {
+      try {
+        const { ready, summary: s, orders } = await admin('sales');
+        $('shop-status').textContent = ready ? 'open' : 'closed';
+        $('shop-status').className = `pill ${ready ? 'on' : 'off'}`;
+        $('shop-tiles').innerHTML = [
+          ['Takings', `TSh ${fmt(s.revenue)}`, 'all time'],
+          ['Today', `TSh ${fmt(s.today)}`, 'since midnight in Dar'],
+          ['Paid orders', fmt(s.paid), `${fmt(s.orders)} checkouts opened`],
+        ].map(([k, v, sub]) => `<div class="tile"><span>${k}</span><b>${v}</b><small>${sub}</small></div>`).join('');
+        const label = (o) => (o.hearts ? `❤️ ${fmt(o.hearts)} hearts` : `🌰 ${fmt(o.seeds)} seeds`);
+        $('shop-orders').innerHTML = `<h2>Latest orders</h2>${orders.length
+          ? `<table><tr><th>When</th><th>Runner</th><th>Pack</th><th class="num">TSh</th><th>Status</th></tr>${orders.map((o) => `<tr><td>${new Date(o.at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td><td>${esc(o.name)}</td><td>${label(o)}</td><td class="num">${fmt(o.price)}</td><td>${o.status === 'paid' ? '✓ paid' : esc(o.status)}</td></tr>`).join('')}</table>`
+          : '<p>No orders yet.</p>'}`;
+        if (!ready) $('shop-orders').insertAdjacentHTML('afterbegin', '<p class="err" style="margin-bottom:12px">The shop is closed: add SNIPPE_API_KEY and SNIPPE_WEBHOOK_SECRET in Vercel → safari → Settings → Environment Variables, then redeploy.</p>');
+      } catch (err) {
+        $('shop-orders').innerHTML = `<p class="err">${esc(err.message)}</p>`;
       }
     };
 
