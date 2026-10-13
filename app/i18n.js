@@ -203,6 +203,7 @@ const SW = {
   'Your first run past 1,000 m each day wins a heart, and lucky Zawadi boxes hold one too.': 'Mbio zako za kwanza kupita mita 1,000 kila siku zinashinda moyo, na masanduku ya Zawadi ya bahati yana moyo pia.',
   'Allies moved into the new 🛍️ Shop, with Ngao shields, hearts and seed packs.': 'Washirika wamehamia 🛍️ Duka jipya, pamoja na ngao za Ngao, mioyo na vifurushi vya mbegu.',
   'Need more hearts? Get them after the run, right from the results screen.': 'Unahitaji mioyo zaidi? Ipate baada ya mbio, moja kwa moja kwenye skrini ya matokeo.',
+  'A seed revive now costs 500, then 1,500 — hearts are the easy way back.': 'Kufufuka kwa mbegu sasa ni 500, kisha 1,500 — mioyo ndiyo njia rahisi ya kurudi.',
   '🛍️ Shop': '🛍️ Duka',
   'Allies, shields, hearts and seed packs': 'Washirika, ngao, mioyo na vifurushi vya mbegu',
   'Payments open very soon — have a look at what’s coming!': 'Malipo yanafunguliwa hivi karibuni — angalia kinachokuja!',

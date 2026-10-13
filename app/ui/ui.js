@@ -1,4 +1,4 @@
-import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO, OUTFITS, outfitId, HUNT_WORDS, BOOSTS, DERBY, REFERRAL, TUTORIAL, SHOP_PACKS, MAX_REVIVES, EARNED_HEARTS, derbyLive, derbyShown, wearable } from '../data/content.js';
+import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO, OUTFITS, outfitId, HUNT_WORDS, BOOSTS, DERBY, REFERRAL, TUTORIAL, SHOP_PACKS, MAX_REVIVES, REVIVE_COSTS, EARNED_HEARTS, derbyLive, derbyShown, wearable } from '../data/content.js';
 import { TIKTOK_ICON, captureInvite, fetchInviter, fetchInvites, fetchSocial, inviteLink, tiktokUrl } from './social.js';
 import { bettableSeeds, checkOrder, heartsTotal, onSaleNow, shopReady, shopReadyNow, startCheckout, syncWallet, tsh, useHeart } from './shop.js';
 import { adoptSide, fetchDerby, joinSide, km } from './derby.js';
@@ -847,12 +847,12 @@ export class UI {
 
   /* --------------------------------------------------------- game over */
   reviveCost() {
-    return 150 * Math.pow(2, this.game.revives);
+    return REVIVE_COSTS[Math.min(this.game.revives, REVIVE_COSTS.length - 1)];
   }
 
   onOver(run) {
     const cost = this.reviveCost();
-    const seedsOk = this.game.revives < 2 && save.seeds + run.seeds >= cost;
+    const seedsOk = this.game.revives < REVIVE_COSTS.length && save.seeds + run.seeds >= cost;
     const heartsOk = this.game.revives < MAX_REVIVES && heartsTotal() > 0;
     const freeOk = !!this.game.freeRevive; // Kito's perk
     if (seedsOk || heartsOk || freeOk) this.revivePrompt(run, cost, { seedsOk, heartsOk, freeOk });

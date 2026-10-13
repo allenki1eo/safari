@@ -269,6 +269,8 @@ export const SHOP_PACKS = [
 ];
 /** Revives in one run: two with seeds, a third only with a heart. */
 export const MAX_REVIVES = 3;
+/** Seeds for the first and second revive of a run: dear enough that a heart is the easy way back. */
+export const REVIVE_COSTS = [500, 1500];
 /**
  * Hearts won on the trail, kept on the device apart from bought ones (which live on the server):
  * a rare Zawadi box prize, and one a day for the first run that reaches `dailyM` metres. A player
