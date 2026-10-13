@@ -131,7 +131,9 @@ export class UI {
     if (invite) this.greetInvite(invite);
     // back from a Snippe checkout: the home screen checks the order and celebrates
     const paid = String(this.params.get('paid') ?? '');
+    // a pack's payment link comes back to one fixed address (?paid=1): the order is the last one opened here
     if (/^kb[0-9a-f]{24}$/.test(paid)) this.returnedOrder = paid;
+    else if (paid && /^kb[0-9a-f]{24}$/.test(save.lastOrder ?? '')) this.returnedOrder = save.lastOrder;
     if (this.params.has('paid')) {
       const url = new URL(location.href);
       url.searchParams.delete('paid');

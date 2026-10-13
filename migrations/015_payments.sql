@@ -29,3 +29,13 @@ CREATE TABLE IF NOT EXISTS hearts (
   bought INTEGER NOT NULL DEFAULT 0,
   used INTEGER NOT NULL DEFAULT 0
 );
+
+-- Every completed payment Snippe reports, once (its reference), with the order it paid if the
+-- link carried one. Payments with no order show on the admin page to sort out by hand.
+CREATE TABLE IF NOT EXISTS payments_in (
+  reference TEXT PRIMARY KEY,
+  order_id TEXT,
+  amount INTEGER NOT NULL,
+  phone TEXT,
+  created_ms INTEGER NOT NULL
+);

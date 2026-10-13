@@ -65,6 +65,10 @@
 
     /* overview */
     .tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .steps-list { margin: 0 0 14px; padding-left: 20px; line-height: 1.55; }
+    .steps-list code { font-size: 12px; padding: 1px 5px; border-radius: 6px; background: rgba(255,255,255,0.08); word-break: break-all; }
+    .links-form label { display: block; margin: 10px 0 4px; font-weight: 800; }
+    .links-form input { width: 100%; }
     @media (min-width: 720px) { .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
     .tile { padding: 14px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line); }
     .tile b { display: block; font-size: 26px; line-height: 1.1; font-variant-numeric: tabular-nums; }
@@ -200,8 +204,19 @@
     <section data-pane="shop" hidden>
       <div class="card">
         <h2>Shop <span class="pill" id="shop-status">…</span></h2>
-        <p>Players buy hearts and seed packs through a Snippe payment link (mobile money). Hearts land the moment Snippe confirms the payment; seeds land in the player's bank the next time they open the game. Bought seeds can't be staked in friend-challenge bets.</p>
+        <p>Players buy hearts and seed packs through your Snippe payment links (mobile money). Hearts land the moment Snippe confirms the payment; seeds land in the player's bank the next time they open the game. Bought seeds can't be staked in friend-challenge bets.</p>
         <div class="tiles" id="shop-tiles"></div>
+      </div>
+      <div class="card">
+        <h2>Payment links</h2>
+        <ol class="steps-list">
+          <li>In the Snippe dashboard, make one <b>fixed-amount payment link</b> per pack below (same price), and set its redirect to <code>https://safari-blush.vercel.app/?paid=1</code>.</li>
+          <li>Set Snippe's <b>webhook URL</b> to <code>https://safari-blush.vercel.app/api/pay</code>.</li>
+          <li>Copy your <b>webhook signing secret</b> (Snippe → Settings → Webhook Secret) into Vercel → safari → Settings → Environment Variables as <code>SNIPPE_WEBHOOK_SECRET</code>, then redeploy. Never paste it anywhere else.</li>
+          <li>Paste each link here and save. A pack shows in the game once it has a link.</li>
+        </ol>
+        <form id="links" class="links-form"></form>
+        <p class="muted" id="links-out"></p>
       </div>
       <div class="card" id="shop-orders"></div>
     </section>
@@ -534,7 +549,12 @@
     /* ------------------------------------------------------------- shop */
     loaders.shop = async () => {
       try {
-        const { ready, summary: s, orders } = await admin('sales');
+        const { secret, apiKey, links, summary: s, orders, unmatched } = await admin('sales');
+        const ready = secret && (apiKey || Object.keys(links).length > 0);
+        const packs = [['h3', '❤️ 3 hearts', 1500], ['h7', '❤️ 7 hearts', 3000], ['h12', '❤️ 12 hearts', 5000], ['s5', '🌰 5,000 seeds', 1500], ['s12', '🌰 12,000 seeds', 3000], ['s25', '🌰 25,000 seeds', 5000]];
+        $('links').innerHTML = `${packs.map(([id, label, price]) => `<label for="link-${id}">${label} · TSh ${fmt(price)}</label><input id="link-${id}" data-pack="${id}" placeholder="https://snippe.me/p/…" value="${esc(links[id] ?? '')}" autocomplete="off" />`).join('')}
+          <div class="row" style="margin-top:12px"><button class="btn" type="submit">Save links</button></div>`;
+        $('links-out').textContent = secret ? '' : 'Waiting for SNIPPE_WEBHOOK_SECRET in Vercel — without it the shop stays closed, so nobody can fake a payment.';
         $('shop-status').textContent = ready ? 'open' : 'closed';
         $('shop-status').className = `pill ${ready ? 'on' : 'off'}`;
         $('shop-tiles').innerHTML = [
@@ -546,11 +566,29 @@
         $('shop-orders').innerHTML = `<h2>Latest orders</h2>${orders.length
           ? `<table><tr><th>When</th><th>Runner</th><th>Pack</th><th class="num">TSh</th><th>Status</th></tr>${orders.map((o) => `<tr><td>${new Date(o.at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td><td>${esc(o.name)}</td><td>${label(o)}</td><td class="num">${fmt(o.price)}</td><td>${o.status === 'paid' ? '✓ paid' : esc(o.status)}</td></tr>`).join('')}</table>`
           : '<p>No orders yet.</p>'}`;
-        if (!ready) $('shop-orders').insertAdjacentHTML('afterbegin', '<p class="err" style="margin-bottom:12px">The shop is closed: add SNIPPE_API_KEY and SNIPPE_WEBHOOK_SECRET in Vercel → safari → Settings → Environment Variables, then redeploy.</p>');
+        if (unmatched.length) {
+          $('shop-orders').insertAdjacentHTML('beforeend', `<h2 style="margin-top:18px">Payments without an order</h2><p>Paid on a link opened outside the game (or for the wrong amount). Credit the player by hand if they contact you.</p><table><tr><th>When</th><th>Snippe ref</th><th>Phone</th><th class="num">TSh</th></tr>${unmatched.map((u) => `<tr><td>${new Date(u.at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td><td>${esc(u.reference)}</td><td>${esc(u.phone)}</td><td class="num">${fmt(u.amount)}</td></tr>`).join('')}</table>`);
+        }
       } catch (err) {
         $('shop-orders').innerHTML = `<p class="err">${esc(err.message)}</p>`;
       }
     };
+
+    $('links').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = e.target.querySelector('button');
+      btn.disabled = true;
+      try {
+        const links = Object.fromEntries([...e.target.querySelectorAll('[data-pack]')].map((i) => [i.dataset.pack, i.value]));
+        await admin('shop-links', { links });
+        $('links-out').textContent = 'Saved.';
+        loaders.shop();
+      } catch (err) {
+        $('links-out').innerHTML = `<span class="err">${esc(err.message)}</span>`;
+      } finally {
+        btn.disabled = false;
+      }
+    });
 
     /* ----------------------------------------------------------- social */
     const showHandle = (h) => {

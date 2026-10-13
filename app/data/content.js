@@ -59,7 +59,7 @@ export const DERBY = {
   title: 'Kariakoo Derby Special',
   opens: Date.parse('2026-10-09T00:00:00Z'),
   closes: Date.parse('2026-10-12T21:00:00Z'), // midnight in Dar after Sunday
-  shows: Date.parse('2026-10-14T21:00:00Z'), // the final score stays up a couple of days
+  shows: Date.parse('2026-10-12T21:00:00Z'), // off the home screen once it closes (the kits stay)
   sides: {
     green: { id: 'green', name: 'Green & Gold', short: 'Green', emoji: '💚', color: '#1f9d4a', accent: '#f6c933', shirt: 0x178a3e, stripe: 0xf6c933, pants: 0x161616 },
     red: { id: 'red', name: 'Red & White', short: 'Red', emoji: '❤️', color: '#d7263d', accent: '#ffffff', shirt: 0xc8102e, stripe: 0xffffff, pants: 0xffffff },

@@ -1174,3 +1174,65 @@ test('shop: Snippe payment links pay hearts and seeds once, only after Snippe co
     }
   }
 });
+
+test('shop with payment links: no API key, the signed webhook carries the order back in ?meta=', async () => {
+  const pay = await import('./payments.js');
+  const { handleAdminRequest } = await import('./admin.js');
+  const { createHmac } = await import('node:crypto');
+  const prev = { key: process.env.SNIPPE_API_KEY, secret: process.env.SNIPPE_WEBHOOK_SECRET, admin: process.env.KIMBIA_ADMIN_KEY };
+  delete process.env.SNIPPE_API_KEY;
+  process.env.KIMBIA_ADMIN_KEY = 'admin-test-key';
+  pay.setSnippeFetch(async () => { throw new Error('no API calls in link mode'); });
+  const shop = (body) => pay.handlePayRequest('POST', body, {}, { origin: 'https://kimbia.test' });
+  const admin = (body) => handleAdminRequest('POST', { adminKey: 'admin-test-key', ...body });
+  const ts = Math.floor(Date.parse('2026-10-13T09:00:00Z') / 1000);
+  const hook = (payload, secret = 'whsec_test') => {
+    const raw = JSON.stringify(payload);
+    const sig = createHmac('sha256', secret).update(`${ts}.${raw}`).digest('hex');
+    return pay.handlePayRequest('POST', payload, {}, { raw, headers: { 'x-webhook-event': payload.type, 'x-webhook-signature': sig, 'x-webhook-timestamp': String(ts) } });
+  };
+  const paid = (order, value, ref) => ({ type: 'payment.completed', id: `evt_${ref}`, data: { reference: ref, status: 'completed', amount: { value, currency: 'TZS' }, customer: { phone: '+255712345678' }, metadata: { url_metadata: { order, pack: 'h7' } } } });
+  try {
+    await withDb(async () => {
+      setLeaderboardClock(() => new Date('2026-10-13T09:00:00Z'));
+      await post({ token: T.juma, name: 'Juma', score: 100, distance: 50, duration: 10 });
+      // links but no signing key: closed, and webhooks are refused
+      delete process.env.SNIPPE_WEBHOOK_SECRET;
+      assert.equal((await admin({ action: 'shop-links', links: { h7: 'https://evil.example/p/x' } })).status, 400);
+      assert.equal((await admin({ action: 'shop-links', links: { h7: 'https://snippe.me/p/kimbia-7-hearts', s12: 'https://snippe.me/p/kimbia-12k' } })).status, 200);
+      assert.equal((await pay.handlePayRequest('GET')).body.ready, false);
+      assert.equal((await hook(paid('x', 3000, 'pi_0'))).status, 503);
+
+      process.env.SNIPPE_WEBHOOK_SECRET = 'whsec_test';
+      const open = (await pay.handlePayRequest('GET')).body;
+      assert.deepEqual([open.ready, open.packs.map((p) => p.id)], [true, ['h7', 's12']]);
+      assert.equal((await shop({ action: 'buy', token: T.juma, pack: 'h3' })).status, 400, 'no link, not on sale');
+
+      // buying hands back the pack's link with the order in ?meta= (base64 JSON)
+      const b = (await shop({ action: 'buy', token: T.juma, pack: 'h7' })).body;
+      const url = new URL(b.url);
+      assert.equal(url.origin + url.pathname, 'https://snippe.me/p/kimbia-7-hearts');
+      assert.deepEqual(JSON.parse(Buffer.from(url.searchParams.get('meta'), 'base64').toString()), { order: b.order, pack: 'h7' });
+
+      // forged or short payments pay nothing; the real one pays once, even if Snippe retries
+      assert.equal((await hook(paid(b.order, 3000, 'pi_1'), 'wrong')).status, 401);
+      assert.equal((await hook(paid(b.order, 500, 'pi_2'))).body.status, 'pending', 'wrong amount is held');
+      assert.equal((await hook(paid(b.order, 3000, 'pi_3'))).body.status, 'paid');
+      await hook(paid(b.order, 3000, 'pi_3'));
+      const o = (await shop({ action: 'order', token: T.juma, order: b.order })).body;
+      assert.deepEqual([o.status, o.hearts], ['paid', 7]);
+
+      // a payment on a link opened outside the game shows on the admin page
+      await hook({ type: 'payment.completed', data: { reference: 'pi_9', status: 'completed', amount: { value: 3000, currency: 'TZS' }, metadata: {} } });
+      const sales = (await admin({ action: 'sales' })).body;
+      assert.deepEqual(sales.unmatched.map((u) => u.reference).sort(), ['pi_2', 'pi_9']);
+      assert.deepEqual([sales.secret, sales.apiKey, sales.summary.paid], [true, false, 1]);
+    });
+  } finally {
+    pay.setSnippeFetch(null);
+    for (const [k, v] of [['SNIPPE_API_KEY', prev.key], ['SNIPPE_WEBHOOK_SECRET', prev.secret], ['KIMBIA_ADMIN_KEY', prev.admin]]) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});

@@ -1,19 +1,24 @@
 /**
  * The shop: hearts and seed packs for real money, paid through Snippe payment links
- * (https://docs.snippe.sh, "Payment Sessions").
+ * (https://docs.snippe.sh/docs/2026-01-25/sessions/payment-links).
  *
- *   buy      opens an order and a Snippe checkout for the pack; the game sends the player to its
- *            checkout_url, they pay by mobile money (M-Pesa, Mixx, Airtel, Halotel) and come back
- *   order    how an order stands; we ask Snippe (at most every CHECK_GAP) and settle it
- *   webhook  Snippe says a payment completed; we look the checkout up with Snippe ourselves
- *            before settling, so a forged call pays nothing
+ * The admin makes one payment link per pack in the Snippe dashboard and pastes it on the admin
+ * page (no API key needed). Buying opens an order and sends the player to that pack's link with
+ * the order in its `?meta=` (base64 JSON); Snippe hands it back on the signed `payment.completed`
+ * webhook as data.metadata.url_metadata, and that settles the order. With SNIPPE_API_KEY set
+ * instead, the server makes a checkout session per order and double-checks each one with Snippe.
+ *
+ *   buy      opens an order and returns the checkout URL for the pack
+ *   order    how an order stands (with an API key, we also ask Snippe, at most every CHECK_GAP)
+ *   webhook  Snippe says a payment completed: verified with the webhook signing key
+ *            (SNIPPE_WEBHOOK_SECRET), and for the right amount, before anything is paid
  *   wallet   this runner's hearts, and any bought seeds not yet in their bank (collected once)
  *   use      spends one heart on a revive
  *
  * Hearts live here against the runner (they follow a recovered runner to a new phone and can't
  * be edited on the device). An order pays out exactly once: settling flips it from pending to
  * paid in one statement and only the call that wins adds the hearts; seeds are collected the same
- * way. Needs SNIPPE_API_KEY (and SNIPPE_WEBHOOK_SECRET) in Vercel; without them the shop is hidden.
+ * way. The shop opens once SNIPPE_WEBHOOK_SECRET is set and packs have links (or an API key is set).
  */
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { SHOP_PACKS } from '../app/data/content.js';
@@ -35,9 +40,69 @@ export function setSnippeFetch(fn) {
   request = fn ?? ((url, init) => fetch(url, init));
 }
 
+/** The Snippe settings in Vercel: the webhook signing key (needed), and an API key (optional). */
 export function payKeys() {
-  const key = process.env.SNIPPE_API_KEY?.trim();
-  return key ? { key, secret: process.env.SNIPPE_WEBHOOK_SECRET?.trim() || null } : null;
+  const key = process.env.SNIPPE_API_KEY?.trim() || null;
+  const secret = process.env.SNIPPE_WEBHOOK_SECRET?.trim() || null;
+  return key || secret ? { key, secret } : null;
+}
+
+/* ---------------------------------------------------------- pack links */
+const LINK_HOSTS = /(^|\.)snippe\.(me|sh)$/i;
+
+/** A Snippe payment link the admin pasted, as a clean https URL, or null. */
+export function cleanLink(raw) {
+  try {
+    const url = new URL(String(raw ?? '').trim());
+    if (url.protocol !== 'https:' || !LINK_HOSTS.test(url.hostname)) return null;
+    url.searchParams.delete('meta');
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+export async function packLinks(db) {
+  const row = (await db.execute("SELECT value FROM meta WHERE key = 'shop:links'")).rows[0];
+  try {
+    const links = JSON.parse(String(row?.value ?? '{}'));
+    return Object.fromEntries(SHOP_PACKS.filter((p) => cleanLink(links[p.id])).map((p) => [p.id, cleanLink(links[p.id])]));
+  } catch {
+    return {};
+  }
+}
+
+/** Admin: sets the payment link of each pack (an empty value removes it). */
+export async function setPackLinks(db, links) {
+  const out = {};
+  for (const p of SHOP_PACKS) {
+    const raw = String(links?.[p.id] ?? '').trim();
+    if (!raw) continue;
+    const link = cleanLink(raw);
+    if (!link) return { status: 400, body: { error: `The link for ${p.id} is not a Snippe payment link (https://snippe.me/…).` } };
+    out[p.id] = link;
+  }
+  await db.execute({
+    sql: "INSERT INTO meta (key, value) VALUES ('shop:links', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+    args: [JSON.stringify(out)],
+  });
+  return { status: 200, body: { links: out } };
+}
+
+/** Which packs can be bought now: those with a link (once webhooks can be verified), or all with an API key. */
+async function openPacks(db) {
+  const keys = payKeys();
+  if (!keys?.secret && !keys?.key) return [];
+  if (keys.key) return SHOP_PACKS;
+  const links = await packLinks(db);
+  return SHOP_PACKS.filter((p) => links[p.id]);
+}
+
+/** A pack's link with the order riding along in ?meta= (base64 JSON), as Snippe documents. */
+export function linkWithOrder(link, order, pack) {
+  const url = new URL(link);
+  url.searchParams.set('meta', Buffer.from(JSON.stringify({ order, pack })).toString('base64'));
+  return url.toString();
 }
 
 const bad = (error, code) => ({ status: 400, body: { error, ...(code ? { code } : {}) } });
@@ -85,7 +150,7 @@ async function heartsOf(db, playerId) {
  * Settles an order from Snippe's own record of its checkout. Completed, for the right amount, in
  * shillings: the order turns paid (once) and its hearts land. Expired or cancelled: it closes.
  */
-async function settle(db, order, session) {
+async function settle(db, order, session, paymentRef = null) {
   const status = String(session?.status ?? '');
   const amount = Number(session?.amount?.value ?? session?.amount ?? NaN);
   const currency = String(session?.amount?.currency ?? session?.currency ?? 'TZS');
@@ -97,7 +162,7 @@ async function settle(db, order, session) {
     }
     const won = (await db.execute({
       sql: "UPDATE orders SET status = 'paid', paid_ms = ?, payment_ref = ? WHERE id = ? AND status = 'pending' RETURNING player_id, hearts",
-      args: [now().getTime(), session?.payment_reference ?? session?.payment?.reference ?? null, order.id],
+      args: [now().getTime(), paymentRef ?? session?.payment_reference ?? null, order.id],
     })).rows[0];
     if (won && Number(won.hearts) > 0) {
       await db.execute({
@@ -118,24 +183,26 @@ async function settle(db, order, session) {
 
 /** Asks Snippe how a pending order's checkout stands (not more often than CHECK_GAP). */
 async function refresh(db, order, force = false) {
-  if (String(order.status) !== 'pending' || !order.reference) return String(order.status);
+  if (String(order.status) !== 'pending' || !order.reference || !payKeys()?.key) return String(order.status);
   const t = now().getTime();
   if (!force && order.checked_ms != null && t - Number(order.checked_ms) < CHECK_GAP) return 'pending';
   await db.execute({ sql: 'UPDATE orders SET checked_ms = ? WHERE id = ?', args: [t, order.id] });
   return settle(db, order, await sessions('GET', `/${encodeURIComponent(String(order.reference))}`));
 }
 
-/** GET: whether the shop is open, and its packs. */
-function shop() {
-  return { status: 200, body: { ready: !!payKeys(), packs: SHOP_PACKS } };
+/** GET: whether the shop is open, and the packs on sale. */
+async function shop() {
+  const packs = await openPacks(await getClient());
+  return { status: 200, body: { ready: packs.length > 0, packs } };
 }
 
 /** POST { action: 'buy', token, pack, back }: opens an order and its Snippe checkout. */
 async function buy(body, ctx) {
-  if (!payKeys()) return { status: 503, body: { error: 'The shop is not open yet.' } };
-  const pack = SHOP_PACKS.find((p) => p.id === body?.pack);
-  if (!pack) return bad('Pick a pack.');
   const db = await getClient();
+  const packs = await openPacks(db);
+  if (!packs.length) return { status: 503, body: { error: 'The shop is not open yet.' } };
+  const pack = packs.find((p) => p.id === body?.pack);
+  if (!pack) return bad('Pick a pack.');
   const id = await playerFor(db, body?.token);
   if (id == null) return { status: 409, body: { error: 'Pick your runner name first.', code: 'NAME_FIRST' } };
   const t = now().getTime();
@@ -154,6 +221,13 @@ async function buy(body, ctx) {
     args: [orderId, id, pack.id, pack.price, pack.hearts, pack.seeds, t],
   });
   const what = pack.kind === 'hearts' ? `${pack.hearts} hearts` : `${pack.seeds.toLocaleString('en-US')} seeds`;
+  const link = (await packLinks(db))[pack.id];
+  if (link) {
+    // the admin's payment link for this pack, carrying the order back to us on the webhook
+    const url = linkWithOrder(link, orderId, pack.id);
+    await db.execute({ sql: 'UPDATE orders SET checkout_url = ? WHERE id = ?', args: [url, orderId] });
+    return { status: 200, body: { order: orderId, url, price: pack.price } };
+  }
   try {
     const session = await sessions('POST', '', {
       amount: pack.price,
@@ -191,8 +265,9 @@ async function collectSeeds(db, playerId) {
 async function wallet(body) {
   const db = await getClient();
   const id = await playerFor(db, body?.token);
-  if (id == null) return { status: 200, body: { hearts: 0, seeds: 0, ready: !!payKeys() } };
-  return { status: 200, body: { hearts: await heartsOf(db, id), seeds: await collectSeeds(db, id), ready: !!payKeys() } };
+  const ready = (await openPacks(db)).length > 0;
+  if (id == null) return { status: 200, body: { hearts: 0, seeds: 0, ready } };
+  return { status: 200, body: { hearts: await heartsOf(db, id), seeds: await collectSeeds(db, id), ready } };
 }
 
 /** POST { action: 'order', token, order }: how an order stands; once paid, its hearts and seeds. */
@@ -244,10 +319,25 @@ export function webhookSignatureOk(raw, headers, secret, nowS = Math.floor(now()
   return safeEqual(sig, mac(`${ts}.${raw}`)) || safeEqual(sig, mac(raw));
 }
 
+/** The order a payment was for: the link's ?meta= (url_metadata), a session's metadata, or its session. */
+function orderIn(data) {
+  const meta = data?.metadata ?? {};
+  let url = meta.url_metadata ?? {};
+  if (typeof url === 'string') {
+    try {
+      url = JSON.parse(Buffer.from(url, 'base64').toString('utf8'));
+    } catch {
+      url = {};
+    }
+  }
+  return String(url.order ?? meta.order ?? '');
+}
+
 async function webhook(raw, headers) {
   const keys = payKeys();
-  if (!keys) return { status: 503, body: { error: 'The shop is not open.' } };
-  if (keys.secret && !webhookSignatureOk(raw, headers, keys.secret)) return { status: 401, body: { error: 'Bad signature.' } };
+  // without the signing key nobody can tell a real payment from a forged one: refuse them all
+  if (!keys?.secret) return { status: 503, body: { error: 'Set SNIPPE_WEBHOOK_SECRET to accept payments.' } };
+  if (!webhookSignatureOk(raw, headers, keys.secret)) return { status: 401, body: { error: 'Bad signature.' } };
   let event = {};
   try {
     event = JSON.parse(raw || '{}');
@@ -255,16 +345,29 @@ async function webhook(raw, headers) {
     return { status: 400, body: { error: 'Invalid JSON.' } };
   }
   const type = String(headers['x-webhook-event'] ?? event.type ?? '');
-  if (!type.startsWith('payment.')) return { status: 200, body: { ok: true } }; // payouts are not ours
+  if (type !== 'payment.completed') return { status: 200, body: { ok: true } }; // failures and payouts change nothing here
   const data = event.data ?? {};
   const db = await getClient();
+  const orderId = orderIn(data);
+  const amount = Number(data.amount?.value ?? data.amount ?? 0);
+  // every payment once, so a retried webhook is a no-op and unmatched ones reach the admin
+  const reference = String(data.reference ?? event.id ?? '');
+  if (reference) {
+    await db.execute({
+      sql: 'INSERT OR IGNORE INTO payments_in (reference, order_id, amount, phone, created_ms) VALUES (?, ?, ?, ?, ?)',
+      args: [reference, orderId || null, amount, data.customer?.phone ? String(data.customer.phone).replace(/\d(?=\d{3})/g, '•') : null, now().getTime()],
+    });
+  }
   const row = (await db.execute({
-    sql: 'SELECT * FROM orders WHERE reference = ? OR id = ? LIMIT 1',
-    args: [String(data.session_reference ?? data.reference ?? ''), String(data.metadata?.order ?? '')],
+    sql: 'SELECT * FROM orders WHERE id = ? OR (reference IS NOT NULL AND reference = ?) LIMIT 1',
+    args: [orderId, String(data.session_reference ?? '')],
   })).rows[0];
-  if (!row) return { status: 200, body: { ok: true } }; // not one of ours: don't make Snippe retry
-  // never trust the message itself: ask Snippe how this checkout really stands
-  const status = await refresh(db, row, true);
+  if (!row) return { status: 200, body: { ok: true, matched: false } }; // not one of ours: don't make Snippe retry
+  // with an API key, ask Snippe about the checkout itself; otherwise the signed message is the proof
+  const status = keys.key && row.reference ? await refresh(db, row, true) : await settle(db, row, data, reference || null);
+  if (status === 'paid' && reference) {
+    await db.execute({ sql: 'UPDATE orders SET payment_ref = COALESCE(payment_ref, ?) WHERE id = ?', args: [reference, row.id] });
+  }
   return { status: 200, body: { ok: true, status } };
 }
 
@@ -281,6 +384,15 @@ export async function salesSummary(db, dayStartMs) {
   return { orders: Number(row.orders ?? 0), paid: Number(row.paid ?? 0), revenue: Number(row.revenue ?? 0), today: Number(row.today ?? 0) };
 }
 
+/** Payments Snippe reported that no order claimed (a link opened without the game, say). */
+export async function unmatchedPayments(db) {
+  return (await db.execute(`SELECT p.reference, p.amount, p.phone, p.created_ms FROM payments_in p
+                            LEFT JOIN orders o ON o.payment_ref = p.reference AND o.status = 'paid'
+                            WHERE o.id IS NULL ORDER BY p.created_ms DESC LIMIT 20`)).rows.map((r) => ({
+    reference: String(r.reference), amount: Number(r.amount), phone: r.phone == null ? '' : String(r.phone), at: Number(r.created_ms),
+  }));
+}
+
 export async function recentOrders(db) {
   return (await db.execute(`SELECT o.id, o.pack, o.price, o.hearts, o.seeds, o.status, o.created_ms, o.paid_ms, p.name
                             FROM orders o LEFT JOIN players p ON p.id = o.player_id
@@ -293,7 +405,7 @@ export async function recentOrders(db) {
 /** `ctx` carries the raw body and headers (for the webhook) and the site's origin. */
 export async function handlePayRequest(method, body, query, ctx = {}) {
   try {
-    if (method === 'GET') return shop();
+    if (method === 'GET') return await shop();
     if (method !== 'POST') return { status: 405, body: { error: 'Method not allowed.' } };
     const headers = ctx.headers ?? {};
     if (headers['x-webhook-event'] || headers['x-webhook-signature']) return await webhook(ctx.raw ?? JSON.stringify(body ?? {}), headers);
