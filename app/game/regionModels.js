@@ -295,6 +295,95 @@ export function makeFlowers(scale = 1) {
 /* ============================================================= fauna */
 const soft = (c) => mat(c, { flat: false });
 
+/**
+ * A monkey sat upright on its haunches, about 80 cm tall (a little larger than life): it looks about, scratches, and now
+ * and then bounds a few steps and settles again. Colours (and the colobus's white mantle, face
+ * ring and plume) come from `c`.
+ */
+function monkey(c) {
+  const g = new Group();
+  const coat = soft(c.coat);
+  const limb = soft(c.limbs);
+  const face = soft(c.face);
+  const body = new Group();
+  g.add(body);
+  // haunches, belly and a back that leans forward a little
+  body.add(mesh(G.ball, coat, 0.17, 0.15, 0.17, 0, 0.16, 0.04));
+  body.add(mesh(G.ball, coat, 0.15, 0.2, 0.13, 0, 0.34, -0.01));
+  body.add(mesh(G.ball, soft(c.belly), 0.1, 0.14, 0.06, 0, 0.32, -0.1));
+  if (c.mantle) for (const x of [-1, 1]) body.add(mesh(G.ball, soft(c.mantle), 0.07, 0.2, 0.14, x * 0.12, 0.3, 0.03));
+  const head = new Group();
+  head.position.set(0, 0.56, -0.04);
+  body.add(head);
+  head.add(mesh(G.ball, soft(c.crown), 0.1, 0.1, 0.1, 0, 0.02, 0.01));
+  if (c.ring) head.add(mesh(G.ball, soft(c.ring), 0.105, 0.085, 0.05, 0, -0.005, -0.06));
+  head.add(mesh(G.ball, face, 0.065, 0.06, 0.045, 0, -0.01, -0.085));
+  head.add(mesh(G.ball, face, 0.035, 0.03, 0.03, 0, -0.04, -0.12));
+  for (const x of [-1, 1]) {
+    head.add(mesh(G.ball, soft(0x2a1408), 0.016, 0.016, 0.01, x * 0.03, 0.015, -0.128));
+    head.add(mesh(G.ball, soft(0xf4efe6), 0.005, 0.005, 0.004, x * 0.03 + 0.005, 0.02, -0.137));
+    head.add(mesh(G.ball, soft(c.crown), 0.03, 0.035, 0.02, x * 0.095, 0.0, 0.0));
+  }
+  // arms resting on the knees; one comes up to scratch now and then
+  const arms = [];
+  for (const x of [-1, 1]) {
+    const sh = new Group();
+    sh.position.set(x * 0.12, 0.44, -0.05);
+    body.add(sh);
+    sh.add(mesh(G.cyl16, limb, 0.035, 0.22, 0.035, 0, -0.1, -0.03));
+    sh.add(mesh(G.ball, limb, 0.04, 0.03, 0.05, 0, -0.22, -0.07));
+    sh.rotation.x = 0.35;
+    arms.push(sh);
+    body.add(mesh(G.ball, limb, 0.06, 0.05, 0.12, x * 0.1, 0.07, -0.1));
+    body.add(mesh(G.ball, limb, 0.04, 0.025, 0.07, x * 0.1, 0.02, -0.2));
+  }
+  // the tail curls out behind and down; the colobus's ends in a long white plume
+  const tail = new Group();
+  tail.position.set(0, 0.12, 0.16);
+  body.add(tail);
+  const tc = soft(c.tail);
+  for (let i = 0; i < 6; i++) {
+    const r = c.plume ? 0.03 + i * 0.008 : 0.022;
+    tail.add(mesh(G.ball, tc, r, r, 0.07, 0, -0.02 - i * 0.025, 0.06 + i * 0.07));
+  }
+  g.add(blobShadow(0.7, 0.6));
+  bakeRigid(g);
+  g.scale.setScalar(1.3); // a touch larger than life, so they read from the trail
+  let t = Math.random() * 10;
+  let hop = 0;
+  let scratch = 0;
+  const home = { x: 0, z: 0, dir: Math.random() < 0.5 ? -1 : 1 };
+  return {
+    root: g,
+    update(dt) {
+      t += dt;
+      head.rotation.y = Math.sin(t * 0.6) * 0.7;
+      head.rotation.x = Math.sin(t * 0.37) * 0.15;
+      tail.rotation.x = Math.sin(t * 1.1) * 0.12;
+      if (hop <= 0 && Math.random() < dt * 0.12) hop = 0.9;
+      if (scratch <= 0 && Math.random() < dt * 0.2) scratch = 1.4;
+      if (hop > 0) {
+        // a few quick bounds sideways, then sit again
+        hop -= dt;
+        const k = Math.max(0, hop);
+        body.position.y = Math.abs(Math.sin(k * Math.PI * 3)) * 0.18;
+        body.rotation.x = -0.4 * Math.sin(k * Math.PI);
+        home.x += home.dir * dt * 0.8;
+        if (Math.abs(home.x) > 0.8) home.dir = -home.dir;
+        body.position.x = home.x;
+      } else {
+        body.position.y = 0;
+        body.rotation.x = 0;
+      }
+      scratch = Math.max(0, scratch - dt);
+      arms[1].rotation.x = scratch > 0 ? -1.6 + Math.sin(t * 24) * 0.25 : 0.35;
+      arms[1].rotation.z = scratch > 0 ? -0.5 : 0;
+    },
+  };
+}
+
+
+
 export const RegionAnimals = {
   buffalo: () => Animals.buffalo(),
 
@@ -482,6 +571,11 @@ export const RegionAnimals = {
       },
     };
   },
+
+  /** Rwanda's golden monkey: a gold-orange back on black limbs and crown, sat watching the trail. */
+  goldenMonkey: () => monkey({ coat: 0xd9862a, belly: 0xe8a548, limbs: 0x2b2420, crown: 0x1e1a17, face: 0x3a2e28, tail: 0x2b2420 }),
+  /** Nyungwe's black-and-white colobus: a white mantle, white face ring and a long white plume of a tail. */
+  colobus: () => monkey({ coat: 0x151312, belly: 0x151312, limbs: 0x151312, crown: 0x151312, face: 0x2a2624, tail: 0xf2efe8, mantle: 0xf2efe8, ring: 0xf2efe8, plume: true }),
 
   /** 0 A.D.'s Nile crocodile, with the hand-built one standing in while it loads. */
   croc: () => makeWildAnimal('croc', () => RegionAnimals.crocBuilt()),

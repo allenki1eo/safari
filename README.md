@@ -46,9 +46,9 @@ Every run is a chase across East Africa. Each region has its own ground, plants,
 | 🇰🇪 | Amboseli | Elephants crossing beneath Kilimanjaro |
 | 🇺🇬 | Bwindi Forest | Mountain gorillas in misty rainforest |
 | 🇨🇩 | Virunga · Nyiragongo | Glowing lava rocks raining from the fire mountain · night falls over the lava lake |
-| 🇨🇩 | Congo River | Crocodiles and river crossings in deep misty rainforest |
-| 🇷🇼 | Volcanoes | Gorillas and charging buffalo among green volcanoes |
-| 🇷🇼 | Nyungwe Forest | Streams under an ancient tree-fern canopy |
+| 🇨🇩 | Congo River | Crocodiles and river crossings in deep misty rainforest · okapi on the banks |
+| 🇷🇼 | Volcanoes | Gorillas, golden monkeys and charging buffalo among green volcanoes |
+| 🇷🇼 | Nyungwe Forest | Streams under an ancient tree-fern canopy · black-and-white colobus |
 | 🇷🇼 | Akagera | Charging rhinos by the papyrus lakes |
 | 🇺🇬 | Queen Elizabeth | Tree-climbing lions and buffalo by the Kazinga Channel |
 | 🇺🇬 | Murchison Falls | Nile crocodiles · giraffes crossing |

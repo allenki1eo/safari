@@ -5,6 +5,16 @@
  */
 export const UPDATES = [
   {
+    id: '2026-10-13-okapi',
+    emoji: '🐒',
+    title: 'New animals on the trail',
+    items: [
+      'The okapi, the Congo’s shy forest giraffe, roams the banks of the Congo River.',
+      'Golden monkeys watch you run through Rwanda’s volcanoes and Virunga.',
+      'Black-and-white colobus monkeys sit along the Nyungwe forest path.',
+    ],
+  },
+  {
     id: '2026-10-13-congo-rwanda',
     emoji: '🌋',
     title: 'The journey goes on: Congo and Rwanda',
