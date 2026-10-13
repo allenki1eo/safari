@@ -5,6 +5,16 @@
  */
 export const UPDATES = [
   {
+    id: '2026-10-13-perks',
+    emoji: '💫',
+    title: 'Every runner has a perk now',
+    items: [
+      'Zuri keeps combos going, Juma’s animal allies stay longer, Neema starts with a shield.',
+      'Baraka pulls in nearby seeds, Amani gets 25% more seeds, Kito revives free once a run.',
+      'Plus the ❤️ shop: hearts to revive and seed packs, paid by mobile money.',
+    ],
+  },
+  {
     id: '2026-10-13-shop',
     emoji: '❤️',
     title: 'The shop is open: hearts and seeds',

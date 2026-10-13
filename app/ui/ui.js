@@ -1,6 +1,6 @@
 import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO, OUTFITS, outfitId, HUNT_WORDS, BOOSTS, DERBY, REFERRAL, TUTORIAL, SHOP_PACKS, MAX_REVIVES, derbyLive, derbyShown, wearable } from '../data/content.js';
 import { TIKTOK_ICON, captureInvite, fetchInviter, fetchInvites, fetchSocial, inviteLink, tiktokUrl } from './social.js';
-import { bettableSeeds, checkOrder, shopReady, shopReadyNow, startCheckout, syncWallet, tsh, useHeart } from './shop.js';
+import { bettableSeeds, checkOrder, onSaleNow, shopReady, shopReadyNow, startCheckout, syncWallet, tsh, useHeart } from './shop.js';
 import { adoptSide, fetchDerby, joinSide, km } from './derby.js';
 import { applyUpdate, markUpdateSeen, unseenUpdate, updateWaiting } from './updates.js';
 import { ago, describe, fetchInbox, markInboxRead, unreadCount } from './inbox.js';
@@ -852,7 +852,8 @@ export class UI {
     const cost = this.reviveCost();
     const seedsOk = this.game.revives < 2 && save.seeds + run.seeds >= cost;
     const heartsOk = this.game.revives < MAX_REVIVES && ((save.hearts ?? 0) > 0 || shopReadyNow());
-    if (seedsOk || heartsOk) this.revivePrompt(run, cost, { seedsOk, heartsOk });
+    const freeOk = !!this.game.freeRevive; // Kito's perk
+    if (seedsOk || heartsOk || freeOk) this.revivePrompt(run, cost, { seedsOk, heartsOk, freeOk });
     else this.results(run);
   }
 
@@ -860,8 +861,13 @@ export class UI {
    * Second wind: a heart (bought in the shop) or seeds bring the runner back. With no hearts
    * the shop opens right here, the run waiting, and a heart bought there revives straight away.
    */
-  revivePrompt(run, cost, { seedsOk = true, heartsOk = false } = {}) {
+  revivePrompt(run, cost, { seedsOk = true, heartsOk = false, freeOk = false } = {}) {
     const hearts = save.hearts ?? 0;
+    if (freeOk) {
+      // Kito's free revive comes first, and alone: nothing to spend
+      heartsOk = false;
+      seedsOk = false;
+    }
     const el = $(`
       <div class="screen over scrim-full">
         <div class="panel card">
@@ -869,6 +875,7 @@ export class UI {
           <h2 class="h-display" style="font-size:32px;color:var(--sun-2)">${t('Second wind?')}</h2>
           <p class="muted" style="margin:6px 0 18px">${t('Bibi Tembo can scare Fisi away — for a heart or a few golden seeds.')}</p>
           <div class="stack revive-stack">
+            ${freeOk ? `<button class="btn big flame" data-act="free" data-click>💫 ${t('Free revive')} <small>${t('Kito’s perk')}</small><i class="bar"></i></button>` : ''}
             ${heartsOk && hearts > 0 ? `<button class="btn big heart-btn" data-act="heart" data-click>❤️ ${t('Use a heart')} <small>${t('{n} left', { n: fmt(hearts) })}</small><i class="bar"></i></button>` : ''}
             ${seedsOk ? `<button class="btn ${heartsOk && hearts > 0 ? 'ghost' : 'flame big'} revive" data-act="revive" data-click>${t('Revive')} · ${fmt(cost)} <span class="seed"></span>${heartsOk && hearts > 0 ? '' : '<i class="bar"></i>'}</button>` : ''}
             ${heartsOk && hearts <= 0 ? `<button class="btn ${seedsOk ? 'ghost' : 'big heart-btn'}" data-act="get-hearts" data-click>❤️ ${t('Get hearts')} · ${tsh(SHOP_PACKS[0].price)}</button>` : ''}
@@ -891,6 +898,9 @@ export class UI {
         this.countdownRevive();
       } else if (how === 'heart') {
         this.countdownRevive('heart');
+      } else if (how === 'free') {
+        this.game.freeRevive = false;
+        this.countdownRevive();
       } else this.results(run);
     };
     const timer = setTimeout(() => finish(null), 6000);
@@ -898,6 +908,7 @@ export class UI {
       const btn = e.target.closest('[data-act]');
       const act = btn?.dataset.act;
       if (act === 'revive') finish('seeds');
+      if (act === 'free') finish('free');
       if (act === 'skip') finish(null);
       if (act === 'heart' && !done) {
         clearTimeout(timer);
@@ -2101,6 +2112,7 @@ export class UI {
             <div class="role">${esc(r.title)}</div>
             <h2>${esc(r.name)}</h2>
             <p>${esc(r.bio)}</p>
+            ${r.perk ? `<div class="perk-badge"><span class="pi">${r.perk.icon}</span><span><b>${esc(t(r.perk.name))}</b><small>${esc(t(r.perk.desc))}</small></span></div>` : ''}
             <div class="outfit-line">${esc(outfit.line)}</div>
             <div class="outfits" role="listbox" aria-label="${t('Outfit')}">
               ${wearable(save.side).map((o) => `<button type="button" class="${o.id === outfit.id ? 'on' : ''} ${o.limited ? `limited ${o.limited}` : ''}" data-outfit="${o.id}" aria-label="${esc(o.line)}">${esc(o.name)}</button>`).join('')}
@@ -2818,7 +2830,7 @@ export class UI {
           ${this.notifyRow()}
           ${install.offered ? `<div class="toggle-row"><span>${t('📲 Play from your home screen')}</span><button class="btn small" data-act="install" data-click>${t('Install')}</button></div>` : ''}
           ${save.name ? `<div class="toggle-row"><span>${t('🔐 Recovery PIN')}${save.pinSet ? ` <em class="pin-on">${t('on')}</em>` : ''}</span><button class="btn small ${save.pinSet ? 'ghost' : ''}" data-act="pin" data-click>${save.pinSet ? t('Change') : t('Set PIN')}</button></div>` : ''}
-          ${shopReadyNow() ? `<div class="toggle-row"><span>${t('❤️ Shop')}<small class="row-note">${t('Hearts to revive, and seed packs')}</small></span><button class="btn small" data-act="shop" data-click>${t('Open')}</button></div>` : ''}
+          <div class="toggle-row"><span>${t('❤️ Shop')}<small class="row-note">${t('Hearts to revive, and seed packs')}</small></span><button class="btn small" data-act="shop" data-click>${t('Open')}</button></div>
           <div class="toggle-row"><span>${t('❓ How to play')}</span><button class="btn small ghost" data-act="how" data-click>${t('Open')}</button></div>
           <div class="toggle-row"><span>${t('🤝 Invite friends')}<small class="row-note">${t('+{n} seeds for each friend who joins', { n: fmt(REFERRAL.reward) })}</small></span><button class="btn small" data-act="invite" data-click>${t('Invite')}</button></div>
           ${save.tiktok ? `<div class="toggle-row"><span class="tt-label">${TIKTOK_ICON} ${t('Follow us on TikTok')}<small class="row-note">@${esc(save.tiktok)}</small></span><a class="btn small tt-btn" href="${tiktokUrl(save.tiktok)}" target="_blank" rel="noopener" data-click>${t('Follow')}</a></div>` : ''}
@@ -2961,7 +2973,7 @@ export class UI {
 
   /* ------------------------------------------------------------------ shop */
   heartsChipHtml() {
-    if (!shopReadyNow() && !(save.hearts > 0)) return '';
+    // always there, so players find the shop; the + shows once it takes payments
     return `<button class="chip hearts-chip" data-act="shop" data-click aria-label="${t('Shop')}">❤️ <span>${fmt(save.hearts ?? 0)}</span>${shopReadyNow() ? '<b>+</b>' : ''}</button>`;
   }
 
@@ -3023,12 +3035,12 @@ export class UI {
       el.querySelector('[data-hearts]').textContent = fmt(save.hearts ?? 0);
     };
     const packCard = (p) => `
-      <button class="pack ${p.kind}" data-pack="${p.id}" data-click>
+      <button class="pack ${p.kind}" data-pack="${p.id}" data-click ${onSaleNow(p.id) ? '' : 'disabled'}>
         ${p.tag ? `<span class="tag">${t(p.tag)}</span>` : ''}
         <span class="ico">${p.kind === 'hearts' ? '❤️' : '<span class="seed"></span>'}</span>
         <b>${p.kind === 'hearts' ? t('{n} hearts', { n: fmt(p.hearts) }) : t('{n} seeds', { n: fmt(p.seeds) })}</b>
         <small>${p.kind === 'hearts' ? t('Revive after a crash') : t('For runners and allies')}</small>
-        <span class="price">${tsh(p.price)}</span>
+        <span class="price">${onSaleNow(p.id) ? tsh(p.price) : `${tsh(p.price)} · ${t('soon')}`}</span>
       </button>`;
     const paintPacks = () => {
       const packs = SHOP_PACKS.filter((p) => p.kind === tab);
@@ -3038,6 +3050,7 @@ export class UI {
           <button type="button" data-tab="hearts" class="${tab === 'hearts' ? 'on' : ''}">❤️ ${t('Hearts')}</button>
           <button type="button" data-tab="seeds" class="${tab === 'seeds' ? 'on' : ''}"><span class="seed"></span> ${t('Seeds')}</button>
         </div>`}
+        ${shopReadyNow() ? '' : `<div class="shop-soon">🛠️ ${t('The shop opens very soon — have a look at what’s coming!')}</div>`}
         <div class="packs">${packs.map(packCard).join('')}</div>
         <div class="shop-notes">
           <p>📱 ${t('Pay with M-Pesa, Mixx by Yas, Airtel Money or Halotel on Snippe’s secure page.')}</p>

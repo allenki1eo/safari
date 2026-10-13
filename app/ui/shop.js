@@ -22,12 +22,15 @@ async function call(body) {
 }
 
 let shopOpen = null;
-/** Whether the shop is open (its Snippe keys are set). Cached for the visit. */
+let onSale = new Set();
+/** Whether the shop takes payments yet, and which packs are on sale. Cached for the visit. */
 export async function shopReady() {
   if (shopOpen == null) {
     try {
       const res = await fetch('/api/pay', { headers: { accept: 'application/json' } });
-      shopOpen = res.ok && !!(await res.json()).ready;
+      const data = res.ok ? await res.json() : {};
+      shopOpen = !!data.ready;
+      onSale = new Set((data.packs ?? []).map((p) => p.id));
     } catch {
       return false;
     }
@@ -35,6 +38,8 @@ export async function shopReady() {
   return shopOpen;
 }
 export const shopReadyNow = () => !!shopOpen;
+/** A pack can be bought right now (the shop is open and it has a payment link). */
+export const onSaleNow = (id) => !!shopOpen && onSale.has(id);
 
 /** Bought seeds into the bank, kept apart from what can be bet. */
 function bankSeeds(n) {
