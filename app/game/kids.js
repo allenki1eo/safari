@@ -79,6 +79,25 @@ const LOOKS = {
     body: 'female', hair: 'Hair_BuzzedFemale', sleeve: 1, hem: 2, height: 1.68,
     shirtPat: { type: PAT.zigzag, color: 0x4de1ff, scale: 10 }, gear: ['braids', 'necklace', 'glowshoes'],
   },
+  keza: {
+    body: 'female', hair: 'Hair_Buns', sleeve: 0.3, hem: 0.2, height: 1.66,
+    shirtPat: { type: PAT.zigzag, color: 0x1a1a1a, scale: 11 }, gear: ['skirt', 'headband', 'necklace', 'bracelets', 'sandals'],
+    skirtPat: { type: PAT.zigzag, color: 0xf2ece0, scale: 14 },
+  },
+  ilunga: {
+    body: 'male', hair: 'Hair_Buzzed', sleeve: 1, hem: 2, height: 1.74, vest: 0xc2185b,
+    gear: ['hat', 'chain', 'boots'],
+  },
+  nakato: {
+    body: 'female', hair: 'Hair_BuzzedFemale', sleeve: 0.35, hem: 0.2, height: 1.64,
+    gear: ['wrap', 'shuka', 'skirt', 'bracelets', 'sandals'],
+    wrapPat: { type: PAT.stripesX, color: 0x1a1a1a, scale: 16 }, shukaPat: { type: PAT.stripesX, color: 0x1a1a1a, scale: 16 },
+    skirtPat: { type: PAT.dots, color: 0xd90000, scale: 18 },
+  },
+  chebet: {
+    body: 'female', hair: 'Hair_BuzzedFemale', sleeve: 0, hem: 0.25, height: 1.7,
+    shirtPat: { type: PAT.stripesY, color: 0x111111, scale: 14 }, gear: ['sweatband', 'necklace'],
+  },
   kito: {
     body: 'male', hair: 'Hair_Buzzed', sleeve: 0.5, hem: 0.7, height: 1.56,
     pantsPat: { type: PAT.stripesX, color: 0xd7263d, scale: 22 }, gear: ['hightop', 'chain', 'goldshoes'],

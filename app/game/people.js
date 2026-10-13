@@ -48,6 +48,10 @@ const LOOKS = {
   baraka: { hair: 'hat' },
   amani: { hair: 'braids', girl: true, gear: ['necklace'] },
   kito: { hair: 'hightop', baggy: true, scale: 0.93 },
+  keza: { hair: 'puffs', girl: true, gear: ['headband', 'necklace', 'bracelets'] },
+  ilunga: { hair: 'hat' },
+  nakato: { hair: 'wrap', girl: true, wrapPat: { type: PAT.stripesX, color: 0x1a1a1a, scale: 16 }, gear: ['bracelets'] },
+  chebet: { hair: 'fade', band: 0x1eb53a, girl: true, gear: ['necklace'] },
 };
 
 const hex = (c) => new THREE.Color(c);

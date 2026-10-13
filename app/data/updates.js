@@ -5,6 +5,17 @@
  */
 export const UPDATES = [
   {
+    id: '2026-10-13-congo-rwanda',
+    emoji: '🌋',
+    title: 'The journey goes on: Congo and Rwanda',
+    items: [
+      'Nine new regions after Bwindi: Nyiragongo’s lava, the Congo River, Rwanda’s volcanoes, Nyungwe and Akagera.',
+      'Then back through Uganda’s Queen Elizabeth and Murchison Falls, Lake Nakuru, and the sea at Lamu.',
+      'Four new runners: Keza from Rwanda, Ilunga from Congo, Nakato from Uganda and Chebet from Kenya.',
+      'Three new powerups: 🧲 Sumaku pulls in seeds, 🪶 Unyoya makes you leap, ✨ Kinga carries you through anything.',
+    ],
+  },
+  {
     id: '2026-10-13-store',
     emoji: '🛍️',
     title: 'Win hearts on the trail',

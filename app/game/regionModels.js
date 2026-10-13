@@ -597,13 +597,15 @@ export function makeGateStyled(style) {
 
 export function makeBoulderStyled(style) {
   const g = new Group();
-  const cols = style === 'snow' ? [0x7d7f88, 0x8c8e96] : style === 'moss' ? [0x5f5a4e, 0x6a6555] : [0xa08a78, 0x93806e, 0xb09a86];
+  const cols = style === 'snow' ? [0x7d7f88, 0x8c8e96] : style === 'moss' ? [0x5f5a4e, 0x6a6555] : style === 'lava' ? [0x3a3230, 0x2e2826, 0x45393a] : [0xa08a78, 0x93806e, 0xb09a86];
   const b = mesh(G.dodec, mat(pick(cols)), 1.15, 1.3, 1.1, 0, 1.2, 0);
   b.rotation.set(rand(0, 3), rand(0, 3), rand(0, 3));
   g.add(b);
   g.add(mesh(G.dodec, mat(pick(cols)), 0.6, 0.5, 0.6, 0.7, 0.4, 0.4));
   if (style === 'snow') g.add(mesh(G.ico1, mat(0xf4f7fb), 1.1, 0.35, 1.05, 0, 2.2, 0));
   if (style === 'moss') for (let i = 0; i < 5; i++) g.add(mesh(G.ico1, mat(i % 2 ? 0x4f8a3a : 0x6aa845), 0.4, 0.15, 0.35, rand(-0.6, 0.6), rand(1.4, 2.3), rand(-0.6, 0.6)));
+  // Nyiragongo basalt: still glowing in the cracks
+  if (style === 'lava') for (let i = 0; i < 6; i++) g.add(mesh(G.ico1, basic(i % 2 ? 0xff6a1a : 0xffb02e), 0.16, 0.1, 0.16, rand(-0.8, 0.8), rand(0.5, 2.1), rand(-0.75, 0.75)));
   g.add(blobShadow(3, 2.6));
   return g;
 }

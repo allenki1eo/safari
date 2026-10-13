@@ -35,7 +35,9 @@ const NIGHT = { top: '#070b26', hor: '#26306e', fog: '#1d2558', sun: '#a9bcff', 
 const BRIGHT = { top: '#3a95e6', hor: '#e8f4ff', fog: '#f2efe2', sun: '#fff6e0', sunI: 2.6, hemiS: '#f2f6ff', hemiG: '#c9b48a', hemiI: 1.35, sunH: 0.8, night: 0, cloud: '#ffffff' };
 // Serengeti morning → crater noon → bright lakeshore → baobab afternoon → Kili sunset → dusk
 // in Ruaha → Rufiji night → Zanzibar in full daylight → Mara day → golden Amboseli → soft misty
-// Bwindi → morning again. Keyed to regions (`at(id, metres in)`) so adding one keeps the light.
+// Bwindi → Nyiragongo's lava glowing in the night → dawn on the Congo → misty Rwandan hills →
+// Akagera noon → Queen Elizabeth day → golden Nile → Nakuru → Lamu in full daylight → morning
+// again. Keyed to regions (`at(id, metres in)`) so adding one keeps the light.
 // The coast starts bright on purpose: a night-to-dawn fade here turned the beach into fog.
 const at = (id, m = 0) => REGIONS.find((r) => r.id === id).at + m;
 const PALETTES = [
@@ -43,7 +45,10 @@ const PALETTES = [
   { at: at('tarangire', 400), ...DAY }, { at: at('kilimanjaro', 250), ...GOLD }, { at: at('ruaha', 350), ...DUSK },
   { at: at('selous', 250), ...NIGHT }, { at: at('selous', 700), ...NIGHT }, { at: at('zanzibar'), ...BRIGHT },
   { at: at('mara', 400), ...NOON }, { at: at('amboseli', 200), ...DAY }, { at: at('amboseli', 550), ...GOLD },
-  { at: at('bwindi', 150), ...DAY }, { at: CYCLE, ...DAY },
+  { at: at('bwindi', 150), ...DAY }, { at: at('nyiragongo', 250), ...DUSK }, { at: at('nyiragongo', 600), ...NIGHT },
+  { at: at('congo', 350), ...DAY }, { at: at('volcanoes', 300), ...DAY }, { at: at('akagera', 400), ...NOON },
+  { at: at('queenelizabeth', 400), ...DAY }, { at: at('murchison', 450), ...GOLD }, { at: at('nakuru', 300), ...DAY },
+  { at: at('lamu'), ...BRIGHT }, { at: CYCLE, ...DAY },
 ].map((p) => ({ ...p, top: C(p.top), hor: C(p.hor), fog: C(p.fog), sun: C(p.sun), hemiS: C(p.hemiS), hemiG: C(p.hemiG), cloud: C(p.cloud) }));
 
 /** Sun height and night amount at a journey distance. Used to keep regions in their own light. */
@@ -677,6 +682,15 @@ export class World {
     this.forestMat.color.copy(P.fog).lerp(hill, 0.75);
     this.mtnMat.color.copy(P.fog).lerp(C('#5a6088'), 0.5 + fogAmt * 0.4);
     this.snowMat.color.copy(P.sun).lerp(C('#ffffff'), 0.5);
+    // a volcano wears no snow: a glowing lava rim on Nyiragongo, green slopes in Rwanda
+    const lava = this.mixNum(m, (r) => (r.peak === 'lava' ? 1 : 0));
+    const green = this.mixNum(m, (r) => (r.peak === 'green' ? 1 : 0));
+    if (lava > 0) this.snowMat.color.lerp(C('#3a2622'), lava);
+    if (green > 0) {
+      this.mtnMat.color.lerp(C('#4f6e48'), green * 0.55);
+      this.snowMat.color.lerp(this.mtnMat.color.clone().lerp(C('#3f6a3a'), 0.6), green);
+    }
+    this.snowMat.emissive.setHex(0x333344).lerp(C('#ff4a14'), lava * 0.85);
     this.cloudMat.color.copy(P.cloud);
     this.cloudMat.emissive.copy(P.cloud).multiplyScalar(0.35);
     this.oceanMat.color.set(rb.ocean && m.t > 0.5 ? rb.ground.water : ra.ground.water ?? '#3fc1c9').lerp(P.fog, 0.25);

@@ -8,9 +8,16 @@ describe('journey regions', () => {
     for (const r of REGIONS) expect(COUNTRIES[r.country], r.id).toBeDefined();
   });
 
-  it('visits Tanzania, then Kenya, then Uganda', () => {
+  it('visits Tanzania, then Kenya, Uganda, Congo and Rwanda', () => {
     const order = [...new Set(REGIONS.map((r) => r.country))];
-    expect(order).toEqual(['tz', 'ke', 'ug']);
+    expect(order).toEqual(['tz', 'ke', 'ug', 'cd', 'rw']);
+  });
+
+  it('only ever adds regions at the end, so saved indexes and journey distances hold', () => {
+    // saves, challenge links and the leaderboard store region indexes; routes are keyed by distance
+    const first = ['serengeti', 'ngorongoro', 'manyara', 'tarangire', 'kilimanjaro', 'ruaha', 'selous', 'zanzibar', 'mara', 'amboseli', 'bwindi'];
+    expect(REGIONS.slice(0, first.length).map((r) => r.id)).toEqual(first);
+    expect(REGIONS.find((r) => r.id === 'bwindi').at).toBe(7900);
   });
 
   it('only references props, animals and blockers the game can build', () => {

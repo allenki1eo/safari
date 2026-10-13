@@ -502,7 +502,7 @@ export class UI {
     }
     for (const [id, el] of Object.entries(this.boostEls)) {
       const left = g.boosts[id] ?? 0;
-      el.style.setProperty('--p', Math.max(0, left / BOOSTS[id].dur).toFixed(3));
+      el.style.setProperty('--p', Math.max(0, left / g.boostDur(id)).toFixed(3));
       el.classList.toggle('ending', left < 1.5);
     }
     if (g.shield > 0) E.shield.style.setProperty('--p', (g.shield / 30).toFixed(3));
@@ -623,7 +623,7 @@ export class UI {
 
   onLap({ lap }) {
     this.shout({ text: t('Journey complete!'), sub: `${t('Legend lap {n}', { n: lap + 1 })} · +${fmt(5000 * multiplier())}` });
-    this.toast('🏆', t('<b>You crossed three countries!</b> The song grows stronger — keep running.'), 3600);
+    this.toast('🏆', t('<b>You crossed five countries!</b> The song grows stronger — keep running.'), 3600);
   }
 
   flash(color) {
@@ -690,7 +690,7 @@ export class UI {
       <div class="screen modal-wrap scrim-full">
         <div class="panel modal how-to">
           <h2>${t('How to play')}</h2>
-          <div class="muted">${t('Outrun Fisi the hyena king across Tanzania, Kenya and Uganda.')}</div>
+          <div class="muted">${t('Outrun Fisi the hyena king across Tanzania, Kenya, Uganda, Congo and Rwanda.')}</div>
           <div class="how-list">
             ${CONTROLS.map((c) => `
               <div class="how-row"><div class="gest g-${c.g}"><i></i></div><div><b>${t(c.label)}</b><small>${t(c.why)}${desktopKeys(c.act) ? ` · ${desktopKeys(c.act)}` : ''}</small></div></div>`).join('')}
@@ -972,7 +972,7 @@ export class UI {
             <div class="lb-head"><b>${t('Savanna board')}</b><span class="muted">${t('Top runs')}</span></div>
             <div class="lb-slot"><p class="muted">${t('Saving your run…')}</p></div>
           </div>
-          <div class="story-unlock"><span class="e">${COUNTRIES[reg.country].flag}</span><div><b>${esc(reg.name)} · ${esc(reg.title)}</b><br><span class="muted">${next ? t('Next: {place}', { place: `${COUNTRIES[next.country].flag} ${esc(next.name)}` }) : t('You crossed all three countries!')}</span></div></div>
+          <div class="story-unlock"><span class="e">${COUNTRIES[reg.country].flag}</span><div><b>${esc(reg.name)} · ${esc(reg.title)}</b><br><span class="muted">${next ? t('Next: {place}', { place: `${COUNTRIES[next.country].flag} ${esc(next.name)}` }) : t('You crossed all five countries!')}</span></div></div>
           <div class="bet-slot"></div>
           <div class="chal-slot"></div>
           ${this.heartsLineHtml()}
@@ -2045,7 +2045,7 @@ export class UI {
           </div>
           <div class="panel select-card">
             <div class="dots">${RUNNERS.map((_, i) => `<i class="${i === this.selIdx ? 'on' : ''}"></i>`).join('')}</div>
-            <div class="role">${esc(r.title)}</div>
+            <div class="role">${r.country ? `${COUNTRIES[r.country].flag} ` : ''}${esc(r.title)}</div>
             <h2>${esc(r.name)}</h2>
             <p>${esc(r.bio)}</p>
             ${r.perk ? `<div class="perk-badge"><span class="pi">${r.perk.icon}</span><span><b>${esc(t(r.perk.name))}</b><small>${esc(t(r.perk.desc))}</small></span></div>` : ''}

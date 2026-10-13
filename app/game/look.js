@@ -48,6 +48,12 @@ const GRADES = {
   mara: [1.12, 1.07, '#fff0e2'],
   amboseli: [1.02, 1.04, '#fff8ec'],
   bwindi: [1.0, 1.03, '#effff0'],
+  nyiragongo: [1.06, 1.08, '#fff0e6'],
+  congo: [1.06, 1.04, '#effff0'],
+  volcanoes: [1.04, 1.04, '#f2fff2'],
+  nyungwe: [1.02, 1.03, '#effff0'],
+  nakuru: [1.12, 1.05, '#fff2f2'],
+  lamu: [1.18, 1.04, '#f2fffe'],
 };
 const G = REGIONS.map((r) => {
   const [s, c, t] = GRADES[r.id] ?? [1.08, 1.05, '#ffffff'];
