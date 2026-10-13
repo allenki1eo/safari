@@ -21,7 +21,7 @@ function weighted(list, rng) {
 }
 
 // Plains animals that graze, wander and trot; the rest keep the mode their region gives them.
-export const ROAMERS = new Set(['zebra', 'giraffe', 'elephant', 'wildebeest', 'buffalo', 'lion', 'rhino', 'gazelle', 'warthog', 'wilddog']);
+export const ROAMERS = new Set(['zebra', 'giraffe', 'elephant', 'wildebeest', 'buffalo', 'lion', 'rhino', 'gazelle', 'warthog', 'wilddog', 'okapi']);
 
 /** Mothers that sometimes bring a calf, which keeps to their side (world.js). */
 export const CALVES = { elephant: 'elephant_calf', giraffe: 'giraffe_calf' };
@@ -57,7 +57,9 @@ export function planHerd(region, day, wz) {
   let side = rng() < 0.5 ? -1 : 1;
   if (wet && water) side = water;
   const big = kind === 'elephant' || kind === 'giraffe';
-  const xr = kind === 'dolphin' ? [22, 60] : wet && water ? [17, 40] : kind === 'crab' ? [4.5, 10] : kind === 'gorilla' ? [6, 16] : big ? [16, 40] : [11, 32];
+  const monkey = kind === 'goldenMonkey' || kind === 'colobus';
+  // small animals sit close to the trail so they read; the big ones stand well back
+  const xr = kind === 'dolphin' ? [22, 60] : wet && water ? [17, 40] : kind === 'crab' || monkey ? [4.5, 10] : kind === 'gorilla' ? [6, 16] : big ? [16, 40] : [11, 32];
   const span = xr[1] - xr[0];
   return {
     kind,

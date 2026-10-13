@@ -164,6 +164,7 @@ export const Animals = {
   warthog: () => makeWildAnimal('warthog', null, { height: 0.8 }),
   elephantCalf: () => makeWildAnimal('elephant_calf', null, { height: 1.5 }),
   giraffeCalf: () => makeWildAnimal('giraffe_calf', null, { height: 2.6 }),
+  okapi: () => makeWildAnimal('okapi', null, { height: 1.9 }),
 };
 
 /* ==========================================================================

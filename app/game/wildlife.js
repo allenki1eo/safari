@@ -11,7 +11,7 @@ import { PAT, PATTERN_GLSL } from './rigkit.js';
  * static/models/animals/LICENSE.txt): lion, lioness, zebra, wildebeest, rhino, giraffe,
  * African elephant and hippo, plus a hyena, cheetah and buffalo recoated from 0 A.D.'s wolf,
  * tiger and bull, a painted wild dog from the same wolf, gazelle, warthog (0 A.D.'s boar),
- * crocodile, and elephant and giraffe calves. Where a code-built animal exists (fauna.js) it
+ * crocodile, elephant and giraffe calves, and an okapi drawn from the giraffe. Where a code-built animal exists (fauna.js) it
  * stands in until the model arrives, so the herds never wait on the network.
  */
 
@@ -59,10 +59,11 @@ const CLIPS = {
   elephant_calf: { run: 'Run', walk: 'Walk', idle: ['Idle', 'Idle2'] },
   giraffe_calf: { run: 'Run', walk: 'Walk', idle: ['Idle', 'Idle2'] },
   croc: { run: 'Run', walk: 'Walk', idle: ['Idle', 'Idle2'] },
+  okapi: { run: 'Run', walk: 'Walk', idle: ['Idle', 'Idle2'] },
 };
 
 // species drawn from another species' model file: the wild dog is 0 A.D.'s wolf, like the hyena
-const FILES = { wilddog: 'hyena' };
+const FILES = { wilddog: 'hyena', okapi: 'giraffe' };
 
 /**
  * Reshaping a borrowed body, applied after each animation update (the clips key every bone's
@@ -72,6 +73,9 @@ const FILES = { wilddog: 'hyena' };
  */
 const RESHAPE = {
   hyena: { tilt: ['Bone', -0.15], scale: { FrontLeg1_L: 1.2, FrontLeg1_R: 1.2, Neck1: 1.14, Tail1: 0.55 } },
+  // the okapi is the giraffe's forest cousin: the same build with a far shorter neck (the head
+  // scaled back up to its own size) and a longer tail
+  okapi: { scale: { 'neck_01-node': 0.62, 'neck_02-node': 0.62, 'neck_03-node': 0.7, 'head-node': 1 / (0.62 * 0.62 * 0.7), 'tail_01-node': 1.25 } },
 };
 
 function reshaper(kind, model) {
@@ -91,10 +95,16 @@ function reshaper(kind, model) {
     const axis = new THREE.Vector3(1, 0, 0).applyQuaternion(modelQ).applyQuaternion(rel.invert()).normalize();
     tilt = new THREE.Quaternion().setFromAxisAngle(axis, spec.tilt[1]);
   }
-  const scaled = Object.entries(spec.scale ?? {}).filter(([n]) => bones[n]).map(([n, k]) => [bones[n], k]);
+  const scaled = Object.entries(spec.scale ?? {}).filter(([n]) => bones[n]).map(([n, k]) => ({ b: bones[n], k, rest: bones[n].scale.clone(), last: null }));
   return () => {
     if (tilt) tiltBone.quaternion.premultiply(tilt);
-    for (const [b, k] of scaled) b.scale.multiplyScalar(k);
+    for (const s of scaled) {
+      // some rigs' clips don't key a bone's scale; then last frame's scale is still there, and
+      // multiplying again would compound it every frame
+      if (s.last?.equals(s.b.scale)) s.b.scale.copy(s.rest);
+      s.b.scale.multiplyScalar(s.k);
+      (s.last ??= new THREE.Vector3()).copy(s.b.scale);
+    }
   };
 }
 
@@ -110,6 +120,9 @@ const COATS = {
   // the painted wolf: blotches of black over tan and cream
   wilddog: { base: 0xa8803f, mark: 0x1c1712, type: PAT.spots, scale: 4.6, blur: 2, lo: 0.6 },
   warthog: { base: 0x9a8a76, mark: 0x9a8a76, type: PAT.none, scale: 1, blur: 1, lo: 0.6 },
+  // velvet chocolate with zebra-like white bands on the legs only (`legs`: the bind-pose height,
+  // in the mesh's own units, below which the bands are painted; the giraffe stands z-up)
+  okapi: { base: 0x3b1e16, mark: 0xf1eadf, type: PAT.none, scale: 9, blur: 3, lo: 0.55, legs: -0.12 },
 };
 
 const materials = new Map();
@@ -126,16 +139,23 @@ function curved(src, kind, unit) {
     key: `coat-${kind}`,
     vertexHead: 'varying vec3 vCoat;\n',
     vertexBegin: 'vCoat = position;\n',
-    fragmentHead: 'varying vec3 vCoat;\nuniform vec3 uBase, uMark;\nuniform vec4 uPat;\n' + PATTERN_GLSL,
+    fragmentHead: 'varying vec3 vCoat;\nuniform vec3 uBase, uMark;\nuniform vec4 uPat;\nuniform vec2 uLegs;\n' + PATTERN_GLSL,
     fragmentColor: /* glsl */ `
       vec3 fur = texture2D(map, vMapUv, uPat.z).rgb;
       float shade = clamp(dot(fur, vec3(0.299, 0.587, 0.114)) / 0.42, uPat.w, 1.35);
-      diffuseColor.rgb = mix(uBase, uMark, patternMask(vCoat * uPat.y, uPat.x)) * shade;
+      float mark = patternMask(vCoat * uPat.y, uPat.x);
+      if (uLegs.x > 0.5) {
+        // horizontal bands, wavy, fading out up the leg
+        float band = step(0.5, fract(vCoat.z * uPat.y + sin(vCoat.x * uPat.y * 2.0) * 0.12));
+        mark = band * (1.0 - smoothstep(uLegs.y - 0.06, uLegs.y + 0.06, vCoat.z));
+      }
+      diffuseColor.rgb = mix(uBase, uMark, mark) * shade;
     `,
     uniforms: {
       uBase: { value: new THREE.Color(coat.base) },
       uMark: { value: new THREE.Color(coat.mark) },
       uPat: { value: new THREE.Vector4(coat.type, coat.scale * unit, coat.blur, coat.lo) },
+      uLegs: { value: new THREE.Vector2(coat.legs == null ? 0 : 1, coat.legs ?? 0) },
     },
   });
   materials.set(key, m);

@@ -142,6 +142,9 @@ const HERD = {
   wilddog: () => Animals.wilddog(),
   elephant_calf: () => Animals.elephantCalf(),
   giraffe_calf: () => Animals.giraffeCalf(),
+  okapi: () => Animals.okapi(),
+  goldenMonkey: () => RegionAnimals.goldenMonkey(),
+  colobus: () => RegionAnimals.colobus(),
 };
 
 function weighted(list) {

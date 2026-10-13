@@ -25,7 +25,7 @@ export const PROP_TYPES = [
 ];
 export const HERD_TYPES = [
   'zebra', 'giraffe', 'elephant', 'wildebeest', 'buffalo', 'flamingo', 'hippo', 'gorilla', 'lion', 'rhino', 'dolphin', 'crab',
-  'gazelle', 'warthog', 'wilddog',
+  'gazelle', 'warthog', 'wilddog', 'okapi', 'goldenMonkey', 'colobus',
 ];
 
 export const REGIONS = [
@@ -197,7 +197,7 @@ export const REGIONS = [
     hill: '#3f4a30', fog: { tint: '#c9b9b0', amount: 0.3, far: 190 }, peak: 'lava', blades: false,
     kili: { x: -40, y: -60, z: -900, s: 1.6 },
     props: [['jungle', 2], ['treefern', 2.5], ['fern', 4], ['banana', 1.5], ['kopje', 1.8], ['bush', 2]],
-    herd: [['gorilla', 'idle', 1.6], ['elephant', 'walk', 0.6]],
+    herd: [['gorilla', 'idle', 1.6], ['goldenMonkey', 'idle', 1.2], ['elephant', 'walk', 0.6]],
     blocks: ['boulder', 'gorilla'], style: { log: 'mossy', gate: 'vine', rock: 'lava' },
     trucks: false, specials: { rockfall: 3.2 },
     music: { transpose: -4, tempo: 120, scale: 'minor' },
@@ -211,7 +211,7 @@ export const REGIONS = [
     hill: '#2c5226', fog: { tint: '#b8cdb0', amount: 0.42, near: 24, far: 140 }, weather: 'mist', forest: true,
     kili: { x: -260, y: -200, z: -720, s: 1 },
     props: [['jungle', 6], ['palm', 2], ['banana', 2], ['papyrus', 2.5], ['fern', 5], ['treefern', 2], ['hut', 0.6]],
-    herd: [['hippo', 'idle', 2], ['elephant', 'walk', 1], ['gorilla', 'idle', 1]],
+    herd: [['okapi', 'walk', 2.4], ['hippo', 'idle', 2], ['elephant', 'walk', 1], ['gorilla', 'idle', 0.8]],
     blocks: ['boulder', 'gorilla'], style: { log: 'mossy', gate: 'vine', rock: 'moss' },
     wild: false, trucks: false, specials: { croc: 2.4, river: 1.8 },
     music: { transpose: 3, tempo: 124, scale: 'major' },
@@ -225,7 +225,7 @@ export const REGIONS = [
     hill: '#3f7a35', fog: { tint: '#c4d6c0', amount: 0.38, near: 30, far: 170 }, weather: 'mist', peak: 'green',
     kili: { x: 120, y: -50, z: -880, s: 1.3 },
     props: [['jungle', 3], ['treefern', 3], ['banana', 3], ['fern', 5], ['flowers', 1.5], ['hut', 0.8], ['bush', 2]],
-    herd: [['gorilla', 'idle', 2.5], ['buffalo', 'idle', 0.6]],
+    herd: [['goldenMonkey', 'idle', 3.5], ['gorilla', 'idle', 2.2], ['buffalo', 'idle', 0.6]],
     blocks: ['gorilla', 'boulder'], style: { log: 'mossy', gate: 'vine', rock: 'moss' },
     trucks: false, specials: { buffalo: 1.2 },
     music: { transpose: 0, tempo: 118, scale: 'minor' },
@@ -239,7 +239,7 @@ export const REGIONS = [
     hill: '#2f6a2f', fog: { tint: '#b6ccb2', amount: 0.48, near: 20, far: 125 }, weather: 'mist', forest: true,
     kili: { x: -260, y: -200, z: -720, s: 1 },
     props: [['treefern', 5], ['jungle', 4], ['fern', 6], ['flowers', 2], ['bush', 3]],
-    herd: [['gorilla', 'idle', 1]],
+    herd: [['colobus', 'idle', 3.5], ['gorilla', 'idle', 0.8]],
     blocks: ['gorilla', 'boulder'], style: { log: 'mossy', gate: 'vine', rock: 'moss' },
     wild: false, trucks: false, specials: { river: 1.6 },
     music: { transpose: -1, tempo: 116, scale: 'minor' },
