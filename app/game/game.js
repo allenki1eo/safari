@@ -201,6 +201,12 @@ export class Game {
     this.shieldMesh.scale.set(0.85, 1.15, 0.85);
     this.shieldMesh.visible = false;
     this.scene.add(this.shieldMesh);
+    // Kinga's golden glow, a little wider than the Ngao shield
+    const k = bend(new THREE.MeshBasicMaterial({ color: 0xffd34d, transparent: true, opacity: 0.2, depthWrite: false, blending: THREE.AdditiveBlending }));
+    this.kingaMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(1.4, 2), k);
+    this.kingaMesh.scale.set(0.9, 1.2, 0.9);
+    this.kingaMesh.visible = false;
+    this.scene.add(this.kingaMesh);
   }
 
   /** Journey distance a run starts from. A shared link may start a locked region. */
@@ -311,6 +317,11 @@ export class Game {
       this.shieldMesh.visible = true;
       this.emit('shield', { on: true, dur: SHIELD_T, perk: true });
     }
+    // Chebet's flying start: the run opens with Duma's dash (a perk, not an ally found)
+    if (this.perk === 'dash') {
+      this.activate('duma');
+      this.stats.allies--;
+    }
     this.emit('start');
   }
 
@@ -417,7 +428,7 @@ export class Game {
 
   jump() {
     const p = this.p;
-    p.vy = JUMP_V * (this.powers.twiga ? 1.6 : 1);
+    p.vy = JUMP_V * (this.powers.twiga ? 1.6 : this.boosts.leap ? 1.3 : 1) * (this.perk === 'jump' ? 1.15 : 1);
     p.grounded = false;
     p.slide = 0;
     this.coyote = 0;
@@ -591,6 +602,14 @@ export class Game {
       this.shieldMesh.rotation.y += dt * 1.5;
       this.shieldMesh.material.opacity = this.shield < 3 && Math.floor(this.time * 8) % 2 ? 0.06 : 0.22;
     }
+    const kinga = this.boosts.kinga ?? 0;
+    this.kingaMesh.visible = kinga > 0;
+    if (kinga > 0) {
+      this.kingaMesh.position.set(p.x, p.y + 1 + (pw.tembo ? 1.95 : 0), 0);
+      this.kingaMesh.rotation.y -= dt * 2;
+      this.kingaMesh.material.opacity = kinga < 2 && Math.floor(this.time * 8) % 2 ? 0.05 : 0.2 + Math.sin(this.time * 9) * 0.05;
+      if (Math.random() < dt * 18) this.fx.sparkle(p.x + rand(-0.6, 0.6), p.y + rand(0.4, 1.8), 0.4, 0xffd34d, 1);
+    }
     this.emit('hud', this);
   }
 
@@ -723,7 +742,7 @@ export class Game {
   updateObstacles(dt, prevD) {
     const p = this.p;
     const pw = this.powers;
-    const invincible = pw.tembo || pw.duma || pw.tai || p.invuln > 0;
+    const invincible = pw.tembo || pw.duma || pw.tai || p.invuln > 0 || !!this.boosts.kinga;
     const pH = p.slide > 0 ? 0.85 : 1.75;
     const changing = Math.abs(p.x - LANES[p.lane]) > 0.15;
 
@@ -1136,14 +1155,14 @@ export class Game {
       return;
     }
     if (wz <= this.nextBoxAt) return; // the slot was asked for a letter that can't sit here
-    // about a third of the slots carry a powerup gem instead of a box
-    if (Math.random() < 0.35) {
+    // two slots in five carry a powerup gem instead of a box
+    if (Math.random() < 0.4) {
       const id = BOOST_IDS[Math.floor(Math.random() * BOOST_IDS.length)];
       const g = makeBoostGem(BOOSTS[id].emoji, BOOSTS[id].color);
       g.position.set(LANES[lane], y, 0);
       this.scene.add(g);
       this.boxes.push({ lane, wz, y, mesh: g, boost: id });
-      this.nextBoxAt = wz + 220 + rngAt(this.day, 6, wz)() * 180;
+      this.nextBoxAt = wz + (220 + rngAt(this.day, 6, wz)() * 180) * this.boxGap();
       return;
     }
     const m = makePrizeBox();
@@ -1151,7 +1170,7 @@ export class Game {
     this.scene.add(m);
     this.boxes.push({ lane, wz, y, mesh: m });
     // roughly every 250-450 m, a little more often the further you get
-    this.nextBoxAt = wz + 250 + rngAt(this.day, 6, wz)() * 200 - Math.min(80, this.D / 100);
+    this.nextBoxAt = wz + (250 + rngAt(this.day, 6, wz)() * 200 - Math.min(80, this.D / 100)) * this.boxGap();
   }
 
   /** The day's first run past EARNED_HEARTS.dailyM metres wins a heart (while there's room). */
@@ -1163,6 +1182,12 @@ export class Game {
     this.haptic(30);
     this.emit('heart', { from: 'daily' });
     this.emit('prize', { emoji: '❤️', title: t('{m} m — a heart!', { m: EARNED_HEARTS.dailyM.toLocaleString() }), sub: t('Your heart for today: it revives you after a crash'), big: true });
+  }
+
+  /** Spacing between prize slots: Nakato's twin luck finds them a third more often. */
+  boxGap() {
+    // a friend's challenge keeps their exact route, so the luck stays home
+    return this.perk === 'box' && this.linkedRoute == null ? 0.75 : 1;
   }
 
   /** Opens a Zawadi box: seeds, a shield charm, a surprise ally, double seeds, bonus points or a heart. */
@@ -1232,7 +1257,7 @@ export class Game {
     this.fx.sparkle(LANES[b.lane], b.y + 1.2, z, new THREE.Color(def.color).getHex(), 22);
     if (id === 'wind') this.kimbunga();
     else {
-      this.boosts[id] = def.dur;
+      this.boosts[id] = this.boostDur(id);
       this.emit('boost', { id, on: true });
     }
     this.emit('prize', { emoji: def.emoji, title: def.name, sub: def.line });
@@ -1243,6 +1268,11 @@ export class Game {
       persist();
       this.emit('boostIntro', { id });
     }
+  }
+
+  /** How long a powerup gem lasts: Ilunga's sapeur style stretches it by 30%. */
+  boostDur(id) {
+    return BOOSTS[id].dur * (this.perk === 'boosts' ? 1.3 : 1);
   }
 
   /** Kimbunga: a whirlwind runs ahead and flings everything in the next stretch aside. */
@@ -1265,6 +1295,7 @@ export class Game {
   endBoosts() {
     for (const k of Object.keys(this.boosts ?? {})) this.emit('boost', { id: k, on: false });
     this.boosts = {};
+    if (this.kingaMesh) this.kingaMesh.visible = false;
   }
 
   /** False while the hunt rests after a finished word (its letters stop turning up). */
@@ -1313,7 +1344,7 @@ export class Game {
   /* ------------------------------------------------------------- pickups */
   updatePickups(dt) {
     const p = this.p;
-    const magnet = !!this.powers.hondo;
+    const magnet = !!this.powers.hondo || !!this.boosts.magnet;
     const py = p.y + (p.slide > 0 ? 0.5 : 0.9);
 
     for (let i = this.coins.length - 1; i >= 0; i--) {

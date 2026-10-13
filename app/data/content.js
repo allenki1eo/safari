@@ -2,42 +2,70 @@
 
 export const RUNNERS = [
   {
-    id: 'zuri', name: 'Zuri', title: 'The Young Ranger', cost: 0, emoji: '🧒🏾',
+    id: 'zuri', name: 'Zuri', title: 'The Young Ranger', cost: 0, emoji: '🧒🏾', country: 'tz',
     perk: { id: 'combo', icon: '🔥', name: 'Combo keeper', desc: 'Seed combos last longer before they break.' },
     bio: 'Raised at the edge of the plains, Zuri can name every bird by its song.',
     skin: 0x6b4226, shirt: 0xc9a46a, pants: 0x5b4a32, shoes: 0x3b2a1c, hair: 0x1a120c,
     accent: 0xd7263d, head: 'wrap', scarf: 0xd7263d, scarfPattern: 0x1b2a6b, backpack: 0x8a5a2b, sleeves: true, wristband: 0xf4d35e,
   },
   {
-    id: 'juma', name: 'Juma', title: 'Striker of Arusha', cost: 600, emoji: '⚽',
+    id: 'juma', name: 'Juma', title: 'Striker of Arusha', cost: 600, emoji: '⚽', country: 'tz',
     perk: { id: 'allies', icon: '🐾', name: "Striker's stamina", desc: 'Animal allies stay 25% longer.' },
     bio: 'Fastest feet in the village league. Has never once lost a race to a goat.',
     skin: 0x5a3620, shirt: 0xf4d35e, pants: 0x1b4f9c, shoes: 0xffffff, hair: 0x120c08,
     accent: 0x1b998b, head: 'cap', socks: 0x1b998b, shorts: true, wristband: 0x1b998b,
   },
   {
-    id: 'neema', name: 'Neema', title: 'Keeper of Beads', cost: 1500, emoji: '📿',
+    id: 'neema', name: 'Neema', title: 'Keeper of Beads', cost: 1500, emoji: '📿', country: 'tz',
     perk: { id: 'shield', icon: '🛡️', name: 'Lucky beads', desc: 'Every run starts with a free shield.' },
     bio: 'Her beadwork tells the story of the migration. She means to finish it.',
     skin: 0x4a2c18, shirt: 0x6a2c91, pants: 0x4a2c18, shoes: 0x7a4a22, hair: 0x120c08,
     accent: 0xd7263d, head: 'beads', necklace: true, dress: 0x6a2c91, scarf: 0xe94f37, scarfPattern: 0xf4d35e, shorts: true,
   },
   {
-    id: 'baraka', name: 'Baraka', title: 'The Explorer', cost: 3000, emoji: '🧭',
+    id: 'keza', name: 'Keza', title: 'Dancer of a Thousand Hills', cost: 2000, emoji: '💃🏾', country: 'rw',
+    perk: { id: 'jump', icon: '🦘', name: 'Intore leap', desc: 'Every jump goes higher, like a Rwandan Intore dancer.' },
+    bio: 'From the hills above Kigali. She learned to leap from the Intore dancers — and never stopped.',
+    skin: 0x5a3620, shirt: 0xf2ece0, pants: 0x1a1a1a, shoes: 0x7a4a22, hair: 0x120c08,
+    accent: 0xb5452f, head: 'beads', necklace: true, dress: 0xb5452f, scarf: 0x1a1a1a, scarfPattern: 0xf2ece0, shorts: true,
+  },
+  {
+    id: 'baraka', name: 'Baraka', title: 'The Explorer', cost: 3000, emoji: '🧭', country: 'tz',
     perk: { id: 'magnet', icon: '🧲', name: "Explorer's nose", desc: 'Seeds close by fly into your bag.' },
     bio: 'Maps every kopje, names every baobab. Carries far too many snacks.',
     skin: 0x7a4a2a, shirt: 0xe8dcc0, pants: 0x6b5a3a, shoes: 0x4a3420, hair: 0x2a1a10,
     accent: 0xb38b4d, head: 'hat', backpack: 0x3f6b3a, sleeves: true, scarf: 0x1b998b,
   },
   {
-    id: 'amani', name: 'Amani', title: 'Night Runner', cost: 6000, emoji: '🌙',
+    id: 'ilunga', name: 'Ilunga', title: 'The Sapeur of Kinshasa', cost: 4500, emoji: '🎩', country: 'cd',
+    perk: { id: 'boosts', icon: '🎩', name: 'Sapeur style', desc: 'Powerup gems last 30% longer.' },
+    bio: 'Never runs without his best suit. Says a sapeur can outrun anyone — as long as the hat stays on.',
+    skin: 0x4a2c18, shirt: 0xe84393, pants: 0xe84393, shoes: 0x1a1a1a, hair: 0x120c08,
+    accent: 0xf4d35e, head: 'hat', sleeves: true, scarf: 0xf4d35e,
+  },
+  {
+    id: 'amani', name: 'Amani', title: 'Night Runner', cost: 6000, emoji: '🌙', country: 'tz',
     perk: { id: 'seeds', icon: '🌰', name: 'Night harvest', desc: '+25% seeds on every run.' },
     bio: 'Runs by starlight. The fireflies follow her home.',
     skin: 0x3e2414, shirt: 0x1b2a6b, pants: 0x101828, shoes: 0x4de1ff, hair: 0x0a0806,
     accent: 0x4de1ff, head: 'braids', scarf: 0x4de1ff, scarfPattern: 0xffffff, wristband: 0x4de1ff, necklace: true,
   },
   {
-    id: 'kito', name: 'Kito', title: 'Little Legend', cost: 12000, emoji: '👑',
+    id: 'nakato', name: 'Nakato', title: 'Lucky Twin of Kampala', cost: 8000, emoji: '🍀', country: 'ug',
+    perk: { id: 'box', icon: '🎁', name: 'Twin luck', desc: 'Zawadi prize boxes turn up a third more often.' },
+    bio: 'A twin, and twice as lucky. She finds Zawadi boxes where nobody else thinks to look.',
+    skin: 0x5a3620, shirt: 0xfcdc04, pants: 0x1a1a1a, shoes: 0x7a4a22, hair: 0x120c08,
+    accent: 0xd90000, head: 'wrap', dress: 0xfcdc04, scarf: 0xd90000, scarfPattern: 0x1a1a1a, shorts: true,
+  },
+  {
+    id: 'chebet', name: 'Chebet', title: 'Marathoner of Iten', cost: 10000, emoji: '🏅', country: 'ke',
+    perk: { id: 'dash', icon: '⚡', name: 'Flying start', desc: 'Every run opens with a Duma dash.' },
+    bio: 'Trains at 2,400 metres with the champions of Iten. Fisi has never once seen her start.',
+    skin: 0x3e2414, shirt: 0xbb0000, pants: 0x111111, shoes: 0x1eb53a, hair: 0x0a0806,
+    accent: 0x1eb53a, head: 'fade', wristband: 0x1eb53a, necklace: true, shorts: true,
+  },
+  {
+    id: 'kito', name: 'Kito', title: 'Little Legend', cost: 12000, emoji: '👑', country: 'tz',
     perk: { id: 'revive', icon: '💫', name: 'Little legend', desc: 'One free revive every run.' },
     bio: 'The youngest runner ever to outpace Fisi. Nobody knows how. Kito won\'t say.',
     skin: 0x6b4226, shirt: 0xff7a2f, pants: 0x2b1a0e, shoes: 0xf4d35e, hair: 0x120c08,
@@ -237,6 +265,18 @@ export const BOOSTS = {
   wind: {
     id: 'wind', name: 'Kimbunga', emoji: '🌪️', color: '#c9b8ff', dur: 0, tag: '', line: 'A whirlwind sweeps the trail ahead',
     intro: 'A kimbunga is a whirlwind! It blows every obstacle just ahead clean off the trail.',
+  },
+  magnet: {
+    id: 'magnet', name: 'Sumaku', emoji: '🧲', color: '#ff6b81', dur: 10, tag: '', line: 'Seeds from every lane fly to you',
+    intro: 'Sumaku means magnet. For 10 seconds, seeds from every lane fly straight into your bag!',
+  },
+  leap: {
+    id: 'leap', name: 'Unyoya', emoji: '🪶', color: '#ffa94d', dur: 12, tag: 'jump', line: 'Light as a feather: every jump soars',
+    intro: 'Unyoya is a feather. For 12 seconds you jump higher and float further — sail over anything!',
+  },
+  kinga: {
+    id: 'kinga', name: 'Kinga', emoji: '✨', color: '#ffd34d', dur: 7, tag: '', line: 'A golden glow carries you through anything',
+    intro: 'Kinga means protection. For 7 seconds a golden glow carries you straight through every obstacle!',
   },
 };
 export const BOOST_IDS = Object.keys(BOOSTS);

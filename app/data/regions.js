@@ -1,7 +1,10 @@
 /**
  * The journey. Each region is one chapter of the chase after Fisi and the Heart Seed:
  * across Tanzania (plains, crater, lakeshore, baobab country, the mountain, the wild south and
- * the coast), north into Kenya and west to the misty mountains of Uganda.
+ * the coast), north into Kenya, west to the misty mountains of Uganda, over the volcanoes into
+ * Congo, back through the hills of Rwanda and Uganda's great parks, and home across Kenya to
+ * the sea at Lamu. New regions are always added at the end: saves, challenge links and the
+ * leaderboard keep region indexes and journey distances.
  * Everything that makes a place feel different — ground, flora, fauna, hazards,
  * weather, music — is data here, so new regions are cheap to add.
  */
@@ -10,6 +13,8 @@ export const COUNTRIES = {
   tz: { name: 'Tanzania', flag: '🇹🇿', color: '#1eb53a' },
   ke: { name: 'Kenya', flag: '🇰🇪', color: '#bb0000' },
   ug: { name: 'Uganda', flag: '🇺🇬', color: '#fcdc04' },
+  cd: { name: 'DR Congo', flag: '🇨🇩', color: '#007fff' },
+  rw: { name: 'Rwanda', flag: '🇷🇼', color: '#20603d' },
 };
 
 /** Scenery factories the world knows how to build (see world.js). */
@@ -183,6 +188,134 @@ export const REGIONS = [
     trucks: false, specials: {},
     music: { transpose: -2, tempo: 114, scale: 'minor' },
   },
+  {
+    id: 'nyiragongo', country: 'cd', name: 'Virunga · Nyiragongo', len: 800,
+    title: 'The Fire Mountain', speaker: 'Ndeze the Mountain Gorilla', emoji: '🌋',
+    line: 'Fisi ran up the fire mountain! The lava lake spits rocks — watch for the red rings!',
+    blurb: 'Africa\'s oldest national park, where Nyiragongo\'s lava lake glows red all night long.',
+    ground: { grass: '#55603a', path: '#4a3c36' },
+    hill: '#3f4a30', fog: { tint: '#c9b9b0', amount: 0.3, far: 190 }, peak: 'lava', blades: false,
+    kili: { x: -40, y: -60, z: -900, s: 1.6 },
+    props: [['jungle', 2], ['treefern', 2.5], ['fern', 4], ['banana', 1.5], ['kopje', 1.8], ['bush', 2]],
+    herd: [['gorilla', 'idle', 1.6], ['elephant', 'walk', 0.6]],
+    blocks: ['boulder', 'gorilla'], style: { log: 'mossy', gate: 'vine', rock: 'lava' },
+    trucks: false, specials: { rockfall: 3.2 },
+    music: { transpose: -4, tempo: 120, scale: 'minor' },
+  },
+  {
+    id: 'congo', country: 'cd', name: 'Congo River', len: 900,
+    title: 'Heart of the Rainforest', speaker: 'Okapi the Forest Giraffe', emoji: '🛶',
+    line: 'Fisi took a pirogue down the great river! Through the forest — hop the crocs, dodge the hippos!',
+    blurb: 'The world\'s deepest river winds through a rainforest bigger than whole countries.',
+    ground: { grass: '#3d6a2c', path: '#7a5434', water: '#6b7a4a', waterSide: -1 },
+    hill: '#2c5226', fog: { tint: '#b8cdb0', amount: 0.42, near: 24, far: 140 }, weather: 'mist', forest: true,
+    kili: { x: -260, y: -200, z: -720, s: 1 },
+    props: [['jungle', 6], ['palm', 2], ['banana', 2], ['papyrus', 2.5], ['fern', 5], ['treefern', 2], ['hut', 0.6]],
+    herd: [['hippo', 'idle', 2], ['elephant', 'walk', 1], ['gorilla', 'idle', 1]],
+    blocks: ['boulder', 'gorilla'], style: { log: 'mossy', gate: 'vine', rock: 'moss' },
+    wild: false, trucks: false, specials: { croc: 2.4, river: 1.8 },
+    music: { transpose: 3, tempo: 124, scale: 'major' },
+  },
+  {
+    id: 'volcanoes', country: 'rw', name: 'Volcanoes', len: 800,
+    title: 'Land of a Thousand Hills', speaker: 'Inkima the Golden Monkey', emoji: '🐒',
+    line: 'Bamboo, mist and sleeping volcanoes — Fisi is hiding in the gorilla hills. Quietly now, then run!',
+    blurb: 'Five green volcanoes on the Rwanda border, wrapped in bamboo and mountain mist.',
+    ground: { grass: '#5a8a3a', path: '#6e4a30' },
+    hill: '#3f7a35', fog: { tint: '#c4d6c0', amount: 0.38, near: 30, far: 170 }, weather: 'mist', peak: 'green',
+    kili: { x: 120, y: -50, z: -880, s: 1.3 },
+    props: [['jungle', 3], ['treefern', 3], ['banana', 3], ['fern', 5], ['flowers', 1.5], ['hut', 0.8], ['bush', 2]],
+    herd: [['gorilla', 'idle', 2.5], ['buffalo', 'idle', 0.6]],
+    blocks: ['gorilla', 'boulder'], style: { log: 'mossy', gate: 'vine', rock: 'moss' },
+    trucks: false, specials: { buffalo: 1.2 },
+    music: { transpose: 0, tempo: 118, scale: 'minor' },
+  },
+  {
+    id: 'nyungwe', country: 'rw', name: 'Nyungwe Forest', len: 800,
+    title: 'The Canopy Path', speaker: 'Kima the Colobus', emoji: '🐵',
+    line: 'Up here the forest is older than the mountains! Fisi crossed the tea fields — after him!',
+    blurb: 'An ancient montane rainforest of tree ferns, orchids and troops of black-and-white colobus.',
+    ground: { grass: '#4f7f34', path: '#7a5236' },
+    hill: '#2f6a2f', fog: { tint: '#b6ccb2', amount: 0.48, near: 20, far: 125 }, weather: 'mist', forest: true,
+    kili: { x: -260, y: -200, z: -720, s: 1 },
+    props: [['treefern', 5], ['jungle', 4], ['fern', 6], ['flowers', 2], ['bush', 3]],
+    herd: [['gorilla', 'idle', 1]],
+    blocks: ['gorilla', 'boulder'], style: { log: 'mossy', gate: 'vine', rock: 'moss' },
+    wild: false, trucks: false, specials: { river: 1.6 },
+    music: { transpose: -1, tempo: 116, scale: 'minor' },
+  },
+  {
+    id: 'akagera', country: 'rw', name: 'Akagera', len: 800,
+    title: 'Lakes of the Savanna', speaker: 'Inkura the Rhino', emoji: '🦏',
+    line: 'The rhinos came home to Akagera — and so will the Heart Seed! Mind the lakeshore hippos.',
+    blurb: 'Rwanda\'s savanna: papyrus lakes, acacia hills and the Big Five back where they belong.',
+    ground: { grass: '#a9a85a', path: '#a8683e', water: '#7aa8a0', waterSide: 1 },
+    hill: '#7d8f4a', fog: { tint: '#e2e4c0', amount: 0.12 },
+    kili: { x: -260, y: -200, z: -720, s: 1 },
+    props: [['acacia', 4], ['papyrus', 2.5], ['bush', 3], ['grass', 7], ['fever', 1.2], ['kopje', 0.8]],
+    herd: [['giraffe', 'walk', 1.6], ['zebra', 'walk', 2], ['rhino', 'walk', 1], ['hippo', 'idle', 1.4], ['buffalo', 'idle', 1], ['elephant', 'walk', 0.8]],
+    blocks: ['boulder', 'mound'], style: { log: 'log', gate: 'branch', rock: 'rock' },
+    trucks: true, specials: { rhino: 2, croc: 0.8 },
+    music: { transpose: 2, tempo: 120, scale: 'major' },
+  },
+  {
+    id: 'queenelizabeth', country: 'ug', name: 'Queen Elizabeth', len: 800,
+    title: 'Lions in the Fig Trees', speaker: 'Simba wa Ishasha', emoji: '🦁',
+    line: 'In Ishasha we lions sleep up in the fig trees. Fisi ran by below us — follow the channel!',
+    blurb: 'Crater lakes, the hippo-packed Kazinga Channel and the famous tree-climbing lions.',
+    ground: { grass: '#b4ad5e', path: '#a5653c', water: '#6f9d98', waterSide: -1 },
+    hill: '#8a8a4c', fog: { tint: '#e6e2bc', amount: 0.12 },
+    kili: { x: -300, y: -60, z: -900, s: 0.9 },
+    props: [['acacia', 3.5], ['fever', 2], ['bush', 3], ['grass', 7], ['papyrus', 1.5], ['kopje', 0.6]],
+    herd: [['buffalo', 'idle', 2.2], ['hippo', 'idle', 2], ['lion', 'idle', 1.2], ['elephant', 'walk', 1], ['warthog', 'idle', 1], ['gazelle', 'idle', 1]],
+    blocks: ['boulder', 'mound'], style: { log: 'log', gate: 'branch', rock: 'rock' },
+    trucks: true, specials: { lion: 2, buffalo: 1.6 },
+    music: { transpose: 1, tempo: 120, scale: 'major' },
+  },
+  {
+    id: 'murchison', country: 'ug', name: 'Murchison Falls', len: 800,
+    title: 'Where the Nile Roars', speaker: 'Mamba the Crocodile', emoji: '🐊',
+    line: 'The whole Nile squeezes through a gap this wide! Fisi is heading downstream — hop my cousins!',
+    blurb: 'The Nile bursts through a seven-metre gorge, then rolls on past palms, giraffes and crocodiles.',
+    ground: { grass: '#b8a45a', path: '#9a5a36', water: '#5f8a86', waterSide: 1 },
+    hill: '#93844a', fog: { tint: '#e8dcb4', amount: 0.14 },
+    kili: { x: -260, y: -200, z: -720, s: 1 },
+    props: [['doum', 4], ['acacia', 2.5], ['bush', 3], ['grass', 6], ['papyrus', 2], ['palm', 1]],
+    herd: [['giraffe', 'walk', 2.4], ['hippo', 'idle', 2], ['buffalo', 'idle', 1], ['elephant', 'walk', 0.8], ['warthog', 'idle', 0.8]],
+    blocks: ['boulder', 'mound'], style: { log: 'log', gate: 'branch', rock: 'rock' },
+    trucks: true, specials: { croc: 2.4, crossing: 1.2 },
+    music: { transpose: 4, tempo: 122, scale: 'major' },
+  },
+  {
+    id: 'nakuru', country: 'ke', name: 'Lake Nakuru', len: 800,
+    title: 'The Pink Lake', speaker: 'Heroe the Flamingo', emoji: '🦩',
+    line: 'A million of my sisters turn this lake pink! Fisi is racing for the coast — and the rhinos are cross.',
+    blurb: 'A Rift Valley soda lake ringed with flamingos, yellow fever trees and white rhinos.',
+    ground: { grass: '#a5ae5a', path: '#b0784a', water: '#c9a4b0', waterSide: -1 },
+    hill: '#7f8a50', fog: { tint: '#f0dcd8', amount: 0.12 },
+    kili: { x: -260, y: -200, z: -720, s: 1 },
+    props: [['fever', 5], ['acacia', 2], ['bush', 3], ['grass', 6], ['flowers', 1.2], ['kopje', 0.8]],
+    herd: [['flamingo', 'idle', 5], ['rhino', 'walk', 1.2], ['buffalo', 'idle', 1], ['zebra', 'walk', 1], ['giraffe', 'walk', 0.8]],
+    blocks: ['boulder', 'mound'], style: { log: 'log', gate: 'branch', rock: 'rock' },
+    trucks: true, specials: { rhino: 2.4 },
+    music: { transpose: 3, tempo: 120, scale: 'major' },
+  },
+  {
+    id: 'lamu', country: 'ke', name: 'Lamu', len: 900,
+    title: 'Island of Dhows', speaker: 'Punda the Donkey', emoji: '🫏',
+    line: 'No cars on Lamu — only donkeys, dhows and narrow lanes. Corner Fisi by the sea and win back the song!',
+    blurb: 'A Swahili stone town of carved doors and dhows, where the journey reaches the Indian Ocean.',
+    ground: { grass: '#ecdcb4', path: '#f2e6c8', water: '#2fb6c2', waterSide: -1, beach: true },
+    hill: '#d6caa0', fog: { tint: '#c2e8e6', amount: 0.08, near: 150, far: 440 }, ocean: true, blades: false,
+    kili: { x: -260, y: -520, z: -720, s: 1 },
+    props: [
+      ['stonehouse', 3], ['palm', 5], ['ngalawa', 1.8], ['mangrove', 1.6], ['banda', 1], ['fishrack', 1], ['coralrock', 1.2], ['flowers', 1], ['bush', 1],
+    ],
+    herd: [['dolphin', 'idle', 2.5], ['crab', 'idle', 2]],
+    blocks: ['cart', 'canoe'], style: { log: 'palm', gate: 'net', rock: 'rock', fall: 'coconut' },
+    wild: false, trucks: false, specials: { market: 2.8, coconuts: 2 },
+    music: { transpose: 5, tempo: 122, scale: 'taarab' },
+  },
 ];
 
 // absolute journey start distance for every region
@@ -193,7 +326,7 @@ for (const r of REGIONS) {
 }
 export const JOURNEY_LEN = acc;
 
-/** Region index for a journey distance (loops after Bwindi into a "legend lap"). */
+/** Region index for a journey distance (loops after the last region into a "legend lap"). */
 export function regionIndexAt(J) {
   const lap = Math.floor(J / JOURNEY_LEN);
   const d = J - lap * JOURNEY_LEN;
