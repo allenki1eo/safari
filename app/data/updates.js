@@ -5,6 +5,16 @@
  */
 export const UPDATES = [
   {
+    id: '2026-10-13-store',
+    emoji: '🛍️',
+    title: 'Win hearts on the trail',
+    items: [
+      'Your first run past 1,000 m each day wins a heart, and lucky Zawadi boxes hold one too.',
+      'Allies moved into the new 🛍️ Shop, with Ngao shields, hearts and seed packs.',
+      'Need more hearts? Get them after the run, right from the results screen.',
+    ],
+  },
+  {
     id: '2026-10-13-perks',
     emoji: '💫',
     title: 'Every runner has a perk now',

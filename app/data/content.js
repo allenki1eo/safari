@@ -269,6 +269,12 @@ export const SHOP_PACKS = [
 ];
 /** Revives in one run: two with seeds, a third only with a heart. */
 export const MAX_REVIVES = 3;
+/**
+ * Hearts won on the trail, kept on the device apart from bought ones (which live on the server):
+ * a rare Zawadi box prize, and one a day for the first run that reaches `dailyM` metres. A player
+ * holds at most `cap` of them; bought hearts have no cap.
+ */
+export const EARNED_HEARTS = { cap: 3, dailyM: 1000 };
 
 export const PRIZES = {
   day: podium(1000, 600, 400, 100),

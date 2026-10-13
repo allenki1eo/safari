@@ -3,8 +3,9 @@
  * (server/payments.js). Buying sends the player to Snippe's checkout; it brings them back with
  * ?paid=<order>, and the game asks the server until the order is paid.
  *
- * Hearts are kept on the server (save.hearts is only a cache for the HUD). Bought seeds land in
- * the bank and are remembered in save.paidSeeds, so they never go into a friend-challenge bet.
+ * Bought hearts are kept on the server (save.hearts is only a cache for the HUD); hearts won on
+ * the trail live in save.earnedHearts and are spent first. Bought seeds land in the bank and are
+ * remembered in save.paidSeeds, so they never go into a friend-challenge bet.
  */
 import { SHOP_PACKS } from '../data/content.js';
 import { save, persist } from '../data/save.js';
@@ -81,8 +82,16 @@ export async function checkOrder(order) {
   return data;
 }
 
-/** Spends one heart on a revive. Resolves true when the server took it. */
+/** Every heart the player can spend: won on the trail plus bought. */
+export const heartsTotal = () => (save.earnedHearts ?? 0) + (save.hearts ?? 0);
+
+/** Spends one heart on a revive, a won one first. Resolves true when it was taken. */
 export async function useHeart() {
+  if ((save.earnedHearts ?? 0) > 0) {
+    save.earnedHearts--;
+    persist();
+    return true;
+  }
   try {
     const data = await call({ action: 'use' });
     cacheHearts(data.hearts);

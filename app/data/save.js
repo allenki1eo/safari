@@ -1,4 +1,4 @@
-import { MISSION_POOL, ALLY_IDS, outfitId } from './content.js';
+import { MISSION_POOL, ALLY_IDS, EARNED_HEARTS, outfitId } from './content.js';
 import { REGIONS, regionIndexAt } from './regions.js';
 import { darDay, shiftDarDay } from './daily.js';
 
@@ -217,6 +217,16 @@ export function claimMissionSet() {
 }
 
 export const multiplier = () => 1 + save.missionLevel;
+
+/** Room for another heart won on the trail (content.js EARNED_HEARTS). */
+export const earnedRoom = () => (save.earnedHearts ?? 0) < EARNED_HEARTS.cap;
+/** A heart won on the trail. False when the player already holds as many as they can win. */
+export function earnHeart() {
+  if (!earnedRoom()) return false;
+  save.earnedHearts = (save.earnedHearts ?? 0) + 1;
+  persist();
+  return true;
+}
 
 /* ------------------------------------------------------------------- daily */
 const utcDay = (now) => now.toISOString().slice(0, 10);
