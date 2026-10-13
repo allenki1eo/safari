@@ -14,9 +14,9 @@ import { World, Particles, LANE_W } from './world.js';
 import { audio } from './audio.js';
 import { t } from '../i18n.js';
 import { makeChunk, tutorialChunk, TUTORIAL_GAP, TUTORIAL_START, KINDS, TRUCK_LEN, JUMP_V, GRAVITY } from './patterns.js';
-import { RUNNERS, ALLIES, ALLY_IDS, TUTORIAL, SHOUTS, outfitId, HUNT_WORDS, HUNT_PER_LETTER, HUNT_COOLDOWN, BOOSTS, BOOST_IDS } from '../data/content.js';
+import { RUNNERS, ALLIES, ALLY_IDS, TUTORIAL, SHOUTS, outfitId, HUNT_WORDS, HUNT_PER_LETTER, HUNT_COOLDOWN, BOOSTS, BOOST_IDS, EARNED_HEARTS } from '../data/content.js';
 import { REGIONS, regionIndexAt, regionAt } from '../data/regions.js';
-import { save, persist, multiplier } from '../data/save.js';
+import { save, persist, multiplier, earnHeart, earnedRoom } from '../data/save.js';
 import {
   chunkPlan, cruiseSpeed, darDay, newRoute, ghostDistance, huntWord, lionClip, nearMissSpec, rngAt, waterClear, wildebeestFill,
 } from '../data/daily.js';
@@ -40,6 +40,7 @@ const PRIZES = [
   { w: 12, id: 'double' },
   { w: 8, id: 'score', n: 2500 },
   { w: 10, id: 'boost' },
+  { w: 3, id: 'heart' }, // only while the player has room for another won heart
 ];
 const PRIZE_WEIGHT = PRIZES.reduce((s, p) => s + p.w, 0);
 const JUMP_BUFFER = 0.16; // a jump pressed this long before landing still happens
@@ -506,6 +507,7 @@ export class Game {
     this.D += step;
     this.runTime += dt;
     this.stats.distance = Math.floor(this.D);
+    if (prevD < EARNED_HEARTS.dailyM && this.D >= EARNED_HEARTS.dailyM) this.dailyHeart();
     const mult = multiplier() * (pw.simba ? 2 : 1) * (this.boosts.score ? 2 : 1);
     this.score += step * mult;
     this.stats.score = Math.floor(this.score);
@@ -1152,15 +1154,32 @@ export class Game {
     this.nextBoxAt = wz + 250 + rngAt(this.day, 6, wz)() * 200 - Math.min(80, this.D / 100);
   }
 
-  /** Opens a Zawadi box: seeds, a shield charm, a surprise ally, double seeds or bonus points. */
+  /** The day's first run past EARNED_HEARTS.dailyM metres wins a heart (while there's room). */
+  dailyHeart() {
+    if (save.heartDay === this.today || !earnedRoom()) return;
+    save.heartDay = this.today;
+    earnHeart();
+    audio.powerup();
+    this.haptic(30);
+    this.emit('heart', { from: 'daily' });
+    this.emit('prize', { emoji: '❤️', title: t('{m} m — a heart!', { m: EARNED_HEARTS.dailyM.toLocaleString() }), sub: t('Your heart for today: it revives you after a crash'), big: true });
+  }
+
+  /** Opens a Zawadi box: seeds, a shield charm, a surprise ally, double seeds, bonus points or a heart. */
   openBox(b) {
     this.stats.boxes++;
     const m = multiplier();
     const roll = Math.random() * PRIZE_WEIGHT;
     let acc = 0;
-    const prize = PRIZES.find((p) => (acc += p.w) >= roll) ?? PRIZES[0];
+    let prize = PRIZES.find((p) => (acc += p.w) >= roll) ?? PRIZES[0];
+    if (prize.id === 'heart' && !earnedRoom()) prize = PRIZES[1];
     let out;
     switch (prize.id) {
+      case 'heart':
+        earnHeart();
+        this.emit('heart', { from: 'box' });
+        out = { emoji: '❤️', title: t('A heart!'), sub: t('It revives you after a crash'), big: true };
+        break;
       case 'seeds':
         this.seeds += prize.n;
         this.stats.seeds = this.seeds;

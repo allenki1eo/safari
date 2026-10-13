@@ -1,6 +1,6 @@
-import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO, OUTFITS, outfitId, HUNT_WORDS, BOOSTS, DERBY, REFERRAL, TUTORIAL, SHOP_PACKS, MAX_REVIVES, derbyLive, derbyShown, wearable } from '../data/content.js';
+import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO, OUTFITS, outfitId, HUNT_WORDS, BOOSTS, DERBY, REFERRAL, TUTORIAL, SHOP_PACKS, MAX_REVIVES, REVIVE_COSTS, EARNED_HEARTS, derbyLive, derbyShown, wearable } from '../data/content.js';
 import { TIKTOK_ICON, captureInvite, fetchInviter, fetchInvites, fetchSocial, inviteLink, tiktokUrl } from './social.js';
-import { bettableSeeds, checkOrder, onSaleNow, shopReady, shopReadyNow, startCheckout, syncWallet, tsh, useHeart } from './shop.js';
+import { bettableSeeds, checkOrder, heartsTotal, onSaleNow, shopReady, shopReadyNow, startCheckout, syncWallet, tsh, useHeart } from './shop.js';
 import { adoptSide, fetchDerby, joinSide, km } from './derby.js';
 import { applyUpdate, markUpdateSeen, unseenUpdate, updateWaiting } from './updates.js';
 import { ago, describe, fetchInbox, markInboxRead, unreadCount } from './inbox.js';
@@ -34,6 +34,7 @@ const $ = (html) => {
 };
 const fmt = (n) => Math.floor(n).toLocaleString();
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const CHARM_COST = 300; // seeds for one Ngao shield charm
 
 /** The moves, for the controls card and How to play (gestures animate in styles.css). */
 const CONTROLS = [
@@ -207,7 +208,8 @@ export class UI {
     const missions = ensureMissions();
     const missionsReady = missions.some((m) => m.done && !m.claimed) || missionSetReady();
     const start = REGIONS[Math.min(save.startRegion ?? 0, save.regionMax ?? 0)];
-    const canAfford = RUNNERS.some((r) => !save.owned.includes(r.id) && r.cost <= save.seeds) || ALLY_IDS.some((id) => (save.upgrades[id] ?? 0) < 5 && UPGRADE_COSTS[save.upgrades[id] ?? 0] <= save.seeds);
+    const canAfford = RUNNERS.some((r) => !save.owned.includes(r.id) && r.cost <= save.seeds);
+    const canUpgrade = ALLY_IDS.some((id) => (save.upgrades[id] ?? 0) < 5 && UPGRADE_COSTS[save.upgrades[id] ?? 0] <= save.seeds);
     const el = $(`
       <div class="screen title scrim-bottom">
         <div class="title-top">
@@ -248,7 +250,7 @@ export class UI {
           <button class="btn big play-btn" data-act="play" data-click>${t('▶ RUN!')}</button>
           <div class="nav-row">
             <button class="nav-btn" data-act="runners" data-click><span class="ico">🧒🏾</span>${t('Runners')}${canAfford ? '<i class="badge-dot"></i>' : ''}</button>
-            <button class="nav-btn" data-act="allies" data-click><span class="ico">🐘</span>${t('Allies')}</button>
+            <button class="nav-btn" data-act="store" data-click><span class="ico">🛍️</span>${t('Shop')}${canUpgrade ? '<i class="badge-dot"></i>' : ''}</button>
             <button class="nav-btn" data-act="missions" data-click><span class="ico">🎯</span>${t('Missions')}${missionsReady ? '<i class="badge-dot"></i>' : ''}</button>
             <button class="nav-btn" data-act="journey" data-click><span class="ico">🗺️</span>${t('Journey')}${(save.regionMax ?? 0) > (save.mapSeen ?? 0) ? '<i class="badge-dot"></i>' : ''}</button>
           </div>
@@ -261,7 +263,7 @@ export class UI {
       if (act === 'play') this.play();
       else if (act === 'settings') this.settings();
       else if (act === 'runners') this.runners();
-      else if (act === 'allies') this.allies();
+      else if (act === 'store') this.shopSheet();
       else if (act === 'missions') this.missions();
       else if (act === 'journey') this.journey();
       else if (act === 'board') this.showBoard();
@@ -271,7 +273,7 @@ export class UI {
       else if (act === 'derby') this.derbySheet();
       else if (act === 'inbox') this.showInbox();
       else if (act === 'invite') this.inviteSheet();
-      else if (act === 'shop') this.shopSheet();
+      else if (act === 'shop') this.shopSheet({ tab: 'hearts' });
     });
     this.show(el);
     this.collectWinnings();
@@ -283,7 +285,7 @@ export class UI {
       const order = this.returnedOrder;
       this.returnedOrder = null;
       this.nudgedThisVisit = true; // the payment takes this visit's one pop-up slot
-      setTimeout(() => this.shopSheet({ waitFor: order }), 400);
+      setTimeout(() => this.shopSheet({ tab: 'hearts', waitFor: order }), 400);
     }
     this.checkForUpdate(el);
     // the daily reward greets you on the title screen only; it never opens over a run
@@ -436,7 +438,7 @@ export class UI {
     const sb = el.querySelector('[data-act=shield]');
     sb.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
-      if (!this.game.useShield()) this.toast('🛡️', (save.charms ?? 0) > 0 ? t('Shield already up!') : t('No Ngao charms — get more in Allies'));
+      if (!this.game.useShield()) this.toast('🛡️', (save.charms ?? 0) > 0 ? t('Shield already up!') : t('No Ngao charms — get more in the Shop'));
     });
     sb.classList.toggle('empty', (save.charms ?? 0) <= 0);
     this.hud = el;
@@ -692,7 +694,7 @@ export class UI {
           <div class="how-list">
             ${CONTROLS.map((c) => `
               <div class="how-row"><div class="gest g-${c.g}"><i></i></div><div><b>${t(c.label)}</b><small>${t(c.why)}${desktopKeys(c.act) ? ` · ${desktopKeys(c.act)}` : ''}</small></div></div>`).join('')}
-            <div class="how-row"><div class="how-ico">🛡️</div><div><b>${t('Tap the shield')}</b><small>${t('An Ngao charm takes one crash for you. Get more in Allies.')}</small></div></div>
+            <div class="how-row"><div class="how-ico">🛡️</div><div><b>${t('Tap the shield')}</b><small>${t('An Ngao charm takes one crash for you. Get more in the Shop.')}</small></div></div>
             <div class="how-row"><div class="how-ico">🐾</div><div><b>${t('Grab glowing totems')}</b><small>${t('An animal ally joins you: ride Tembo, fly with Tai, dash with Duma…')}</small></div></div>
             <div class="how-row"><div class="how-ico"><span class="seed"></span></div><div><b>${t('Collect seeds')}</b><small>${t('Spend them on runners and allies, and to revive after a crash.')}</small></div></div>
           </div>
@@ -845,24 +847,24 @@ export class UI {
 
   /* --------------------------------------------------------- game over */
   reviveCost() {
-    return 150 * Math.pow(2, this.game.revives);
+    return REVIVE_COSTS[Math.min(this.game.revives, REVIVE_COSTS.length - 1)];
   }
 
   onOver(run) {
     const cost = this.reviveCost();
-    const seedsOk = this.game.revives < 2 && save.seeds + run.seeds >= cost;
-    const heartsOk = this.game.revives < MAX_REVIVES && ((save.hearts ?? 0) > 0 || shopReadyNow());
+    const seedsOk = this.game.revives < REVIVE_COSTS.length && save.seeds + run.seeds >= cost;
+    const heartsOk = this.game.revives < MAX_REVIVES && heartsTotal() > 0;
     const freeOk = !!this.game.freeRevive; // Kito's perk
     if (seedsOk || heartsOk || freeOk) this.revivePrompt(run, cost, { seedsOk, heartsOk, freeOk });
     else this.results(run);
   }
 
   /**
-   * Second wind: a heart (bought in the shop) or seeds bring the runner back. With no hearts
-   * the shop opens right here, the run waiting, and a heart bought there revives straight away.
+   * Second wind: a heart (won on the trail or bought in the shop) or seeds bring the runner back.
+   * Hearts are bought after the run, from the results screen or the Shop, never mid-crash.
    */
   revivePrompt(run, cost, { seedsOk = true, heartsOk = false, freeOk = false } = {}) {
-    const hearts = save.hearts ?? 0;
+    const hearts = heartsTotal();
     if (freeOk) {
       // Kito's free revive comes first, and alone: nothing to spend
       heartsOk = false;
@@ -878,7 +880,6 @@ export class UI {
             ${freeOk ? `<button class="btn big flame" data-act="free" data-click>💫 ${t('Free revive')} <small>${t('Kito’s perk')}</small><i class="bar"></i></button>` : ''}
             ${heartsOk && hearts > 0 ? `<button class="btn big heart-btn" data-act="heart" data-click>❤️ ${t('Use a heart')} <small>${t('{n} left', { n: fmt(hearts) })}</small><i class="bar"></i></button>` : ''}
             ${seedsOk ? `<button class="btn ${heartsOk && hearts > 0 ? 'ghost' : 'flame big'} revive" data-act="revive" data-click>${t('Revive')} · ${fmt(cost)} <span class="seed"></span>${heartsOk && hearts > 0 ? '' : '<i class="bar"></i>'}</button>` : ''}
-            ${heartsOk && hearts <= 0 ? `<button class="btn ${seedsOk ? 'ghost' : 'big heart-btn'}" data-act="get-hearts" data-click>❤️ ${t('Get hearts')} · ${tsh(SHOP_PACKS[0].price)}</button>` : ''}
             <button class="btn ghost" data-act="skip" data-click>${t('No thanks')}</button>
           </div>
         </div>
@@ -918,19 +919,6 @@ export class UI {
           this.toast('❤️', t("Couldn't use a heart just now."));
           finish(null);
         }
-      }
-      if (act === 'get-hearts' && !done) {
-        // the run waits while they buy; a heart bought there brings them straight back
-        clearTimeout(timer);
-        done = true;
-        el.remove();
-        this.shopSheet({
-          mode: 'revive',
-          onClose: async (bought) => {
-            if (bought && (save.hearts ?? 0) > 0 && (await useHeart())) this.countdownRevive('heart');
-            else this.results(run);
-          },
-        });
       }
     });
     this.overlay(el);
@@ -987,6 +975,7 @@ export class UI {
           <div class="story-unlock"><span class="e">${COUNTRIES[reg.country].flag}</span><div><b>${esc(reg.name)} · ${esc(reg.title)}</b><br><span class="muted">${next ? t('Next: {place}', { place: `${COUNTRIES[next.country].flag} ${esc(next.name)}` }) : t('You crossed all three countries!')}</span></div></div>
           <div class="bet-slot"></div>
           <div class="chal-slot"></div>
+          ${this.heartsLineHtml()}
           <button class="invite-line" type="button" data-act="invite"><span class="e">🤝</span><span>${t('Invite a friend: you get {a}, they get {b}', { a: `<b>${fmt(REFERRAL.reward)}</b>`, b: `<b>${fmt(REFERRAL.welcome)}</b>` })}<i class="seed"></i></span><span class="go">›</span></button>
           <div class="over-actions">
             <button class="btn again" type="button" data-act="again">${t('↻ Run again')}</button>
@@ -1007,6 +996,8 @@ export class UI {
         this.showBoard();
       } else if (act === 'invite') {
         this.inviteSheet();
+      } else if (act === 'get-hearts') {
+        this.shopSheet({ tab: 'hearts', onClose: () => el.querySelector('.hearts-line')?.replaceWith($(this.heartsLineHtml())) });
       }
     });
     this.overlay(el);
@@ -1980,61 +1971,6 @@ export class UI {
     return el;
   }
 
-  allies() {
-    const render = () => {
-      const body = ALLY_IDS.map((id, i) => {
-        const a = ALLIES[id];
-        const lvl = save.upgrades[id] ?? 0;
-        const cost = UPGRADE_COSTS[lvl];
-        const dur = a.base + a.perLevel * lvl;
-        return `
-          <div class="panel list-card" style="--c:${a.color};animation-delay:${i * 0.05}s">
-            <div class="art">${a.emoji}</div>
-            <div class="info">
-              <h3>${a.name} <span class="muted" style="font-family:var(--body);font-size:13px">${lang === 'sw' ? a.species : `the ${a.species}`}</span></h3>
-              <div style="font-size:13px;color:${a.color}">${a.power} · ${dur.toFixed(1)}s</div>
-              <p>${a.desc}</p>
-              <div class="pips">${Array.from({ length: 5 }, (_, k) => `<i class="${k < lvl ? 'on' : ''}"></i>`).join('')}</div>
-            </div>
-            ${lvl < 5 ? `<button class="btn buy" data-up="${id}" ${save.seeds < cost ? 'disabled' : ''}><span class="seed"></span>${fmt(cost)}</button>` : `<div class="chip">${t('MAX')}</div>`}
-          </div>`;
-      }).join('');
-      const charm = `
-        <div class="panel list-card" style="--c:#7fe0ff">
-          <div class="art">🛡️</div>
-          <div class="info">
-            <h3>${t('Ngao Shield')} <span class="muted" style="font-family:var(--body);font-size:13px">${t('× {n} owned', { n: save.charms ?? 0 })}</span></h3>
-            <div style="font-size:13px;color:#7fe0ff">${t('Tap 🛡️ while running · 30s')}</div>
-            <p>${t('A Maasai-style shield charm that absorbs one crash and keeps your run alive.')}</p>
-          </div>
-          <button class="btn buy" data-charm ${save.seeds < 300 ? 'disabled' : ''}><span class="seed"></span>300</button>
-        </div>`;
-      const el = this.sheet(t('Animal Allies'), `<p class="muted" style="margin:0 4px">${t('Grab glowing totems on the trail to call an ally. Upgrade them to make their help last longer.')}</p>${charm}${body}`);
-      el.addEventListener('click', (e) => {
-        if (e.target.closest('[data-charm]') && save.seeds >= 300) {
-          save.seeds -= 300;
-          save.charms = (save.charms ?? 0) + 1;
-          persist();
-          audio.buy();
-          this.toast('🛡️', t('Ngao shield ready! You have <b>{n}</b>.', { n: save.charms }));
-          return render();
-        }
-        const id = e.target.closest('[data-up]')?.dataset.up;
-        if (!id) return;
-        const lvl = save.upgrades[id] ?? 0;
-        const cost = UPGRADE_COSTS[lvl];
-        if (save.seeds < cost) return;
-        save.seeds -= cost;
-        save.upgrades[id] = lvl + 1;
-        persist();
-        audio.buy();
-        this.toast(ALLIES[id].emoji, t('<b>{name}</b> upgraded to level {n}!', { name: ALLIES[id].name, n: lvl + 1 }));
-        render();
-      });
-    };
-    render();
-  }
-
   missions() {
     const el = this.sheet(t('Missions'), `
       <div class="panel mult-hero">
@@ -2830,7 +2766,7 @@ export class UI {
           ${this.notifyRow()}
           ${install.offered ? `<div class="toggle-row"><span>${t('📲 Play from your home screen')}</span><button class="btn small" data-act="install" data-click>${t('Install')}</button></div>` : ''}
           ${save.name ? `<div class="toggle-row"><span>${t('🔐 Recovery PIN')}${save.pinSet ? ` <em class="pin-on">${t('on')}</em>` : ''}</span><button class="btn small ${save.pinSet ? 'ghost' : ''}" data-act="pin" data-click>${save.pinSet ? t('Change') : t('Set PIN')}</button></div>` : ''}
-          <div class="toggle-row"><span>${t('❤️ Shop')}<small class="row-note">${t('Hearts to revive, and seed packs')}</small></span><button class="btn small" data-act="shop" data-click>${t('Open')}</button></div>
+          <div class="toggle-row"><span>${t('🛍️ Shop')}<small class="row-note">${t('Allies, shields, hearts and seed packs')}</small></span><button class="btn small" data-act="shop" data-click>${t('Open')}</button></div>
           <div class="toggle-row"><span>${t('❓ How to play')}</span><button class="btn small ghost" data-act="how" data-click>${t('Open')}</button></div>
           <div class="toggle-row"><span>${t('🤝 Invite friends')}<small class="row-note">${t('+{n} seeds for each friend who joins', { n: fmt(REFERRAL.reward) })}</small></span><button class="btn small" data-act="invite" data-click>${t('Invite')}</button></div>
           ${save.tiktok ? `<div class="toggle-row"><span class="tt-label">${TIKTOK_ICON} ${t('Follow us on TikTok')}<small class="row-note">@${esc(save.tiktok)}</small></span><a class="btn small tt-btn" href="${tiktokUrl(save.tiktok)}" target="_blank" rel="noopener" data-click>${t('Follow')}</a></div>` : ''}
@@ -2973,8 +2909,19 @@ export class UI {
 
   /* ------------------------------------------------------------------ shop */
   heartsChipHtml() {
-    // always there, so players find the shop; the + shows once it takes payments
-    return `<button class="chip hearts-chip" data-act="shop" data-click aria-label="${t('Shop')}">❤️ <span>${fmt(save.hearts ?? 0)}</span>${shopReadyNow() ? '<b>+</b>' : ''}</button>`;
+    // always there, so players find the hearts; the + shows once the shop takes payments
+    return `<button class="chip hearts-chip" data-act="shop" data-click aria-label="${t('Hearts')}">❤️ <span>${fmt(heartsTotal())}</span>${shopReadyNow() ? '<b>+</b>' : ''}</button>`;
+  }
+
+  /** On the results screen: the hearts you hold, and where more come from. */
+  heartsLineHtml() {
+    const n = heartsTotal();
+    return `
+      <button class="hearts-line" type="button" data-act="get-hearts" data-click>
+        <span class="e">❤️</span>
+        <span><b>${n ? t('{n} hearts ready', { n: fmt(n) }) : t('No hearts yet')}</b><small>${t('A heart revives you after a crash. Win them on the trail, or get more here.')}</small></span>
+        <span class="go">${t('Get hearts')} ›</span>
+      </button>`;
   }
 
   /** Hearts (and bought seeds still to bank) from the server, at most once a minute. */
@@ -3006,21 +2953,69 @@ export class UI {
     row?.insertAdjacentHTML('beforeend', this.heartsChipHtml());
   }
 
+  /** The Shop's Allies tab: Ngao charms and ally upgrades, paid with seeds won on the trail. */
+  alliesHtml() {
+    const cards = ALLY_IDS.map((id, i) => {
+      const a = ALLIES[id];
+      const lvl = save.upgrades[id] ?? 0;
+      const cost = UPGRADE_COSTS[lvl];
+      const dur = a.base + a.perLevel * lvl;
+      return `
+        <div class="panel list-card" style="--c:${a.color};animation-delay:${(i + 1) * 0.05}s">
+          <div class="art">${a.emoji}</div>
+          <div class="info">
+            <h3>${a.name} <span class="muted" style="font-family:var(--body);font-size:13px">${lang === 'sw' ? a.species : `the ${a.species}`}</span></h3>
+            <div style="font-size:13px;color:${a.color}">${a.power} · ${dur.toFixed(1)}s</div>
+            <p>${a.desc}</p>
+            <div class="pips">${Array.from({ length: 5 }, (_, k) => `<i class="${k < lvl ? 'on' : ''}"></i>`).join('')}</div>
+          </div>
+          ${lvl < 5 ? `<button class="btn buy" data-up="${id}" data-click ${save.seeds < cost ? 'disabled' : ''}><span class="seed"></span>${fmt(cost)}</button>` : `<div class="chip">${t('MAX')}</div>`}
+        </div>`;
+    }).join('');
+    return `
+      <p class="muted shop-lead">${t('Grab glowing totems on the trail to call an ally. Upgrade them to make their help last longer.')}</p>
+      <div class="panel list-card" style="--c:#7fe0ff">
+        <div class="art">🛡️</div>
+        <div class="info">
+          <h3>${t('Ngao Shield')} <span class="muted" style="font-family:var(--body);font-size:13px">${t('× {n} owned', { n: save.charms ?? 0 })}</span></h3>
+          <div style="font-size:13px;color:#7fe0ff">${t('Tap 🛡️ while running · 30s')}</div>
+          <p>${t('A Maasai-style shield charm that absorbs one crash and keeps your run alive.')}</p>
+        </div>
+        <button class="btn buy" data-charm data-click ${save.seeds < CHARM_COST ? 'disabled' : ''}><span class="seed"></span>${fmt(CHARM_COST)}</button>
+      </div>
+      ${cards}`;
+  }
+
+  /** The Shop's Hearts tab opens with the free ways to win one. */
+  earnHeartsHtml() {
+    const won = save.earnedHearts ?? 0;
+    const today = save.heartDay === darDay();
+    return `
+      <div class="earn-hearts">
+        <div class="earn-head"><b>❤️ ${t('Win hearts on the trail')}</b><span>${t('{n} of {m} won', { n: won, m: EARNED_HEARTS.cap })}</span></div>
+        <div class="earn-row ${today ? 'done' : ''}"><span class="e">🏃🏾</span><span>${t('Your first run past {m} m each day', { m: fmt(EARNED_HEARTS.dailyM) })}</span><i>${today ? `✓ ${t('Won today')}` : t('Today')}</i></div>
+        <div class="earn-row"><span class="e">🎁</span><span>${t('Zawadi boxes sometimes hold one')}</span><i>${t('Lucky')}</i></div>
+        ${won >= EARNED_HEARTS.cap ? `<p>${t('You hold all the hearts you can win. Use one, and you can win it back!')}</p>` : ''}
+      </div>`;
+  }
+
   /**
-   * The shop: hearts and seed packs. Buying opens Snippe's checkout in a new tab (the run, or the
-   * home screen, waits here) and this sheet waits for the payment. `waitFor` reopens it on an
-   * order the player came back from; `mode: 'revive'` shows hearts only and reports back.
+   * The Shop: animal allies and Ngao charms for seeds, then hearts and seed packs for mobile
+   * money. Buying a pack opens Snippe's checkout in a new tab (the home or results screen waits
+   * here) and this sheet waits for the payment; `waitFor` reopens it on an order the player came
+   * back from. `onClose` runs on the way out (the results screen repaints its hearts).
    */
-  shopSheet({ mode = 'shop', waitFor = null, onClose = null } = {}) {
+  shopSheet({ tab = 'allies', waitFor = null, onClose = null } = {}) {
     this.root.querySelector('.shop-screen')?.remove();
-    let bought = false;
-    let tab = 'hearts';
     const el = $(`
       <div class="screen scrim-full lb-screen shop-screen">
         <div class="sheet-head">
           <button class="icon-btn" data-act="back" data-click aria-label="${t('Back')}">${ICON.back}</button>
-          <h2>${mode === 'revive' ? t('Get hearts') : t('Shop')}</h2>
-          <div class="chip">❤️ <span data-hearts>${fmt(save.hearts ?? 0)}</span></div>
+          <h2>${t('Shop')}</h2>
+          <div class="shop-wallet">
+            <div class="chip"><span class="seed"></span><span data-bank></span></div>
+            <div class="chip hearts">❤️ <span data-hearts></span></div>
+          </div>
         </div>
         <div class="sheet-body"></div>
       </div>`);
@@ -3028,11 +3023,12 @@ export class UI {
     const close = () => {
       clearInterval(this.orderPoll);
       el.remove();
-      onClose?.(bought);
-      if (!onClose && this.screen?.classList.contains('title')) this.title();
+      if (onClose) onClose();
+      else if (this.screen?.classList.contains('title')) this.title();
     };
-    const paintHearts = () => {
-      el.querySelector('[data-hearts]').textContent = fmt(save.hearts ?? 0);
+    const paintWallet = () => {
+      el.querySelector('[data-bank]').textContent = fmt(save.seeds);
+      el.querySelector('[data-hearts]').textContent = fmt(heartsTotal());
     };
     const packCard = (p) => `
       <button class="pack ${p.kind}" data-pack="${p.id}" data-click ${onSaleNow(p.id) ? '' : 'disabled'}>
@@ -3042,34 +3038,37 @@ export class UI {
         <small>${p.kind === 'hearts' ? t('Revive after a crash') : t('For runners and allies')}</small>
         <span class="price">${onSaleNow(p.id) ? tsh(p.price) : `${tsh(p.price)} · ${t('soon')}`}</span>
       </button>`;
-    const paintPacks = () => {
-      const packs = SHOP_PACKS.filter((p) => p.kind === tab);
+    const packsHtml = () => `
+      ${tab === 'hearts' ? this.earnHeartsHtml() : ''}
+      ${shopReadyNow() ? '' : `<div class="shop-soon">🛠️ ${t('Payments open very soon — have a look at what’s coming!')}</div>`}
+      <div class="packs">${SHOP_PACKS.filter((p) => p.kind === tab).map(packCard).join('')}</div>
+      <div class="shop-notes">
+        <p>📱 ${t('Pay with M-Pesa, Mixx by Yas, Airtel Money or Halotel on Snippe’s secure page.')}</p>
+        ${tab === 'seeds' ? `<p>🤝 ${t('Bought seeds are for runners, allies and revives — they can’t be bet in friend challenges.')}</p>` : ''}
+        <p>👪 ${t('Under 18? Ask a parent or guardian before you buy.')}</p>
+      </div>`;
+    const paint = () => {
+      paintWallet();
+      const tabs = [
+        ['allies', `🐘 ${t('Allies')}`],
+        ['hearts', `❤️ ${t('Hearts')}`],
+        ['seeds', `<span class="seed"></span> ${t('Seeds')}`],
+      ];
       body.innerHTML = `
-        ${mode === 'revive' ? `<p class="muted shop-lead">${t('Fisi is waiting! A heart brings you straight back into this run.')}</p>` : `
-        <div class="lb-tabs shop-tabs">
-          <button type="button" data-tab="hearts" class="${tab === 'hearts' ? 'on' : ''}">❤️ ${t('Hearts')}</button>
-          <button type="button" data-tab="seeds" class="${tab === 'seeds' ? 'on' : ''}"><span class="seed"></span> ${t('Seeds')}</button>
-        </div>`}
-        ${shopReadyNow() ? '' : `<div class="shop-soon">🛠️ ${t('The shop opens very soon — have a look at what’s coming!')}</div>`}
-        <div class="packs">${packs.map(packCard).join('')}</div>
-        <div class="shop-notes">
-          <p>📱 ${t('Pay with M-Pesa, Mixx by Yas, Airtel Money or Halotel on Snippe’s secure page.')}</p>
-          ${tab === 'seeds' ? `<p>🤝 ${t('Bought seeds are for runners, allies and revives — they can’t be bet in friend challenges.')}</p>` : ''}
-          <p>👪 ${t('Under 18? Ask a parent or guardian before you buy.')}</p>
-        </div>`;
+        <div class="lb-tabs shop-tabs" role="tablist">${tabs.map(([id, label]) => `<button type="button" role="tab" data-tab="${id}" class="${tab === id ? 'on' : ''}" aria-selected="${tab === id}">${label}</button>`).join('')}</div>
+        ${tab === 'allies' ? this.alliesHtml() : packsHtml()}`;
     };
     const success = (data) => {
-      bought = true;
       clearInterval(this.orderPoll);
-      paintHearts();
+      paintWallet();
       const pack = SHOP_PACKS.find((p) => p.id === data.pack);
       audio.buy();
       body.innerHTML = `
         <div class="shop-done">
           <div class="burst">${pack?.kind === 'seeds' ? '<span class="seed"></span>' : '❤️'}</div>
           <h3>${t('Asante! Payment received')}</h3>
-          <p>${pack?.kind === 'seeds' ? t('+{n} seeds are in your bank.', { n: fmt(pack.seeds) }) : t('+{n} hearts — you have {m} now.', { n: fmt(pack?.hearts ?? 0), m: fmt(save.hearts ?? 0) })}</p>
-          <button class="btn big" data-act="back" data-click>${mode === 'revive' ? t('▶ Back to the run') : t('Great!')}</button>
+          <p>${pack?.kind === 'seeds' ? t('+{n} seeds are in your bank.', { n: fmt(pack.seeds) }) : t('+{n} hearts — you have {m} now.', { n: fmt(pack?.hearts ?? 0), m: fmt(heartsTotal()) })}</p>
+          <button class="btn big" data-act="back" data-click>${t('Great!')}</button>
         </div>`;
     };
     const wait = (order, url) => {
@@ -3092,7 +3091,7 @@ export class UI {
           if (data.status !== 'pending') {
             clearInterval(this.orderPoll);
             this.toast('⌛', t('That checkout closed without a payment.'));
-            paintPacks();
+            paint();
           }
         } catch {
           /* keep waiting */
@@ -3101,18 +3100,40 @@ export class UI {
       this.orderPoll = setInterval(tick, 3000);
       tick();
     };
+    const buyCharm = () => {
+      if (save.seeds < CHARM_COST) return;
+      save.seeds -= CHARM_COST;
+      save.charms = (save.charms ?? 0) + 1;
+      persist();
+      audio.buy();
+      this.toast('🛡️', t('Ngao shield ready! You have <b>{n}</b>.', { n: save.charms }));
+      paint();
+    };
+    const upgrade = (id) => {
+      const lvl = save.upgrades[id] ?? 0;
+      const cost = UPGRADE_COSTS[lvl];
+      if (lvl >= 5 || save.seeds < cost) return;
+      save.seeds -= cost;
+      save.upgrades[id] = lvl + 1;
+      persist();
+      audio.buy();
+      this.toast(ALLIES[id].emoji, t('<b>{name}</b> upgraded to level {n}!', { name: ALLIES[id].name, n: lvl + 1 }));
+      paint();
+    };
     el.addEventListener('click', async (e) => {
-      const target = e.target.closest('[data-act], [data-tab], [data-pack]');
+      const target = e.target.closest('[data-act], [data-tab], [data-pack], [data-charm], [data-up]');
       if (!target) return;
       if (target.dataset.act === 'back') return close();
       if (target.dataset.act === 'cancel-wait') {
         clearInterval(this.orderPoll);
-        return paintPacks();
+        return paint();
       }
       if (target.dataset.tab) {
         tab = target.dataset.tab;
-        return paintPacks();
+        return paint();
       }
+      if (target.hasAttribute('data-charm')) return buyCharm();
+      if (target.dataset.up) return upgrade(target.dataset.up);
       if (target.dataset.pack) {
         if (save.playerId == null) return this.toast('🏷️', t('Pick your runner name first (Settings), then come back.'), 3200);
         // a tab opened inside the tap, so phones don't block it; Snippe's page loads into it
@@ -3135,7 +3156,7 @@ export class UI {
     });
     this.overlay(el);
     if (waitFor) wait(waitFor, null);
-    else paintPacks();
+    else paint();
   }
 
   /* ------------------------------------------------------- invites & TikTok */

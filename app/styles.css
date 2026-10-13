@@ -1106,7 +1106,33 @@ input { font: inherit; }
 .btn.heart-btn { --c1: #ff6b81; --c2: #c41e3a; --edge: #7d0f22; --ink: #fff; display: flex; align-items: center; justify-content: center; gap: 8px; position: relative; overflow: hidden; }
 .btn.heart-btn small { font-family: var(--body); font-size: 13px; font-weight: 900; opacity: 0.85; }
 
-.shop-tabs { grid-template-columns: repeat(2, 1fr); }
+.shop-tabs { grid-template-columns: repeat(3, 1fr); }
+.shop-wallet { display: flex; gap: 6px; flex: none; }
+.shop-wallet .chip { padding: 6px 10px; font-weight: 900; }
+.shop-wallet .chip .seed { width: 16px; height: 16px; }
+.shop-wallet .chip.hearts { border-color: rgba(255,120,140,0.7); background: linear-gradient(180deg, rgba(255,93,115,0.35), rgba(196,30,58,0.42)); }
+@media (max-width: 380px) { .shop-screen .sheet-head h2 { font-size: 22px; } .shop-wallet .chip { padding: 5px 8px; font-size: 13px; } }
+
+/* hearts won on the trail */
+.earn-hearts { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 18px; background: linear-gradient(160deg, rgba(255,93,115,0.2), rgba(0,0,0,0.25)); border: 1px solid rgba(255,120,140,0.4); animation: rise 0.4s ease both; }
+.earn-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.earn-head b { font-family: var(--display); font-weight: 400; font-size: 19px; color: #fff; }
+.earn-head span { font-size: 12.5px; font-weight: 900; color: #ffb3bf; white-space: nowrap; }
+.earn-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; background: rgba(0,0,0,0.22); font-size: 13.5px; font-weight: 800; }
+.earn-row .e { font-size: 20px; flex: none; }
+.earn-row span:nth-child(2) { flex: 1; min-width: 0; }
+.earn-row i { font-style: normal; font-size: 11.5px; font-weight: 900; padding: 3px 9px; border-radius: 99px; background: rgba(255,244,222,0.14); color: var(--cream); white-space: nowrap; }
+.earn-row.done i { background: #7bd389; color: var(--earth); }
+.earn-hearts p { margin: 2px 2px 0; font-size: 12.5px; font-weight: 700; color: rgba(255,244,222,0.78); }
+
+/* results: hearts held, and the way to more */
+.hearts-line { display: flex; align-items: center; gap: 12px; width: 100%; margin-top: 12px; padding: 12px 14px; border-radius: 16px; text-align: left; color: var(--cream); background: linear-gradient(160deg, rgba(255,93,115,0.26), rgba(125,15,34,0.32)); border: 1px solid rgba(255,120,140,0.5); }
+.hearts-line .e { font-size: 26px; flex: none; }
+.hearts-line > span:nth-child(2) { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.hearts-line b { font-family: var(--display); font-weight: 400; font-size: 17px; color: #fff; }
+.hearts-line small { font-size: 12px; font-weight: 700; line-height: 1.3; color: rgba(255,244,222,0.75); }
+.hearts-line .go { flex: none; padding: 7px 11px; border-radius: 12px; font-weight: 900; font-size: 13px; background: linear-gradient(180deg, #ff6b81, #c41e3a); color: #fff; box-shadow: 0 3px 0 #7d0f22; white-space: nowrap; }
+.hearts-line:active { transform: scale(0.98); }
 .shop-tabs .seed, .pack .seed { width: 18px; height: 18px; vertical-align: -3px; }
 .shop-lead { margin: 0 4px; text-align: center; }
 .packs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
