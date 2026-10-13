@@ -3,36 +3,42 @@
 export const RUNNERS = [
   {
     id: 'zuri', name: 'Zuri', title: 'The Young Ranger', cost: 0, emoji: '🧒🏾',
+    perk: { id: 'combo', icon: '🔥', name: 'Combo keeper', desc: 'Seed combos last longer before they break.' },
     bio: 'Raised at the edge of the plains, Zuri can name every bird by its song.',
     skin: 0x6b4226, shirt: 0xc9a46a, pants: 0x5b4a32, shoes: 0x3b2a1c, hair: 0x1a120c,
     accent: 0xd7263d, head: 'wrap', scarf: 0xd7263d, scarfPattern: 0x1b2a6b, backpack: 0x8a5a2b, sleeves: true, wristband: 0xf4d35e,
   },
   {
     id: 'juma', name: 'Juma', title: 'Striker of Arusha', cost: 600, emoji: '⚽',
+    perk: { id: 'allies', icon: '🐾', name: "Striker's stamina", desc: 'Animal allies stay 25% longer.' },
     bio: 'Fastest feet in the village league. Has never once lost a race to a goat.',
     skin: 0x5a3620, shirt: 0xf4d35e, pants: 0x1b4f9c, shoes: 0xffffff, hair: 0x120c08,
     accent: 0x1b998b, head: 'cap', socks: 0x1b998b, shorts: true, wristband: 0x1b998b,
   },
   {
     id: 'neema', name: 'Neema', title: 'Keeper of Beads', cost: 1500, emoji: '📿',
+    perk: { id: 'shield', icon: '🛡️', name: 'Lucky beads', desc: 'Every run starts with a free shield.' },
     bio: 'Her beadwork tells the story of the migration. She means to finish it.',
     skin: 0x4a2c18, shirt: 0x6a2c91, pants: 0x4a2c18, shoes: 0x7a4a22, hair: 0x120c08,
     accent: 0xd7263d, head: 'beads', necklace: true, dress: 0x6a2c91, scarf: 0xe94f37, scarfPattern: 0xf4d35e, shorts: true,
   },
   {
     id: 'baraka', name: 'Baraka', title: 'The Explorer', cost: 3000, emoji: '🧭',
+    perk: { id: 'magnet', icon: '🧲', name: "Explorer's nose", desc: 'Seeds close by fly into your bag.' },
     bio: 'Maps every kopje, names every baobab. Carries far too many snacks.',
     skin: 0x7a4a2a, shirt: 0xe8dcc0, pants: 0x6b5a3a, shoes: 0x4a3420, hair: 0x2a1a10,
     accent: 0xb38b4d, head: 'hat', backpack: 0x3f6b3a, sleeves: true, scarf: 0x1b998b,
   },
   {
     id: 'amani', name: 'Amani', title: 'Night Runner', cost: 6000, emoji: '🌙',
+    perk: { id: 'seeds', icon: '🌰', name: 'Night harvest', desc: '+25% seeds on every run.' },
     bio: 'Runs by starlight. The fireflies follow her home.',
     skin: 0x3e2414, shirt: 0x1b2a6b, pants: 0x101828, shoes: 0x4de1ff, hair: 0x0a0806,
     accent: 0x4de1ff, head: 'braids', scarf: 0x4de1ff, scarfPattern: 0xffffff, wristband: 0x4de1ff, necklace: true,
   },
   {
     id: 'kito', name: 'Kito', title: 'Little Legend', cost: 12000, emoji: '👑',
+    perk: { id: 'revive', icon: '💫', name: 'Little legend', desc: 'One free revive every run.' },
     bio: 'The youngest runner ever to outpace Fisi. Nobody knows how. Kito won\'t say.',
     skin: 0x6b4226, shirt: 0xff7a2f, pants: 0x2b1a0e, shoes: 0xf4d35e, hair: 0x120c08,
     accent: 0xf4d35e, head: 'mohawk', scarf: 0xf4d35e, scarfPattern: 0xd7263d, wristband: 0xd7263d, shorts: true,
@@ -59,7 +65,7 @@ export const DERBY = {
   title: 'Kariakoo Derby Special',
   opens: Date.parse('2026-10-09T00:00:00Z'),
   closes: Date.parse('2026-10-12T21:00:00Z'), // midnight in Dar after Sunday
-  shows: Date.parse('2026-10-14T21:00:00Z'), // the final score stays up a couple of days
+  shows: Date.parse('2026-10-12T21:00:00Z'), // off the home screen once it closes (the kits stay)
   sides: {
     green: { id: 'green', name: 'Green & Gold', short: 'Green', emoji: '💚', color: '#1f9d4a', accent: '#f6c933', shirt: 0x178a3e, stripe: 0xf6c933, pants: 0x161616 },
     red: { id: 'red', name: 'Red & White', short: 'Red', emoji: '❤️', color: '#d7263d', accent: '#ffffff', shirt: 0xc8102e, stripe: 0xffffff, pants: 0xffffff },
@@ -154,11 +160,12 @@ export const INTRO = [
 
 export const TUTORIAL = [
   // each tip shows well before the scripted obstacle it teaches (patterns.js tutorialPlan):
-  // boulder ~87 m, logs ~123 m, branches ~157 m, totem ~191 m
-  { at: 20, text: 'Swipe ← → to switch lanes', icon: '↔️' },
-  { at: 92, text: 'Swipe ↑ to jump logs', icon: '⬆️' },
-  { at: 127, text: 'Swipe ↓ to slide under branches', icon: '⬇️' },
-  { at: 161, text: 'Grab glowing totems to call an animal ally!', icon: '🐾' },
+  // boulder ~87 m, logs ~123 m, branches ~157 m, totem ~191 m. A tip stays up until the player
+  // makes the move it teaches (`act`); `g` is the gesture the coach card animates.
+  { at: 20, text: 'Swipe ← → to switch lanes', icon: '↔️', act: 'lane', g: 'lr' },
+  { at: 92, text: 'Swipe ↑ to jump logs', icon: '⬆️', act: 'up', g: 'up' },
+  { at: 127, text: 'Swipe ↓ to slide under branches', icon: '⬇️', act: 'down', g: 'down' },
+  { at: 161, text: 'Grab glowing totems to call an animal ally!', icon: '🐾', act: null, g: 'totem' },
 ];
 
 /* -------------------------------------------------------------------------- */
@@ -246,6 +253,22 @@ const podium = (gold, silver, bronze, rest) => [gold, silver, bronze, ...Array(7
  * finishes a run of `qualifyM` metres (up to `cap` friends); the friend gets `welcome` seeds too.
  */
 export const REFERRAL = { reward: 500, welcome: 250, qualifyM: 500, cap: 20 };
+
+/**
+ * The shop: hearts and seed packs bought with mobile money through a Snippe payment link
+ * (server/payments.js). A heart revives a runner after a crash. Prices are Tanzanian shillings
+ * (Snippe's minimum is 500). Bought seeds never go into a friend-challenge bet.
+ */
+export const SHOP_PACKS = [
+  { id: 'h3', kind: 'hearts', hearts: 3, seeds: 0, price: 1500 },
+  { id: 'h7', kind: 'hearts', hearts: 7, seeds: 0, price: 3000, tag: 'Popular' },
+  { id: 'h12', kind: 'hearts', hearts: 12, seeds: 0, price: 5000, tag: 'Best value' },
+  { id: 's5', kind: 'seeds', hearts: 0, seeds: 5000, price: 1500 },
+  { id: 's12', kind: 'seeds', hearts: 0, seeds: 12000, price: 3000, tag: 'Popular' },
+  { id: 's25', kind: 'seeds', hearts: 0, seeds: 25000, price: 5000, tag: 'Best value' },
+];
+/** Revives in one run: two with seeds, a third only with a heart. */
+export const MAX_REVIVES = 3;
 
 export const PRIZES = {
   day: podium(1000, 600, 400, 100),

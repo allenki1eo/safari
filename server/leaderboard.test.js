@@ -1080,3 +1080,159 @@ test('prize boards show the real run next to what it counts for', async () => {
     }
   });
 });
+
+test('shop: Snippe payment links pay hearts and seeds once, only after Snippe confirms', async () => {
+  const pay = await import('./payments.js');
+  const { createHmac } = await import('node:crypto');
+  const prev = { key: process.env.SNIPPE_API_KEY, secret: process.env.SNIPPE_WEBHOOK_SECRET };
+  process.env.SNIPPE_API_KEY = 'snp_test_key';
+  process.env.SNIPPE_WEBHOOK_SECRET = 'whsec_test';
+  // a fake Snippe: sessions it created, and their status
+  const sessions = new Map();
+  const calls = [];
+  pay.setSnippeFetch(async (url, init) => {
+    calls.push({ url, method: init.method, auth: init.headers.authorization, body: init.body && JSON.parse(init.body) });
+    const json = (status, data) => ({ ok: status < 300, status, json: async () => ({ code: status, data }) });
+    if (init.method === 'POST' && url.endsWith('/api/v1/sessions')) {
+      const body = JSON.parse(init.body);
+      const ref = `sess_${sessions.size + 1}`;
+      sessions.set(ref, { reference: ref, status: 'pending', amount: body.amount, currency: 'TZS', checkout_url: `https://snippe.me/checkout/${ref}`, metadata: body.metadata });
+      return json(201, sessions.get(ref));
+    }
+    const m = url.match(/\/api\/v1\/sessions\/([^/?]+)$/);
+    if (init.method === 'GET' && m && sessions.has(m[1])) return json(200, sessions.get(m[1]));
+    return json(404, { message: 'not found' });
+  });
+  const shop = (body, ctx = {}) => pay.handlePayRequest('POST', body, {}, { origin: 'https://kimbia.test', ...ctx });
+  const hook = (payload, { secret = 'whsec_test', ts = Math.floor(Date.parse('2026-10-13T09:00:00Z') / 1000) } = {}) => {
+    const raw = JSON.stringify(payload);
+    const sig = createHmac('sha256', secret).update(`${ts}.${raw}`).digest('hex');
+    return pay.handlePayRequest('POST', payload, {}, { raw, headers: { 'x-webhook-event': payload.type, 'x-webhook-signature': sig, 'x-webhook-timestamp': String(ts) } });
+  };
+  try {
+    await withDb(async () => {
+      setLeaderboardClock(() => new Date('2026-10-13T09:00:00Z'));
+      assert.equal((await pay.handlePayRequest('GET')).body.ready, true);
+      // a runner needs a name before buying
+      assert.equal((await shop({ action: 'buy', token: T.juma, pack: 'h7' })).body.code, 'NAME_FIRST');
+      await post({ token: T.juma, name: 'Juma', score: 100, distance: 50, duration: 10 });
+      assert.equal((await shop({ action: 'buy', token: T.juma, pack: 'nope' })).status, 400);
+
+      // buying 7 hearts opens a checkout for TSh 3,000 that comes back to the game
+      const h = (await shop({ action: 'buy', token: T.juma, pack: 'h7' })).body;
+      assert.match(h.url, /^https:\/\/snippe\.me\/checkout\//);
+      const sent = calls.find((c) => c.method === 'POST');
+      assert.equal(sent.auth, 'Bearer snp_test_key');
+      assert.deepEqual([sent.body.amount, sent.body.currency, sent.body.redirect_url, sent.body.webhook_url], [3000, 'TZS', `https://kimbia.test/?paid=${h.order}`, 'https://kimbia.test/api/pay']);
+      assert.equal((await shop({ action: 'order', token: T.juma, order: h.order })).body.status, 'pending');
+
+      // a forged webhook pays nothing: bad signature, and even a well-signed one is checked with Snippe
+      assert.equal((await hook({ type: 'payment.completed', data: { session_reference: 'sess_1' } }, { secret: 'wrong' })).status, 401);
+      assert.equal((await hook({ type: 'payment.completed', data: { session_reference: 'sess_1' } }, { ts: 1 })).status, 401, 'stale');
+      assert.equal((await hook({ type: 'payment.completed', data: { session_reference: 'sess_1', status: 'completed' } })).body.status, 'pending');
+      assert.equal((await shop({ action: 'wallet', token: T.juma })).body.hearts, 0);
+
+      // Snippe says it is paid: the webhook settles it, once
+      sessions.get('sess_1').status = 'completed';
+      assert.equal((await hook({ type: 'payment.completed', data: { session_reference: 'sess_1' } })).body.status, 'paid');
+      await hook({ type: 'payment.completed', data: { session_reference: 'sess_1' } });
+      const o = (await shop({ action: 'order', token: T.juma, order: h.order })).body;
+      assert.deepEqual([o.status, o.hearts], ['paid', 7]);
+
+      // a seed pack, settled by the game asking (no webhook); the seeds come out once
+      const s = (await shop({ action: 'buy', token: T.juma, pack: 's12' })).body;
+      sessions.get('sess_2').status = 'completed';
+      const so = (await shop({ action: 'order', token: T.juma, order: s.order })).body;
+      assert.deepEqual([so.status, so.seeds], ['paid', 12000]);
+      assert.equal((await shop({ action: 'wallet', token: T.juma })).body.seeds, 0, 'collected only once');
+
+      // a checkout paid for the wrong amount is held, not paid
+      const w = (await shop({ action: 'buy', token: T.juma, pack: 'h3' })).body;
+      Object.assign(sessions.get('sess_3'), { status: 'completed', amount: 500 });
+      assert.equal((await shop({ action: 'order', token: T.juma, order: w.order })).body.status, 'pending');
+      // an expired one closes
+      setLeaderboardClock(() => new Date('2026-10-13T09:01:00Z'));
+      Object.assign(sessions.get('sess_3'), { status: 'expired', amount: 1500 });
+      assert.equal((await shop({ action: 'order', token: T.juma, order: w.order })).body.status, 'expired');
+
+      // hearts are spent one revive at a time, never below zero; nobody else can see an order
+      for (let i = 6; i >= 0; i--) assert.equal((await shop({ action: 'use', token: T.juma })).body.hearts, i);
+      assert.equal((await shop({ action: 'use', token: T.juma })).body.code, 'NO_HEARTS');
+      assert.equal((await shop({ action: 'order', token: T.neema, order: h.order })).status, 404);
+
+      // the admin sees the takings
+      const { salesSummary } = pay;
+      const db = (await import('./leaderboard.js')).getClient;
+      const sum = await salesSummary(await db(), Date.parse('2026-10-12T21:00:00Z'));
+      assert.deepEqual([sum.paid, sum.revenue, sum.today], [2, 6000, 6000]);
+    });
+  } finally {
+    pay.setSnippeFetch(null);
+    for (const [k, v] of [['SNIPPE_API_KEY', prev.key], ['SNIPPE_WEBHOOK_SECRET', prev.secret]]) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});
+
+test('shop with payment links: no API key, the signed webhook carries the order back in ?meta=', async () => {
+  const pay = await import('./payments.js');
+  const { handleAdminRequest } = await import('./admin.js');
+  const { createHmac } = await import('node:crypto');
+  const prev = { key: process.env.SNIPPE_API_KEY, secret: process.env.SNIPPE_WEBHOOK_SECRET, admin: process.env.KIMBIA_ADMIN_KEY };
+  delete process.env.SNIPPE_API_KEY;
+  process.env.KIMBIA_ADMIN_KEY = 'admin-test-key';
+  pay.setSnippeFetch(async () => { throw new Error('no API calls in link mode'); });
+  const shop = (body) => pay.handlePayRequest('POST', body, {}, { origin: 'https://kimbia.test' });
+  const admin = (body) => handleAdminRequest('POST', { adminKey: 'admin-test-key', ...body });
+  const ts = Math.floor(Date.parse('2026-10-13T09:00:00Z') / 1000);
+  const hook = (payload, secret = 'whsec_test') => {
+    const raw = JSON.stringify(payload);
+    const sig = createHmac('sha256', secret).update(`${ts}.${raw}`).digest('hex');
+    return pay.handlePayRequest('POST', payload, {}, { raw, headers: { 'x-webhook-event': payload.type, 'x-webhook-signature': sig, 'x-webhook-timestamp': String(ts) } });
+  };
+  const paid = (order, value, ref) => ({ type: 'payment.completed', id: `evt_${ref}`, data: { reference: ref, status: 'completed', amount: { value, currency: 'TZS' }, customer: { phone: '+255712345678' }, metadata: { url_metadata: { order, pack: 'h7' } } } });
+  try {
+    await withDb(async () => {
+      setLeaderboardClock(() => new Date('2026-10-13T09:00:00Z'));
+      await post({ token: T.juma, name: 'Juma', score: 100, distance: 50, duration: 10 });
+      // links but no signing key: closed, and webhooks are refused
+      delete process.env.SNIPPE_WEBHOOK_SECRET;
+      assert.equal((await admin({ action: 'shop-links', links: { h7: 'https://evil.example/p/x' } })).status, 400);
+      assert.equal((await admin({ action: 'shop-links', links: { h7: 'https://snippe.me/p/kimbia-7-hearts', s12: 'https://snippe.me/p/kimbia-12k' } })).status, 200);
+      assert.equal((await pay.handlePayRequest('GET')).body.ready, false);
+      assert.equal((await hook(paid('x', 3000, 'pi_0'))).status, 503);
+
+      process.env.SNIPPE_WEBHOOK_SECRET = 'whsec_test';
+      const open = (await pay.handlePayRequest('GET')).body;
+      assert.deepEqual([open.ready, open.packs.map((p) => p.id)], [true, ['h7', 's12']]);
+      assert.equal((await shop({ action: 'buy', token: T.juma, pack: 'h3' })).status, 400, 'no link, not on sale');
+
+      // buying hands back the pack's link with the order in ?meta= (base64 JSON)
+      const b = (await shop({ action: 'buy', token: T.juma, pack: 'h7' })).body;
+      const url = new URL(b.url);
+      assert.equal(url.origin + url.pathname, 'https://snippe.me/p/kimbia-7-hearts');
+      assert.deepEqual(JSON.parse(Buffer.from(url.searchParams.get('meta'), 'base64').toString()), { order: b.order, pack: 'h7' });
+
+      // forged or short payments pay nothing; the real one pays once, even if Snippe retries
+      assert.equal((await hook(paid(b.order, 3000, 'pi_1'), 'wrong')).status, 401);
+      assert.equal((await hook(paid(b.order, 500, 'pi_2'))).body.status, 'pending', 'wrong amount is held');
+      assert.equal((await hook(paid(b.order, 3000, 'pi_3'))).body.status, 'paid');
+      await hook(paid(b.order, 3000, 'pi_3'));
+      const o = (await shop({ action: 'order', token: T.juma, order: b.order })).body;
+      assert.deepEqual([o.status, o.hearts], ['paid', 7]);
+
+      // a payment on a link opened outside the game shows on the admin page
+      await hook({ type: 'payment.completed', data: { reference: 'pi_9', status: 'completed', amount: { value: 3000, currency: 'TZS' }, metadata: {} } });
+      const sales = (await admin({ action: 'sales' })).body;
+      assert.deepEqual(sales.unmatched.map((u) => u.reference).sort(), ['pi_2', 'pi_9']);
+      assert.deepEqual([sales.secret, sales.apiKey, sales.summary.paid], [true, false, 1]);
+    });
+  } finally {
+    pay.setSnippeFetch(null);
+    for (const [k, v] of [['SNIPPE_API_KEY', prev.key], ['SNIPPE_WEBHOOK_SECRET', prev.secret], ['KIMBIA_ADMIN_KEY', prev.admin]]) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});

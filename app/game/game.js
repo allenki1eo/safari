@@ -282,6 +282,10 @@ export class Game {
     this.huntHidden = !this.huntReady();
     this.revives = 0;
     this.deathT = 0;
+    // the runner's perk (content.js RUNNERS): one small edge each, bought with the runner
+    this.perk = RUNNERS.find((r) => r.id === save.runner)?.perk?.id ?? null;
+    this.seedFrac = 0;
+    this.freeRevive = this.perk === 'revive';
     for (const a of Object.values(this.allyModels)) a.root.visible = false;
     if (this.ghost) this.ghost.root.visible = false;
   }
@@ -300,6 +304,12 @@ export class Game {
     audio.setIntensity(1);
     audio.muffle(false);
     setTimeout(() => this.state === 'running' && audio.cackle(), 400);
+    // Neema's lucky beads: a free shield to start (no charm spent)
+    if (this.perk === 'shield') {
+      this.shield = SHIELD_T;
+      this.shieldMesh.visible = true;
+      this.emit('shield', { on: true, dur: SHIELD_T, perk: true });
+    }
     this.emit('start');
   }
 
@@ -369,6 +379,7 @@ export class Game {
   /* ------------------------------------------------------------- input */
   input(action) {
     if (this.state !== 'running') return;
+    this.emit('move', action); // the tutorial coach waits for the move it is teaching
     const p = this.p;
     const flying = !!this.powers.tai;
     switch (action) {
@@ -1294,6 +1305,8 @@ export class Game {
         continue;
       }
       if (magnet && dz < 22 && dz > -2) c.mag = true;
+      // Baraka's nose: seeds just ahead in the next lane drift over too
+      else if (this.perk === 'magnet' && dz < 9 && dz > -2 && Math.abs(c.x - p.x) < 2.8) c.mag = true;
       if (c.mag) {
         const k = 1 - Math.exp(-12 * dt);
         c.x += (p.x - c.x) * k;
@@ -1346,10 +1359,18 @@ export class Game {
   }
 
   collectSeed(c) {
-    this.seeds += (this.seedBoost > 0 ? 2 : 1) * (this.boosts.gold ? 3 : 1);
+    const gain = (this.seedBoost > 0 ? 2 : 1) * (this.boosts.gold ? 3 : 1);
+    this.seeds += gain;
+    if (this.perk === 'seeds') {
+      // Amani's night harvest: a quarter more, banked as it adds up to whole seeds
+      this.seedFrac += gain * 0.25;
+      const extra = Math.floor(this.seedFrac);
+      this.seeds += extra;
+      this.seedFrac -= extra;
+    }
     this.stats.seeds = this.seeds;
     this.combo++;
-    this.comboT = 0.9;
+    this.comboT = this.perk === 'combo' ? 1.35 : 0.9;
     this.stats.bestCombo = Math.max(this.stats.bestCombo, this.combo);
     this.score += 5 * multiplier() * (this.powers.simba ? 2 : 1) * (this.boosts.score ? 2 : 1);
     const step = COMBO_STEPS.find(([n]) => n === this.combo);
@@ -1383,7 +1404,7 @@ export class Game {
   /* ---------------------------------------------------------------- allies */
   duration(id) {
     const a = ALLIES[id];
-    return a.base + a.perLevel * (save.upgrades[id] ?? 0);
+    return (a.base + a.perLevel * (save.upgrades[id] ?? 0)) * (this.perk === 'allies' ? 1.25 : 1);
   }
 
   activate(id) {

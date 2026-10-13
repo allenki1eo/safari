@@ -1,5 +1,6 @@
-import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO, OUTFITS, outfitId, HUNT_WORDS, BOOSTS, DERBY, REFERRAL, derbyLive, derbyShown, wearable } from '../data/content.js';
+import { RUNNERS, ALLIES, ALLY_IDS, UPGRADE_COSTS, INTRO, OUTFITS, outfitId, HUNT_WORDS, BOOSTS, DERBY, REFERRAL, TUTORIAL, SHOP_PACKS, MAX_REVIVES, derbyLive, derbyShown, wearable } from '../data/content.js';
 import { TIKTOK_ICON, captureInvite, fetchInviter, fetchInvites, fetchSocial, inviteLink, tiktokUrl } from './social.js';
+import { bettableSeeds, checkOrder, onSaleNow, shopReady, shopReadyNow, startCheckout, syncWallet, tsh, useHeart } from './shop.js';
 import { adoptSide, fetchDerby, joinSide, km } from './derby.js';
 import { applyUpdate, markUpdateSeen, unseenUpdate, updateWaiting } from './updates.js';
 import { ago, describe, fetchInbox, markInboxRead, unreadCount } from './inbox.js';
@@ -33,6 +34,19 @@ const $ = (html) => {
 };
 const fmt = (n) => Math.floor(n).toLocaleString();
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+/** The moves, for the controls card and How to play (gestures animate in styles.css). */
+const CONTROLS = [
+  { g: 'lr', act: 'lane', label: 'Swipe ← → to change lane', why: 'Dodge boulders, rhinos and trucks.' },
+  { g: 'up', act: 'up', label: 'Swipe ↑ to jump', why: 'Leap over logs and rivers.' },
+  { g: 'down', act: 'down', label: 'Swipe ↓ to slide', why: 'Duck under branches and gates.' },
+];
+
+/** The keyboard version of a move, on computers only. */
+function desktopKeys(act) {
+  if (typeof matchMedia !== 'function' || !matchMedia('(hover: hover) and (pointer: fine)').matches) return '';
+  return { lane: t('← → or A D keys'), up: t('↑, W or Space'), down: t('↓ or S') }[act] ?? '';
+}
 
 const ICON = {
   pause: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1.5"/><rect x="14" y="4" width="4" height="16" rx="1.5"/></svg>',
@@ -115,6 +129,16 @@ export class UI {
     // a friend's invite link: kept on a brand-new device so the invite counts once they run
     const invite = captureInvite(this.params);
     if (invite) this.greetInvite(invite);
+    // back from a Snippe checkout: the home screen checks the order and celebrates
+    const paid = String(this.params.get('paid') ?? '');
+    // a pack's payment link comes back to one fixed address (?paid=1): the order is the last one opened here
+    if (/^kb[0-9a-f]{24}$/.test(paid)) this.returnedOrder = paid;
+    else if (paid && /^kb[0-9a-f]{24}$/.test(save.lastOrder ?? '')) this.returnedOrder = save.lastOrder;
+    if (this.params.has('paid')) {
+      const url = new URL(location.href);
+      url.searchParams.delete('paid');
+      history.replaceState(history.state, '', url.pathname + url.search + url.hash);
+    }
     this.missionTick = 0;
     this.selIdx = Math.max(0, RUNNERS.findIndex((r) => r.id === save.runner));
     this.postedRunId = null;
@@ -133,6 +157,10 @@ export class UI {
     });
     game.on('chapter', (c) => this.onChapter(c));
     game.on('tutorial', (t) => this.tip(t));
+    game.on('move', (a) => {
+      const want = this.coachAct;
+      if (want && (want === 'lane' ? a === 'left' || a === 'right' : a === want)) this.dismissCoach(true);
+    });
     game.on('shout', (s) => this.shout(s));
     game.on('over', (r) => this.onOver(r));
     game.on('pause', () => this.showPause());
@@ -185,7 +213,8 @@ export class UI {
         <div class="title-top">
           <div class="chips">
             <div class="chip"><span class="seed"></span><span>${fmt(save.seeds)}</span></div>
-            <div class="chip">✖️ ${multiplier()} <span class="muted" style="font-size:12px">${t('MULTIPLIER')}</span></div>
+            <div class="chip">✖️ ${multiplier()} <span class="muted mult-word" style="font-size:12px">${t('MULTIPLIER')}</span></div>
+            <div class="chip-row">${this.heartsChipHtml()}</div>
           </div>
           <div class="title-actions">
             ${install.offered ? `<button class="install-pill" data-act="install" data-click aria-label="${t('Install Kimbia! on this device')}">${ICON.install}<span>${t('Install')}</span></button>` : ''}
@@ -242,12 +271,20 @@ export class UI {
       else if (act === 'derby') this.derbySheet();
       else if (act === 'inbox') this.showInbox();
       else if (act === 'invite') this.inviteSheet();
+      else if (act === 'shop') this.shopSheet();
     });
     this.show(el);
     this.collectWinnings();
     this.collectPrizeMoney();
     this.collectInvites();
     this.paintTiktok(el);
+    this.collectWallet(el);
+    if (this.returnedOrder) {
+      const order = this.returnedOrder;
+      this.returnedOrder = null;
+      this.nudgedThisVisit = true; // the payment takes this visit's one pop-up slot
+      setTimeout(() => this.shopSheet({ waitFor: order }), 400);
+    }
     this.checkForUpdate(el);
     // the daily reward greets you on the title screen only; it never opens over a run
     if (save.introSeen && dailyDue()) {
@@ -366,6 +403,8 @@ export class UI {
     this.buildHud();
     this.game.start();
     this.missionTick = 0;
+    // the tutorial run teaches move by move; the next few runs open with the moves at a glance
+    if (save.tutorialDone && (save.runs ?? 0) < 4) this.controlsCard();
   }
 
   buildHud() {
@@ -591,8 +630,91 @@ export class UI {
     setTimeout(() => f.remove(), 650);
   }
 
+  /**
+   * A tutorial step, as a coach card over the trail: the move, an animated gesture, and how far
+   * through the lesson they are. It stays until the player makes that move (then cheers), so
+   * nobody misses it; a step with nothing to do fades on its own.
+   */
   tip(tp) {
-    this.feed({ icon: tp.icon, text: tp.text, kind: 'tip', ms: 3200 });
+    if (!this.hud) return;
+    this.dismissCoach(false, true);
+    const step = Math.max(0, TUTORIAL.indexOf(tp));
+    const keys = desktopKeys(tp.act);
+    const el = $(`
+      <div class="coach" role="status">
+        <div class="gest g-${tp.g ?? 'tap'}" aria-hidden="true"><i></i></div>
+        <div class="tx"><b>${esc(tp.text)}</b>${keys ? `<small>${keys}</small>` : ''}</div>
+        <div class="steps" aria-label="${t('Step {n} of {m}', { n: step + 1, m: TUTORIAL.length })}">${TUTORIAL.map((_, i) => `<i class="${i < step ? 'done' : i === step ? 'on' : ''}"></i>`).join('')}</div>
+      </div>`);
+    this.hud.appendChild(el);
+    this.coachEl = el;
+    this.coachAct = tp.act ?? null;
+    this.coachTimer = setTimeout(() => this.dismissCoach(false), tp.act ? 7000 : 4200);
+  }
+
+  /** Clears the coach card: with a cheer when they made the move, quietly otherwise. */
+  dismissCoach(done, now = false) {
+    const el = this.coachEl;
+    clearTimeout(this.coachTimer);
+    this.coachEl = null;
+    this.coachAct = null;
+    if (!el) return;
+    if (now) return el.remove();
+    if (done) {
+      el.classList.add('done');
+      el.querySelector('.tx').innerHTML = `<b>${t('✓ Nice!')}</b>`;
+      audio.tone('sine', 660, 990, 0.12, 0.08);
+      setTimeout(() => el.classList.add('out'), 520);
+    } else {
+      el.classList.add('out');
+    }
+    setTimeout(() => el.remove(), 900);
+  }
+
+  /** The moves at a glance, for a few seconds at the start of a player's early runs. */
+  controlsCard() {
+    if (!this.hud) return;
+    this.hud.querySelector('.controls-card')?.remove();
+    const el = $(`<div class="controls-card" aria-hidden="true">${CONTROLS.map((c) => `
+      <div class="ctl"><div class="gest g-${c.g}"><i></i></div><span>${t(c.label)}</span></div>`).join('')}</div>`);
+    this.hud.appendChild(el);
+    setTimeout(() => el.classList.add('out'), 4200);
+    setTimeout(() => el.remove(), 4800);
+  }
+
+  /** How to play: every move, the shield and the animal allies, with a practice run. */
+  howToPlay({ fromPause = false } = {}) {
+    const el = $(`
+      <div class="screen modal-wrap scrim-full">
+        <div class="panel modal how-to">
+          <h2>${t('How to play')}</h2>
+          <div class="muted">${t('Outrun Fisi the hyena king across Tanzania, Kenya and Uganda.')}</div>
+          <div class="how-list">
+            ${CONTROLS.map((c) => `
+              <div class="how-row"><div class="gest g-${c.g}"><i></i></div><div><b>${t(c.label)}</b><small>${t(c.why)}${desktopKeys(c.act) ? ` · ${desktopKeys(c.act)}` : ''}</small></div></div>`).join('')}
+            <div class="how-row"><div class="how-ico">🛡️</div><div><b>${t('Tap the shield')}</b><small>${t('An Ngao charm takes one crash for you. Get more in Allies.')}</small></div></div>
+            <div class="how-row"><div class="how-ico">🐾</div><div><b>${t('Grab glowing totems')}</b><small>${t('An animal ally joins you: ride Tembo, fly with Tai, dash with Duma…')}</small></div></div>
+            <div class="how-row"><div class="how-ico"><span class="seed"></span></div><div><b>${t('Collect seeds')}</b><small>${t('Spend them on runners and allies, and to revive after a crash.')}</small></div></div>
+          </div>
+          <div class="stack">
+            <button class="btn" data-act="ok" data-click>${fromPause ? t('▶ Back to the run') : t('Got it!')}</button>
+            ${fromPause ? '' : `<button class="btn ghost" data-act="practice" data-click>${t('🎓 Practice run')}</button>`}
+          </div>
+        </div>
+      </div>`);
+    el.addEventListener('click', (e) => {
+      const act = e.target.closest('[data-act]')?.dataset.act;
+      if (act === 'ok' || e.target === el) el.remove();
+      if (act === 'practice') {
+        // the next run is the scripted lesson again
+        save.tutorialDone = false;
+        persist();
+        el.remove();
+        this.root.querySelectorAll('.modal-wrap').forEach((m) => m.remove());
+        this.play();
+      }
+    });
+    this.overlay(el);
   }
 
   /** Shows the word being hunted, its found letters lit; a new word slides in fresh. */
@@ -674,6 +796,7 @@ export class UI {
           ${this.sizeControl()}
           <div class="stack">
             <button class="btn" data-act="resume" data-click>${t('▶ Keep running')}</button>
+            <button class="btn ghost" data-act="how" data-click>${t('❓ How to play')}</button>
             <div class="row2">
               <button class="btn ghost" data-act="sound" data-click>${save.music ? t('🔊 Music') : t('🔇 Music')}</button>
               <button class="btn ghost" data-act="home" data-click>${t('🏠 Home')}</button>
@@ -686,6 +809,8 @@ export class UI {
       if (act === 'resume') {
         el.remove();
         this.countdownResume();
+      } else if (act === 'how') {
+        this.howToPlay({ fromPause: true });
       } else if (act === 'sound') {
         save.music = !save.music;
         audio.setMusic(save.music);
@@ -725,51 +850,95 @@ export class UI {
 
   onOver(run) {
     const cost = this.reviveCost();
-    const canRevive = this.game.revives < 2 && save.seeds + run.seeds >= cost;
-    if (canRevive) this.revivePrompt(run, cost);
+    const seedsOk = this.game.revives < 2 && save.seeds + run.seeds >= cost;
+    const heartsOk = this.game.revives < MAX_REVIVES && ((save.hearts ?? 0) > 0 || shopReadyNow());
+    const freeOk = !!this.game.freeRevive; // Kito's perk
+    if (seedsOk || heartsOk || freeOk) this.revivePrompt(run, cost, { seedsOk, heartsOk, freeOk });
     else this.results(run);
   }
 
-  revivePrompt(run, cost) {
+  /**
+   * Second wind: a heart (bought in the shop) or seeds bring the runner back. With no hearts
+   * the shop opens right here, the run waiting, and a heart bought there revives straight away.
+   */
+  revivePrompt(run, cost, { seedsOk = true, heartsOk = false, freeOk = false } = {}) {
+    const hearts = save.hearts ?? 0;
+    if (freeOk) {
+      // Kito's free revive comes first, and alone: nothing to spend
+      heartsOk = false;
+      seedsOk = false;
+    }
     const el = $(`
       <div class="screen over scrim-full">
         <div class="panel card">
           <div style="font-size:64px">🐘</div>
           <h2 class="h-display" style="font-size:32px;color:var(--sun-2)">${t('Second wind?')}</h2>
-          <p class="muted" style="margin:6px 0 18px">${t('Bibi Tembo can scare Fisi away — for a few golden seeds.')}</p>
-          <div class="stack" style="display:flex;flex-direction:column;gap:12px">
-            <button class="btn flame big revive" data-act="revive" data-click>${t('Revive')} · ${fmt(cost)} <span class="seed"></span><i class="bar"></i></button>
+          <p class="muted" style="margin:6px 0 18px">${t('Bibi Tembo can scare Fisi away — for a heart or a few golden seeds.')}</p>
+          <div class="stack revive-stack">
+            ${freeOk ? `<button class="btn big flame" data-act="free" data-click>💫 ${t('Free revive')} <small>${t('Kito’s perk')}</small><i class="bar"></i></button>` : ''}
+            ${heartsOk && hearts > 0 ? `<button class="btn big heart-btn" data-act="heart" data-click>❤️ ${t('Use a heart')} <small>${t('{n} left', { n: fmt(hearts) })}</small><i class="bar"></i></button>` : ''}
+            ${seedsOk ? `<button class="btn ${heartsOk && hearts > 0 ? 'ghost' : 'flame big'} revive" data-act="revive" data-click>${t('Revive')} · ${fmt(cost)} <span class="seed"></span>${heartsOk && hearts > 0 ? '' : '<i class="bar"></i>'}</button>` : ''}
+            ${heartsOk && hearts <= 0 ? `<button class="btn ${seedsOk ? 'ghost' : 'big heart-btn'}" data-act="get-hearts" data-click>❤️ ${t('Get hearts')} · ${tsh(SHOP_PACKS[0].price)}</button>` : ''}
             <button class="btn ghost" data-act="skip" data-click>${t('No thanks')}</button>
           </div>
         </div>
       </div>`);
     let done = false;
-    const finish = (revive) => {
+    const finish = (how) => {
       if (done) return;
       done = true;
       clearTimeout(timer);
       el.remove();
-      if (revive) {
+      if (how === 'seeds') {
         // spend run seeds first, then the bank
         const fromRun = Math.min(this.game.seeds, cost);
         this.game.seeds -= fromRun;
         save.seeds -= cost - fromRun;
         persist();
         this.countdownRevive();
+      } else if (how === 'heart') {
+        this.countdownRevive('heart');
+      } else if (how === 'free') {
+        this.game.freeRevive = false;
+        this.countdownRevive();
       } else this.results(run);
     };
-    const timer = setTimeout(() => finish(false), 5000);
-    el.addEventListener('click', (e) => {
-      const act = e.target.closest('[data-act]')?.dataset.act;
-      if (act === 'revive') finish(true);
-      if (act === 'skip') finish(false);
+    const timer = setTimeout(() => finish(null), 6000);
+    el.addEventListener('click', async (e) => {
+      const btn = e.target.closest('[data-act]');
+      const act = btn?.dataset.act;
+      if (act === 'revive') finish('seeds');
+      if (act === 'free') finish('free');
+      if (act === 'skip') finish(null);
+      if (act === 'heart' && !done) {
+        clearTimeout(timer);
+        btn.disabled = true;
+        if (await useHeart()) finish('heart');
+        else {
+          this.toast('❤️', t("Couldn't use a heart just now."));
+          finish(null);
+        }
+      }
+      if (act === 'get-hearts' && !done) {
+        // the run waits while they buy; a heart bought there brings them straight back
+        clearTimeout(timer);
+        done = true;
+        el.remove();
+        this.shopSheet({
+          mode: 'revive',
+          onClose: async (bought) => {
+            if (bought && (save.hearts ?? 0) > 0 && (await useHeart())) this.countdownRevive('heart');
+            else this.results(run);
+          },
+        });
+      }
     });
     this.overlay(el);
   }
 
-  countdownRevive() {
+  countdownRevive(how) {
     this.game.revive();
-    this.speech('🐘', 'Bibi Tembo', t('Shoo, Fisi! Off you go, little one — run!'), '#ffb347');
+    this.speech(how === 'heart' ? '❤️' : '🐘', 'Bibi Tembo', t('Shoo, Fisi! Off you go, little one — run!'), how === 'heart' ? '#ff5d73' : '#ffb347');
   }
 
   /** Banks a finished run into the save exactly once. */
@@ -906,7 +1075,7 @@ export class UI {
       } else if (own) {
         bet = `<div class="bet-line">${t('Your bet: {stake} coins on this run', { stake: fmt(ch.stake) })}</div>`;
       } else if (ch.status === 'open') {
-        const short = save.seeds < ch.stake;
+        const short = bettableSeeds() < ch.stake;
         bet = `
           <div class="bet-line">${t('Bet {stake} coins · winner takes {pot}', { stake: `<b>${fmt(ch.stake)}</b>`, pot })}</div>
           <button class="btn small flame bet-take" data-act="take-bet" data-click ${short ? 'disabled' : ''}>🤝 ${t('Take the bet')} · ${fmt(ch.stake)} <span class="seed"></span></button>
@@ -930,6 +1099,7 @@ export class UI {
   async takeBet(btn) {
     const ch = this.remote;
     if (!ch || this.bet) return;
+    if (bettableSeeds() < ch.stake) return this.toast('🌰', t("Seeds bought in the shop can't be bet. Win more on the trail!"), 3200);
     btn.disabled = true;
     try {
       await acceptBet(ch.id, save.name || t('A friend'));
@@ -1012,7 +1182,7 @@ export class UI {
           ${save.name ? '' : `<input class="name-input" data-name placeholder="${t('Your runner name')}" ${NAME_ATTRS}><div class="name-status" data-name-status></div>`}
           <div class="bet-head"><b>${t('Bet coins?')}</b><span>${t('Winner takes all')}</span></div>
           <div class="stakes">
-            ${STAKES.map((n) => `<button class="stake ${n === 0 ? 'on' : ''}" data-stake="${n}" ${n > save.seeds ? 'disabled' : ''}>${n ? `${fmt(n)}<span class="seed"></span>` : t('Free')}</button>`).join('')}
+            ${STAKES.map((n) => `<button class="stake ${n === 0 ? 'on' : ''}" data-stake="${n}" ${n > bettableSeeds() ? 'disabled' : ''}>${n ? `${fmt(n)}<span class="seed"></span>` : t('Free')}</button>`).join('')}
           </div>
           <div class="pot-line" data-pot></div>
           <div data-notify-slot></div>
@@ -1942,6 +2112,7 @@ export class UI {
             <div class="role">${esc(r.title)}</div>
             <h2>${esc(r.name)}</h2>
             <p>${esc(r.bio)}</p>
+            ${r.perk ? `<div class="perk-badge"><span class="pi">${r.perk.icon}</span><span><b>${esc(t(r.perk.name))}</b><small>${esc(t(r.perk.desc))}</small></span></div>` : ''}
             <div class="outfit-line">${esc(outfit.line)}</div>
             <div class="outfits" role="listbox" aria-label="${t('Outfit')}">
               ${wearable(save.side).map((o) => `<button type="button" class="${o.id === outfit.id ? 'on' : ''} ${o.limited ? `limited ${o.limited}` : ''}" data-outfit="${o.id}" aria-label="${esc(o.line)}">${esc(o.name)}</button>`).join('')}
@@ -2659,6 +2830,8 @@ export class UI {
           ${this.notifyRow()}
           ${install.offered ? `<div class="toggle-row"><span>${t('📲 Play from your home screen')}</span><button class="btn small" data-act="install" data-click>${t('Install')}</button></div>` : ''}
           ${save.name ? `<div class="toggle-row"><span>${t('🔐 Recovery PIN')}${save.pinSet ? ` <em class="pin-on">${t('on')}</em>` : ''}</span><button class="btn small ${save.pinSet ? 'ghost' : ''}" data-act="pin" data-click>${save.pinSet ? t('Change') : t('Set PIN')}</button></div>` : ''}
+          <div class="toggle-row"><span>${t('❤️ Shop')}<small class="row-note">${t('Hearts to revive, and seed packs')}</small></span><button class="btn small" data-act="shop" data-click>${t('Open')}</button></div>
+          <div class="toggle-row"><span>${t('❓ How to play')}</span><button class="btn small ghost" data-act="how" data-click>${t('Open')}</button></div>
           <div class="toggle-row"><span>${t('🤝 Invite friends')}<small class="row-note">${t('+{n} seeds for each friend who joins', { n: fmt(REFERRAL.reward) })}</small></span><button class="btn small" data-act="invite" data-click>${t('Invite')}</button></div>
           ${save.tiktok ? `<div class="toggle-row"><span class="tt-label">${TIKTOK_ICON} ${t('Follow us on TikTok')}<small class="row-note">@${esc(save.tiktok)}</small></span><a class="btn small tt-btn" href="${tiktokUrl(save.tiktok)}" target="_blank" rel="noopener" data-click>${t('Follow')}</a></div>` : ''}
           <div class="toggle-row"><span>${t('🔑 Get my runner back')}</span><button class="btn small ghost" data-act="recover" data-click>${t('Open')}</button></div>
@@ -2678,6 +2851,8 @@ export class UI {
       if (e.target.closest('[data-act=pin]')) return this.pinSheet();
       if (e.target.closest('[data-act=recover]')) return this.recoverSheet();
       if (e.target.closest('[data-act=invite]')) return this.inviteSheet();
+      if (e.target.closest('[data-act=how]')) return this.howToPlay();
+      if (e.target.closest('[data-act=shop]')) return this.shopSheet();
       const lb = e.target.closest('[data-lang]');
       if (lb) return setLang(lb.dataset.lang);
       const qb = e.target.closest('[data-q]');
@@ -2794,6 +2969,173 @@ export class UI {
   /** True while the title screen is what the player sees (no run, no other modal on top). */
   onTitle() {
     return this.game.state === 'menu' && !!this.screen?.classList.contains('title') && !document.querySelector('.modal-wrap');
+  }
+
+  /* ------------------------------------------------------------------ shop */
+  heartsChipHtml() {
+    // always there, so players find the shop; the + shows once it takes payments
+    return `<button class="chip hearts-chip" data-act="shop" data-click aria-label="${t('Shop')}">❤️ <span>${fmt(save.hearts ?? 0)}</span>${shopReadyNow() ? '<b>+</b>' : ''}</button>`;
+  }
+
+  /** Hearts (and bought seeds still to bank) from the server, at most once a minute. */
+  async collectWallet(el) {
+    await shopReady();
+    if (save.playerId == null || this.walletBusy || Date.now() - (this.walletAt ?? 0) < 60000) return this.paintHearts(el);
+    this.walletBusy = true;
+    try {
+      const before = save.seeds;
+      const { seeds } = await syncWallet();
+      this.walletAt = Date.now();
+      if (seeds > 0) this.toast('🌰', t('+{n} seeds from the shop', { n: fmt(seeds) }));
+      if (save.seeds !== before) {
+        const chip = el.querySelector('.title-top .chip span:last-child');
+        if (chip) chip.textContent = fmt(save.seeds);
+      }
+    } catch {
+      /* next time */
+    } finally {
+      this.walletBusy = false;
+      this.paintHearts(el);
+    }
+  }
+
+  paintHearts(el) {
+    if (!el?.isConnected) return;
+    const row = el.querySelector('.chip-row');
+    row?.querySelector('.hearts-chip')?.remove();
+    row?.insertAdjacentHTML('beforeend', this.heartsChipHtml());
+  }
+
+  /**
+   * The shop: hearts and seed packs. Buying opens Snippe's checkout in a new tab (the run, or the
+   * home screen, waits here) and this sheet waits for the payment. `waitFor` reopens it on an
+   * order the player came back from; `mode: 'revive'` shows hearts only and reports back.
+   */
+  shopSheet({ mode = 'shop', waitFor = null, onClose = null } = {}) {
+    this.root.querySelector('.shop-screen')?.remove();
+    let bought = false;
+    let tab = 'hearts';
+    const el = $(`
+      <div class="screen scrim-full lb-screen shop-screen">
+        <div class="sheet-head">
+          <button class="icon-btn" data-act="back" data-click aria-label="${t('Back')}">${ICON.back}</button>
+          <h2>${mode === 'revive' ? t('Get hearts') : t('Shop')}</h2>
+          <div class="chip">❤️ <span data-hearts>${fmt(save.hearts ?? 0)}</span></div>
+        </div>
+        <div class="sheet-body"></div>
+      </div>`);
+    const body = el.querySelector('.sheet-body');
+    const close = () => {
+      clearInterval(this.orderPoll);
+      el.remove();
+      onClose?.(bought);
+      if (!onClose && this.screen?.classList.contains('title')) this.title();
+    };
+    const paintHearts = () => {
+      el.querySelector('[data-hearts]').textContent = fmt(save.hearts ?? 0);
+    };
+    const packCard = (p) => `
+      <button class="pack ${p.kind}" data-pack="${p.id}" data-click ${onSaleNow(p.id) ? '' : 'disabled'}>
+        ${p.tag ? `<span class="tag">${t(p.tag)}</span>` : ''}
+        <span class="ico">${p.kind === 'hearts' ? '❤️' : '<span class="seed"></span>'}</span>
+        <b>${p.kind === 'hearts' ? t('{n} hearts', { n: fmt(p.hearts) }) : t('{n} seeds', { n: fmt(p.seeds) })}</b>
+        <small>${p.kind === 'hearts' ? t('Revive after a crash') : t('For runners and allies')}</small>
+        <span class="price">${onSaleNow(p.id) ? tsh(p.price) : `${tsh(p.price)} · ${t('soon')}`}</span>
+      </button>`;
+    const paintPacks = () => {
+      const packs = SHOP_PACKS.filter((p) => p.kind === tab);
+      body.innerHTML = `
+        ${mode === 'revive' ? `<p class="muted shop-lead">${t('Fisi is waiting! A heart brings you straight back into this run.')}</p>` : `
+        <div class="lb-tabs shop-tabs">
+          <button type="button" data-tab="hearts" class="${tab === 'hearts' ? 'on' : ''}">❤️ ${t('Hearts')}</button>
+          <button type="button" data-tab="seeds" class="${tab === 'seeds' ? 'on' : ''}"><span class="seed"></span> ${t('Seeds')}</button>
+        </div>`}
+        ${shopReadyNow() ? '' : `<div class="shop-soon">🛠️ ${t('The shop opens very soon — have a look at what’s coming!')}</div>`}
+        <div class="packs">${packs.map(packCard).join('')}</div>
+        <div class="shop-notes">
+          <p>📱 ${t('Pay with M-Pesa, Mixx by Yas, Airtel Money or Halotel on Snippe’s secure page.')}</p>
+          ${tab === 'seeds' ? `<p>🤝 ${t('Bought seeds are for runners, allies and revives — they can’t be bet in friend challenges.')}</p>` : ''}
+          <p>👪 ${t('Under 18? Ask a parent or guardian before you buy.')}</p>
+        </div>`;
+    };
+    const success = (data) => {
+      bought = true;
+      clearInterval(this.orderPoll);
+      paintHearts();
+      const pack = SHOP_PACKS.find((p) => p.id === data.pack);
+      audio.buy();
+      body.innerHTML = `
+        <div class="shop-done">
+          <div class="burst">${pack?.kind === 'seeds' ? '<span class="seed"></span>' : '❤️'}</div>
+          <h3>${t('Asante! Payment received')}</h3>
+          <p>${pack?.kind === 'seeds' ? t('+{n} seeds are in your bank.', { n: fmt(pack.seeds) }) : t('+{n} hearts — you have {m} now.', { n: fmt(pack?.hearts ?? 0), m: fmt(save.hearts ?? 0) })}</p>
+          <button class="btn big" data-act="back" data-click>${mode === 'revive' ? t('▶ Back to the run') : t('Great!')}</button>
+        </div>`;
+    };
+    const wait = (order, url) => {
+      body.innerHTML = `
+        <div class="shop-wait">
+          <div class="spin big"></div>
+          <h3>${t('Finish paying on the Snippe page')}</h3>
+          <p class="muted">${t('Approve the payment on your phone. This page updates by itself when it’s done.')}</p>
+          ${url ? `<a class="btn ghost" href="${esc(url)}" target="_blank" rel="noopener" data-click>${t('Open the checkout again')}</a>` : ''}
+          <button class="btn ghost" data-act="cancel-wait" data-click>${t('Choose another pack')}</button>
+        </div>`;
+      clearInterval(this.orderPoll);
+      const until = Date.now() + 15 * 60 * 1000;
+      const tick = async () => {
+        if (!el.isConnected || Date.now() > until) return clearInterval(this.orderPoll);
+        try {
+          const data = await checkOrder(order);
+          if (!el.isConnected) return;
+          if (data.status === 'paid') return success(data);
+          if (data.status !== 'pending') {
+            clearInterval(this.orderPoll);
+            this.toast('⌛', t('That checkout closed without a payment.'));
+            paintPacks();
+          }
+        } catch {
+          /* keep waiting */
+        }
+      };
+      this.orderPoll = setInterval(tick, 3000);
+      tick();
+    };
+    el.addEventListener('click', async (e) => {
+      const target = e.target.closest('[data-act], [data-tab], [data-pack]');
+      if (!target) return;
+      if (target.dataset.act === 'back') return close();
+      if (target.dataset.act === 'cancel-wait') {
+        clearInterval(this.orderPoll);
+        return paintPacks();
+      }
+      if (target.dataset.tab) {
+        tab = target.dataset.tab;
+        return paintPacks();
+      }
+      if (target.dataset.pack) {
+        if (save.playerId == null) return this.toast('🏷️', t('Pick your runner name first (Settings), then come back.'), 3200);
+        // a tab opened inside the tap, so phones don't block it; Snippe's page loads into it
+        const tabWin = window.open('', '_blank');
+        target.disabled = true;
+        try {
+          const url = await startCheckout(target.dataset.pack);
+          if (tabWin) tabWin.location.href = url;
+          else location.assign(url); // pop-ups blocked: go there, Snippe brings them back
+          wait(save.lastOrder, url);
+        } catch (err) {
+          tabWin?.close();
+          target.disabled = false;
+          this.toast('⚠️', esc(err.message), 3200);
+        }
+      }
+    });
+    el.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('[data-click]')) audio.click();
+    });
+    this.overlay(el);
+    if (waitFor) wait(waitFor, null);
+    else paintPacks();
   }
 
   /* ------------------------------------------------------- invites & TikTok */

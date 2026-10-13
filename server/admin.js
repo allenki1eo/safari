@@ -9,6 +9,8 @@
  *   prizes     the latest prizes and whether they were collected
  *   broadcast  one notification to everyone who turned them on (at most every 10 minutes)
  *   social     the game's TikTok handle (read it with no `tiktok`, set or clear it with one)
+ *   sales      the shop: takings, the latest orders, unmatched payments and each pack's payment link
+ *   shop-links sets the Snippe payment link of each pack
  */
 import { timingSafeEqual } from 'node:crypto';
 import { DERBY, PRIZES } from '../app/data/content.js';
@@ -18,6 +20,7 @@ import { derbyBoard } from './derby.js';
 import { broadcast, pushKeys } from './push.js';
 import { postInbox } from './inbox.js';
 import { setSocialLinks, socialLinks } from './referrals.js';
+import { packLinks, payKeys, recentOrders, salesSummary, setPackLinks, unmatchedPayments } from './payments.js';
 
 const BROADCAST_GAP = 10 * 60 * 1000;
 const TITLE_MAX = 60;
@@ -87,6 +90,8 @@ async function overview() {
       banned: num(banned.n),
       invited: num(invites.n),
       invitesJoined: num(invites.joined),
+      sales: await salesSummary(db, Date.parse(dayStartIso(today))),
+      shopReady: !!payKeys()?.secret && (!!payKeys()?.key || Object.keys(await packLinks(db)).length > 0),
       pushReady: !!pushKeys(),
       series,
       derby: await derbyBoard(),
@@ -220,6 +225,22 @@ export async function handleAdminRequest(method, body) {
       case 'ban': return await ban(body);
       case 'prizes': return await prizes();
       case 'broadcast': return await sendBroadcast(body);
+      case 'sales': {
+        const db = await getClient();
+        const keys = payKeys();
+        return {
+          status: 200,
+          body: {
+            secret: !!keys?.secret,
+            apiKey: !!keys?.key,
+            links: await packLinks(db),
+            summary: await salesSummary(db, Date.parse(dayStartIso(darDay(now())))),
+            orders: await recentOrders(db),
+            unmatched: await unmatchedPayments(db),
+          },
+        };
+      }
+      case 'shop-links': return await setPackLinks(await getClient(), body?.links);
       case 'social': return body?.tiktok === undefined ? { status: 200, body: await socialLinks() } : await setSocialLinks(body);
       default: return bad('Unknown action.');
     }
