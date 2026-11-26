@@ -18,7 +18,7 @@ import { RUNNERS, ALLIES, ALLY_IDS, TUTORIAL, SHOUTS, outfitId, HUNT_WORDS, HUNT
 import { REGIONS, regionIndexAt, regionAt } from '../data/regions.js';
 import { save, persist, multiplier, earnHeart, earnedRoom } from '../data/save.js';
 import {
-  chunkPlan, cruiseSpeed, darDay, newRoute, ghostDistance, huntWord, lionClip, nearMissSpec, rngAt, waterClear, wildebeestFill,
+  chunkPlan, cruiseSpeed, dailyRun, darDay, newRoute, ghostDistance, huntWord, lionClip, nearMissSpec, rngAt, waterClear, wildebeestFill,
 } from '../data/daily.js';
 
 const LANES = [-LANE_W, 0, LANE_W];
@@ -272,6 +272,10 @@ export class Game {
     this.today = darDay();
     this.day = this.linkedRoute ?? newRoute();
     this.recorder = new GhostRecorder();
+    this.dailyRun = false;
+    this.finishAt = 0;
+    this.finished = false;
+    this.finishWarned = false;
     this.sinking = false;
     this.tutorialIdx = 0;
     // first runs open with the scripted lesson; the day's route picks up right after it
@@ -297,10 +301,20 @@ export class Game {
     if (this.ghost) this.ghost.root.visible = false;
   }
 
-  start() {
+  start(opts = {}) {
     this.resetRun();
-    const linked = this.linkedStart;
-    this.startJ = linked == null ? this.startFor(save.startRegion) : this.startFor(linked, true);
+    if (opts.daily) {
+      const sprint = dailyRun();
+      this.dailyRun = true;
+      this.finishAt = sprint.length;
+      this.today = darDay();
+      this.day = sprint.route;
+      this.startJ = sprint.startAt;
+      this.tutorialRun = false;
+    } else {
+      const linked = this.linkedStart;
+      this.startJ = linked == null ? this.startFor(save.startRegion) : this.startFor(linked, true);
+    }
     this.world.setDay(this.day);
     this.world.reset(this.J);
     this.runId = (this.runId ?? 0) + 1;
@@ -458,6 +472,7 @@ export class Game {
 
     if (this.state === 'running') this.updateRun(dt);
     else if (this.state === 'dying') this.updateDying(dt);
+    else if (this.state === 'finishing') this.updateFinishing(dt);
     else if (this.state === 'menu') this.updateMenu(dt);
 
     if (this.state !== 'paused') {
@@ -522,6 +537,17 @@ export class Game {
     const mult = multiplier() * (pw.simba ? 2 : 1) * (this.boosts.score ? 2 : 1);
     this.score += step * mult;
     this.stats.score = Math.floor(this.score);
+    if (this.dailyRun && this.finishAt > 0) {
+      const left = this.finishAt - this.D;
+      if (!this.finishWarned && left <= 80) {
+        this.finishWarned = true;
+        this.emit('shout', { text: t('Finish!'), sub: t('{n} m to go', { n: Math.max(1, Math.round(left)) }) });
+      }
+      if (this.D >= this.finishAt) {
+        this.crossFinish();
+        return;
+      }
+    }
 
     // ---- timers
     for (const k of Object.keys(pw)) {
@@ -1041,6 +1067,42 @@ export class Game {
     }
   }
 
+  /** The short daily run reaches its finish line: a cheer, not a crash. */
+  crossFinish() {
+    if (this.state !== 'running') return;
+    this.D = this.finishAt;
+    this.stats.distance = Math.floor(this.D);
+    this.finished = true;
+    this.caught = false;
+    this.p.invuln = 9;
+    this.freeze = 0;
+    this.deathT = 0;
+    this.state = 'finishing';
+    audio.buy();
+    this.haptic([40, 30, 80]);
+    this.emit('shout', { text: t('🏁 Finish!') });
+  }
+
+  updateFinishing(dt) {
+    this.deathT += dt;
+    const p = this.p;
+    this.runner.update(dt, this.speed, 'run');
+    this.runner.root.position.set(p.x, p.y, 0);
+    this.speed = damp(this.speed, 8, 4, dt);
+    this.D += this.speed * dt;
+    this.updateChasers(dt);
+    for (const o of this.obstacles) {
+      o.mesh.position.z = this.D - o.wz;
+      if (o.anim) o.anim.update(dt, 0, 'idle');
+    }
+    if (this.deathT > 1.1) {
+      this.D = this.finishAt;
+      this.stats.distance = Math.floor(this.finishAt);
+      this.state = 'over';
+      this.emit('over', this.summary());
+    }
+  }
+
   summary() {
     return {
       score: Math.floor(this.score),
@@ -1048,6 +1110,8 @@ export class Game {
       distance: Math.floor(this.D),
       stats: { ...this.stats },
       caught: this.caught,
+      finished: !!this.finished,
+      daily: !!this.dailyRun,
       chapter: this.region,
       region: REGIONS[this.region]?.id ?? 'serengeti',
       lap: this.lap,

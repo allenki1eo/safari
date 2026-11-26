@@ -5,6 +5,7 @@
  * board, the word hunt and the daily reward.
  */
 import { RUNNERS } from './content.js';
+import { REGIONS } from './regions.js';
 
 export const LIVE_ORIGIN = 'https://safari-blush.vercel.app';
 
@@ -290,4 +291,34 @@ export function huntWord(list, day, done = 0) {
     [order[i], order[j]] = [order[j], order[i]];
   }
   return list[order[done % order.length]];
+}
+
+/** Length of the short daily run, in metres. Finishing it also reaches the daily heart mark. */
+export const DAILY_RUN_M = 1000;
+
+/** The shared route key for a Dar calendar day (already a valid ROUTE_RE). */
+export function dailyRoute(day = darDay()) {
+  return String(day);
+}
+
+/**
+ * This week's park: one region, the same for every player, from Monday in Dar.
+ * The short daily run starts there, so the week has a place to visit.
+ */
+export function weekPark(day = darDay()) {
+  const week = darWeekStart(day);
+  const rng = mulberry32(seedFromDay(`park:${week}`));
+  return REGIONS[Math.floor(rng() * REGIONS.length)];
+}
+
+/** Today's short run: a fixed route, a finish line, and this week's starting park. */
+export function dailyRun(day = darDay()) {
+  const park = weekPark(day);
+  return {
+    route: dailyRoute(day),
+    length: DAILY_RUN_M,
+    park,
+    startRegion: REGIONS.indexOf(park),
+    startAt: park.at,
+  };
 }

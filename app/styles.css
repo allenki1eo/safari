@@ -718,6 +718,22 @@ input { font: inherit; }
 .prize-ribbon .seed { width: 15px; height: 15px; }
 .prize-ribbon .ends { flex: none; padding: 3px 9px; border-radius: 99px; background: rgba(0,0,0,0.35); color: var(--sun-2); font-size: 12px; font-weight: 900; font-variant-numeric: tabular-nums; }
 .prize-ribbon:active { transform: scale(0.98); }
+.prize-ribbon.placed { border-color: rgba(255,201,64,0.75); }
+.prize-ribbon.placed .what { color: var(--sun-2); }
+
+.week-chip {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 12px 8px 10px;
+  border-radius: 16px; border: 1px solid rgba(255,244,222,0.16);
+  background: rgba(43,26,14,0.55); color: var(--cream); text-align: left; box-shadow: var(--shadow);
+  backdrop-filter: blur(6px);
+}
+.week-chip .flag { font-size: 26px; line-height: 1; }
+.week-chip small { display: block; font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; color: rgba(255,244,222,0.65); }
+.week-chip b { font-family: var(--display); font-weight: 400; font-size: 18px; color: #fff; }
+.week-chip .go { margin-left: auto; display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 800; color: var(--sun-2); white-space: nowrap; }
+.week-chip .seed { width: 13px; height: 13px; }
+.week-chip:active { transform: scale(0.98); }
+.daily-btn { width: 100%; min-height: 48px; font-size: 18px; }
 @keyframes shine { 0%, 60% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
 
 .prize-card { position: relative; padding: 14px 14px 12px; border-radius: 20px; overflow: hidden; background: radial-gradient(120% 90% at 50% 0%, rgba(255,201,64,0.28), transparent 60%), linear-gradient(180deg, rgba(74,46,23,0.9), rgba(43,26,14,0.9)); border: 1px solid rgba(255,201,64,0.4); }
@@ -931,6 +947,10 @@ input { font: inherit; }
   .title .nav-btn .ico { font-size: 19px; }
   .title .best-line { font-size: 12px; }
   .title .prize-ribbon { min-height: 44px; }
+  .title .week-chip { min-height: 42px; padding-top: 5px; padding-bottom: 5px; }
+  .title .week-chip .flag { font-size: 20px; }
+  .title .week-chip b { font-size: 16px; }
+  .title .daily-btn { min-height: 44px; font-size: 16px; }
   .over .card { max-height: calc(100dvh - 16px - var(--safe-t) - var(--safe-b)); }
 }
 
