@@ -801,8 +801,9 @@ export class UI {
             <button class="btn ghost" data-act="how" data-click>${t('❓ How to play')}</button>
             <div class="row2">
               <button class="btn ghost" data-act="sound" data-click>${save.music ? t('🔊 Music') : t('🔇 Music')}</button>
-              <button class="btn ghost" data-act="home" data-click>${t('🏠 Home')}</button>
+              <button class="btn ghost" data-act="sfx" data-click>${save.sound ? t('🔊 Sound effects') : t('🔇 Sound effects')}</button>
             </div>
+            <button class="btn ghost" data-act="home" data-click>${t('🏠 Home')}</button>
           </div>
         </div>
       </div>`);
@@ -818,6 +819,11 @@ export class UI {
         audio.setMusic(save.music);
         persist();
         e.target.closest('button').textContent = save.music ? t('🔊 Music') : t('🔇 Music');
+      } else if (act === 'sfx') {
+        save.sound = !save.sound;
+        audio.setSound(save.sound);
+        persist();
+        e.target.closest('button').textContent = save.sound ? t('🔊 Sound effects') : t('🔇 Sound effects');
       } else if (act === 'home') {
         el.remove();
         const run = this.game.summary();
