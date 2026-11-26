@@ -13,7 +13,7 @@ import {
 import { audio } from '../game/audio.js';
 import { challengeUrl, makeCard, shareText } from './share.js';
 import { BOARD_PAGE, fetchBoard, leaveDecision, postScore, renderRows, rowHtml, runnerName, scoreSavePlan } from './leaderboard.js';
-import { darDay, ghostFrom, huntWord, parseShareLink, routeForLink } from '../data/daily.js';
+import { DAILY_RUN_M, darDay, ghostFrom, huntWord, parseShareLink, routeForLink, weekPark } from '../data/daily.js';
 import { disableNotifications, enableNotifications, notifyState, pushReady, pushReadyNow } from './notify.js';
 import { MEDAL, PRIZES, closesAt, collectPrizes, ordinal, periodName, timeLeft } from './prizes.js';
 import {
@@ -233,9 +233,10 @@ export class UI {
           ${this.challengeCardHtml() || this.inviteCardHtml()}
           ${derbyShown() ? this.derbyCardHtml() : `<button class="prize-ribbon" data-act="board" data-click>
             <span class="gift">🎁</span>
-            <span class="what">${t("Today's #1 wins {n}", { n: `<b>${fmt(PRIZES.day[0])}</b>` })}<i class="seed"></i></span>
+            <span class="what" data-daily-place>${t("Today's #1 wins {n}", { n: `<b>${fmt(PRIZES.day[0])}</b>` })}<i class="seed"></i></span>
             <span class="ends" data-ends>${timeLeft(closesAt('day'))}</span>
           </button>`}
+          ${this.weekChipHtml()}
           <div class="title-meta">
             ${save.best ? `<div class="best-line">${t('Best run {score} pts · {dist}m', { score: `<b>${fmt(save.best)}</b>`, dist: `<b>${fmt(save.bestDistance)}` })}</b></div>` : ''}
             <button class="invite-chip" data-act="invite" data-click>🤝 ${t('Invite')} <b>+${fmt(REFERRAL.reward)}</b><i class="seed"></i></button>
@@ -247,6 +248,7 @@ export class UI {
             <span class="go">🗺️ ${t('Change')}</span>
           </button>
           <div class="herd-loading" hidden><span class="label">${t('🐾 The herd is on its way…')}</span><i><b></b></i></div>
+          <button class="btn ghost daily-btn" data-act="daily" data-click>☀️ ${t("Today's {n} m run", { n: fmt(DAILY_RUN_M) })}</button>
           <button class="btn big play-btn" data-act="play" data-click>${t('▶ RUN!')}</button>
           <div class="nav-row">
             <button class="nav-btn" data-act="runners" data-click><span class="ico">🧒🏾</span>${t('Runners')}${canAfford ? '<i class="badge-dot"></i>' : ''}</button>
@@ -261,6 +263,8 @@ export class UI {
       if (!act) return;
       audio.unlock();
       if (act === 'play') this.play();
+      else if (act === 'daily') this.playDaily();
+      else if (act === 'week') this.showBoard('week');
       else if (act === 'settings') this.settings();
       else if (act === 'runners') this.runners();
       else if (act === 'store') this.shopSheet();
@@ -301,6 +305,7 @@ export class UI {
       ends.textContent = timeLeft(derbyShown() ? DERBY.closes : closesAt('day'));
     }, 15000);
     this.paintDerby(el);
+    this.paintDailyPlace(el);
     this.maybeNudgeInstall();
     this.maybeOfferRestore();
     this.maybeAskForPin();
@@ -334,6 +339,11 @@ export class UI {
   play() {
     if (!save.introSeen) return this.intro(() => this.startRun());
     this.startRun();
+  }
+
+  playDaily() {
+    if (!save.introSeen) return this.intro(() => this.startRun({ daily: true }));
+    this.startRun({ daily: true });
   }
 
   /* ------------------------------------------------------------- intro */
@@ -396,14 +406,21 @@ export class UI {
   }
 
   /* --------------------------------------------------------------- run */
-  startRun() {
+  startRun(opts = {}) {
     audio.unlock();
-    this.game.linkedStart = this.route.startRegion;
-    this.game.linkedRoute = this.route.route;
-    this.game.setGhost(this.ghostRun);
+    this.wantDaily = !!opts.daily;
+    if (this.wantDaily) {
+      this.game.linkedStart = null;
+      this.game.linkedRoute = null;
+      this.game.setGhost(null);
+    } else {
+      this.game.linkedStart = this.route.startRegion;
+      this.game.linkedRoute = this.route.route;
+      this.game.setGhost(this.ghostRun);
+    }
     this.show($('<div class="screen" style="pointer-events:none"></div>'));
     this.buildHud();
-    this.game.start();
+    this.game.start({ daily: this.wantDaily });
     this.missionTick = 0;
     // the tutorial run teaches move by move; the next few runs open with the moves at a glance
     if (save.tutorialDone && (save.runs ?? 0) < 4) this.controlsCard();
@@ -483,7 +500,12 @@ export class UI {
     const s = Math.floor(g.score);
     if (s !== this.last.score) E.score.textContent = fmt((this.last.score = s));
     const d = Math.floor(g.D);
-    if (d !== this.last.d) E.dist.textContent = `${fmt((this.last.d = d))}m`;
+    if (d !== this.last.d) {
+      this.last.d = d;
+      E.dist.textContent = g.dailyRun && g.finishAt
+        ? t('{done} / {total} m', { done: fmt(Math.min(d, g.finishAt)), total: fmt(g.finishAt) })
+        : `${fmt(d)}m`;
+    }
     if (g.seeds !== this.last.seeds) E.seeds.textContent = fmt((this.last.seeds = g.seeds));
     const boost = g.seedBoost > 0;
     if (boost !== this.last.boost) E.x2.hidden = !(this.last.boost = boost);
@@ -857,6 +879,7 @@ export class UI {
   }
 
   onOver(run) {
+    if (run.finished) return this.results(run);
     const cost = this.reviveCost();
     const seedsOk = this.game.revives < REVIVE_COSTS.length && save.seeds + run.seeds >= cost;
     const heartsOk = this.game.revives < MAX_REVIVES && heartsTotal() > 0;
@@ -963,7 +986,7 @@ export class UI {
     const el = $(`
       <div class="screen over scrim-full">
         <div class="panel card">
-          <div class="caught">${run.caught ? t('🐾 Fisi caught you!') : t('💥 Ouch!')}</div>
+          <div class="caught">${run.finished ? t("🏁 You finished today's run!") : run.caught ? t('🐾 Fisi caught you!') : t('💥 Ouch!')}</div>
           ${this.shareCardHtml(run)}
           <div class="big-score">${fmt(run.score)}</div>
           ${newBest ? `<div class="new-best">${t('★ NEW BEST ★')}</div>` : `<div class="muted">${t('Best {n}', { n: fmt(save.best) })}</div>`}
@@ -1454,7 +1477,7 @@ export class UI {
       if (!ok || !root.isConnected) return;
     }
     root.remove();
-    if (where === 'again') this.startRun();
+    if (where === 'again') this.startRun({ daily: this.wantDaily });
     else this.title();
   }
 
@@ -1563,7 +1586,8 @@ export class UI {
     })();
   }
 
-  showBoard() {
+  showBoard(board = 'day') {
+    const tab = ['day', 'week', 'month', 'all'].includes(board) ? board : 'day';
     this.root.querySelector('.lb-screen')?.remove();
     const el = $(`
       <div class="screen scrim-full lb-screen">
@@ -1574,10 +1598,10 @@ export class UI {
         </div>
         <div class="sheet-body">
           <div class="lb-tabs">
-            <button type="button" data-board="day" class="on">${t('Today')}</button>
-            <button type="button" data-board="week">${t('Week')}</button>
-            <button type="button" data-board="month">${t('Month')}</button>
-            <button type="button" data-board="all">${t('All-time')}</button>
+            <button type="button" data-board="day"${tab === 'day' ? ' class="on"' : ''}>${t('Today')}</button>
+            <button type="button" data-board="week"${tab === 'week' ? ' class="on"' : ''}>${t('Week')}</button>
+            <button type="button" data-board="month"${tab === 'month' ? ' class="on"' : ''}>${t('Month')}</button>
+            <button type="button" data-board="all"${tab === 'all' ? ' class="on"' : ''}>${t('All-time')}</button>
           </div>
           <div class="lb-rows"></div>
         </div>
@@ -1601,7 +1625,7 @@ export class UI {
       }
     });
     this.overlay(el);
-    this.fillBoard(rows, 'day');
+    this.fillBoard(rows, tab);
   }
 
   async fillBoard(body, board = 'day') {
@@ -2318,6 +2342,33 @@ export class UI {
       });
       this.overlay(el);
     }, 900);
+  }
+
+  /* ------------------------------------------ today's place and this week's park */
+  weekChipHtml() {
+    const park = weekPark();
+    const flag = COUNTRIES[park.country]?.flag ?? '';
+    return `<button class="week-chip" data-act="week" data-click>
+      <span class="flag">${flag}</span>
+      <span><small>${t("This week's park")}</small><b>${esc(park.name)}</b></span>
+      <span class="go">${t("Week's #1 wins {n}", { n: `<b>${fmt(PRIZES.week[0])}</b>` })}<i class="seed"></i></span>
+    </button>`;
+  }
+
+  /** Fills "You're #n today" on the prize ribbon once the daily board answers. */
+  async paintDailyPlace(root) {
+    const slot = root.querySelector('[data-daily-place]');
+    if (!slot || save.playerId == null) return;
+    try {
+      const data = await fetchBoard('day', { from: 0, me: save.playerId });
+      if (!slot.isConnected) return;
+      const rank = data.you?.rank;
+      if (!rank) return;
+      slot.innerHTML = t("You're #{n} today", { n: `<b>${fmt(rank)}</b>` });
+      slot.closest('.prize-ribbon')?.classList.add('placed');
+    } catch {
+      /* offline or a quiet board: leave the prize line as it is */
+    }
   }
 
   /* -------------------------------------------------------- derby day */

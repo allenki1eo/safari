@@ -13,9 +13,14 @@ import {
   nearMissSpec,
   parseShareLink,
   routeForLink,
+  dailyRoute,
+  dailyRun,
+  DAILY_RUN_M,
+  darWeekStart,
   seedFromDay,
   shareText,
   shiftDarDay,
+  weekPark,
   waterClear,
   whatsAppHref,
   wildebeestFill,
@@ -202,5 +207,31 @@ describe('herd behaviour', () => {
     }
     expect([...modes].sort()).toEqual(['idle', 'run', 'walk']);
     for (const m of ['idle', 'walk', 'run']) for (const r of [0, 0.3, 0.6, 0.95]) expect(['idle', 'walk', 'run']).toContain(nextMode(m, r));
+  });
+});
+
+describe('the short daily run', () => {
+  it('is the same 1,000 m course for everyone on a Dar day', () => {
+    const a = dailyRun('2026-11-26');
+    const b = dailyRun('2026-11-26');
+    expect(a).toEqual(b);
+    expect(a.route).toBe('2026-11-26');
+    expect(a.route).toBe(dailyRoute('2026-11-26'));
+    expect(a.length).toBe(DAILY_RUN_M);
+    expect(DAILY_RUN_M).toBe(1000);
+    expect(a.park).toBe(REGIONS[a.startRegion]);
+    expect(a.startAt).toBe(a.park.at);
+  });
+
+  it('keeps the same park all week and picks a real region', () => {
+    const monday = darWeekStart('2026-11-26'); // 2026-11-26 is a Thursday
+    expect(monday).toBe('2026-11-23');
+    const parks = ['2026-11-23', '2026-11-26', '2026-11-29'].map((d) => weekPark(d).id);
+    expect(new Set(parks).size).toBe(1);
+    expect(REGIONS.some((r) => r.id === parks[0])).toBe(true);
+    // a later week can (and typically will) visit somewhere else
+    const next = weekPark('2026-11-30').id; // the following Monday
+    expect(REGIONS.some((r) => r.id === next)).toBe(true);
+    expect(dailyRun('2026-11-26').route).not.toBe(dailyRun('2026-11-27').route);
   });
 });
