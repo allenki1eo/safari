@@ -39,10 +39,13 @@ const GradeShader = {
 };
 
 // per-region grading: saturation, contrast, tint
-const GRADES = {
+export const GRADES = {
   serengeti: [1.1, 1.05, '#fff6ea'],
   ngorongoro: [1.12, 1.04, '#f4fff0'],
+  manyara: [1.14, 1.04, '#f4fff8'],
+  tarangire: [1.08, 1.06, '#fff1d4'],
   kilimanjaro: [0.95, 1.06, '#eef4ff'],
+  ruaha: [1.1, 1.07, '#ffe6c8'],
   selous: [1.08, 1.05, '#fbffef'],
   zanzibar: [1.18, 1.04, '#f2fffe'],
   mara: [1.12, 1.07, '#fff0e2'],
@@ -52,6 +55,9 @@ const GRADES = {
   congo: [1.06, 1.04, '#effff0'],
   volcanoes: [1.04, 1.04, '#f2fff2'],
   nyungwe: [1.02, 1.03, '#effff0'],
+  akagera: [1.1, 1.05, '#f4f7e4'],
+  queenelizabeth: [1.08, 1.05, '#f3f0d8'],
+  murchison: [1.06, 1.05, '#f3eed4'],
   nakuru: [1.12, 1.05, '#fff2f2'],
   lamu: [1.18, 1.04, '#f2fffe'],
 };

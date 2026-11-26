@@ -611,6 +611,7 @@ const SW = {
   // settings
   '🎵 Music': '🎵 Muziki',
   '🔊 Sound effects': '🔊 Sauti',
+  '🔇 Sound effects': '🔇 Sauti',
   '📳 Vibration': '📳 Mtetemo',
   '✨ Graphics': '✨ Michoro',
   Auto: 'Otomatiki',

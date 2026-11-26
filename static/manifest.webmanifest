@@ -6,7 +6,7 @@
   "start_url": "/",
   "scope": "/",
   "display": "fullscreen",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#2b1a0e",
   "theme_color": "#2b1a0e",
   "categories": ["games", "entertainment"],
