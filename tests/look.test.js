@@ -4,6 +4,8 @@ import { save } from '../app/data/save.js';
 import { REGIONS } from '../app/data/regions.js';
 import { daylightAt } from '../app/game/world.js';
 import { GROUND_LIFT } from '../app/game/materials.js';
+import { GRADES } from '../app/game/look.js';
+import { readFileSync } from 'node:fs';
 
 describe('wearable outfits', () => {
   it('offers distinct garments and falls back to the running kit', () => {
@@ -50,5 +52,22 @@ describe('Zanzibar stays a bright coast', () => {
     expect(coast.sunH).toBeGreaterThan(0.6);
     const river = daylightAt(selous.at + selous.len * 0.5);
     expect(river.night).toBeGreaterThan(0.8);
+  });
+});
+
+describe('region colour grades', () => {
+  it('gives every region its own grade, including the six that used to fall back to white', () => {
+    for (const r of REGIONS) {
+      expect(GRADES[r.id], r.id).toBeDefined();
+      expect(GRADES[r.id]).toHaveLength(3);
+      expect(String(GRADES[r.id][2]).toLowerCase()).not.toBe('#ffffff');
+    }
+  });
+});
+
+describe('home-screen orientation', () => {
+  it('lets the installed app rotate with the phone', () => {
+    const man = JSON.parse(readFileSync(new URL('../static/manifest.webmanifest', import.meta.url), 'utf8'));
+    expect(man.orientation).toBe('any');
   });
 });
